@@ -39,7 +39,8 @@
     "about": "About",
     "faq": "FAQ",
     "privacyPolicy": "Privacy Policy",
-    "termsOfService": "Terms of Service"
+    "termsOfService": "Terms of Service",
+    "accountMenu": "Account menu"
   },
   "landing": {
     "heroTitle": "Expert Pediatric Care for Your Child",
@@ -117,7 +118,34 @@
     "doctor": "Doctor",
     "phoneNumber": "Phone Number",
     "agreeTerms": "I agree to the Terms of Service and Privacy Policy",
-    "verifyEmail": "We've sent a verification link to your email"
+    "verifyEmail": "We've sent a verification link to your email",
+    "checkEmailTitle": "Check your email",
+    "checkEmailDescription": "We sent a confirmation link to",
+    "checkEmailHint": "Click the link in the email to verify your account. If you don't see it, check your spam folder.",
+    "backToSignIn": "Back to sign in"
+  },
+  "profile": {
+    "title": "Profile",
+    "subtitle": "Manage your account details and security",
+    "personalSection": "Personal information",
+    "fullName": "Full name",
+    "phone": "Phone number",
+    "emailSection": "Email",
+    "newEmail": "Email address",
+    "emailHint": "Changing your email sends a confirmation link to the new address.",
+    "updateEmail": "Update email",
+    "passwordSection": "Password",
+    "passwordHint": "Choose a strong password you have not used elsewhere.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "updatePassword": "Update password",
+    "saveProfile": "Save profile",
+    "profileUpdated": "Profile saved",
+    "emailUpdateSent": "Check your inbox to confirm your new email",
+    "passwordUpdated": "Password updated",
+    "accountType": "Account type",
+    "parentRole": "Parent / Guardian",
+    "doctorRole": "Doctor"
   },
   "parentDashboard": {
     "welcome": "Welcome back",

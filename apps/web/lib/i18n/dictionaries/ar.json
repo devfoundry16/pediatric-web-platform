@@ -39,7 +39,8 @@
     "about": "عنّا",
     "faq": "الأسئلة الشائعة",
     "privacyPolicy": "سياسة الخصوصية",
-    "termsOfService": "شروط الخدمة"
+    "termsOfService": "شروط الخدمة",
+    "accountMenu": "قائمة الحساب"
   },
   "landing": {
     "heroTitle": "رعاية طبية متخصصة لطفلك",
@@ -117,7 +118,34 @@
     "doctor": "طبيب",
     "phoneNumber": "رقم الهاتف",
     "agreeTerms": "أوافق على شروط الخدمة وسياسة الخصوصية",
-    "verifyEmail": "لقد أرسلنا رابط التحقق إلى بريدك الإلكتروني"
+    "verifyEmail": "لقد أرسلنا رابط التحقق إلى بريدك الإلكتروني",
+    "checkEmailTitle": "تحقق من بريدك الإلكتروني",
+    "checkEmailDescription": "أرسلنا رابط التأكيد إلى",
+    "checkEmailHint": "انقر على الرابط في البريد للتحقق من حسابك. إذا لم تجده، راجع مجلد الرسائل غير المرغوب فيها.",
+    "backToSignIn": "العودة لتسجيل الدخول"
+  },
+  "profile": {
+    "title": "الملف الشخصي",
+    "subtitle": "إدارة تفاصيل حسابك والأمان",
+    "personalSection": "المعلومات الشخصية",
+    "fullName": "الاسم الكامل",
+    "phone": "رقم الهاتف",
+    "emailSection": "البريد الإلكتروني",
+    "newEmail": "عنوان البريد الإلكتروني",
+    "emailHint": "تغيير البريد يرسل رابط تأكيد إلى العنوان الجديد.",
+    "updateEmail": "تحديث البريد",
+    "passwordSection": "كلمة المرور",
+    "passwordHint": "اختر كلمة مرور قوية لم تستخدمها في مواقع أخرى.",
+    "newPassword": "كلمة المرور الجديدة",
+    "confirmPassword": "تأكيد كلمة المرور الجديدة",
+    "updatePassword": "تحديث كلمة المرور",
+    "saveProfile": "حفظ الملف",
+    "profileUpdated": "تم حفظ الملف",
+    "emailUpdateSent": "تحقق من بريدك لتأكيد العنوان الجديد",
+    "passwordUpdated": "تم تحديث كلمة المرور",
+    "accountType": "نوع الحساب",
+    "parentRole": "ولي أمر / وصي",
+    "doctorRole": "طبيب"
   },
   "parentDashboard": {
     "welcome": "مرحباً بعودتك",

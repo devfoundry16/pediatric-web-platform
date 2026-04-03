@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { cn } from "@/lib/utils";
 import {
@@ -19,6 +20,7 @@ import {
   ClipboardList,
   Video,
   DollarSign,
+  UserCircle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -35,6 +37,17 @@ interface DashboardSidebarProps {
 export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const { dictionary: t } = useI18n();
   const pathname = usePathname();
+  const router = useRouter();
+  const signOut = useAuthStore((s) => s.signOut);
+  const isSigningOut = useAuthStore((s) => s.isLoading);
+
+  const handleSignOut = async () => {
+    await signOut();
+    if (!useAuthStore.getState().error) {
+      router.push("/");
+      router.refresh();
+    }
+  };
 
   const parentNav: NavItem[] = [
     {
@@ -71,6 +84,11 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       href: "/dashboard/parent/files",
       label: t.parentDashboard.files,
       icon: Paperclip,
+    },
+    {
+      href: "/dashboard/parent/profile",
+      label: t.profile.title,
+      icon: UserCircle,
     },
   ];
 
@@ -110,6 +128,11 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       label: t.doctorDashboard.revenue,
       icon: DollarSign,
     },
+    {
+      href: "/dashboard/doctor/profile",
+      label: t.profile.title,
+      icon: UserCircle,
+    },
   ];
 
   const navItems = role === "parent" ? parentNav : doctorNav;
@@ -130,7 +153,13 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <ul className="flex flex-col gap-1">
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isOverviewHref =
+              item.href === "/dashboard/parent" ||
+              item.href === "/dashboard/doctor";
+            const isActive = isOverviewHref
+              ? pathname === item.href
+              : pathname === item.href ||
+                pathname.startsWith(`${item.href}/`);
             return (
               <li key={item.href}>
                 <Link
@@ -152,11 +181,18 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       </nav>
 
       <div className="border-t border-border p-3">
-        <div className="flex items-center justify-between">
-          <LanguageSwitcher />
-          <button className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
-            <LogOut className="h-4 w-4" />
-            <span className="sr-only">{t.common.logout}</span>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <LanguageSwitcher />
+          </div>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {isSigningOut ? t.common.loading : t.common.logout}
           </button>
         </div>
       </div>

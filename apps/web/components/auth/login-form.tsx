@@ -1,19 +1,69 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { toast } from "sonner";
+import { Eye, EyeOff } from "lucide-react";
+
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Eye, EyeOff } from "lucide-react";
+import GoogleIcon from "./google-icon";
+
+const loginSchema = z.object({
+  email: z
+    .string()
+    .min(1, "Email is required")
+    .pipe(z.email("Enter a valid email")),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+type LoginFormValues = z.infer<typeof loginSchema>;
 
 export function LoginForm() {
   const { dictionary: t } = useI18n();
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
 
+  const { signIn, isLoading, error, clearError } = useAuthStore();
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema),
+  });
+
+  const onSubmit = async (values: LoginFormValues) => {
+    clearError();
+    await signIn(values.email, values.password);
+
+    const { user } = useAuthStore.getState();
+    if (user) {
+      toast.success(t.auth.signIn);
+      const role = user.user_metadata?.role as string | undefined;
+      router.push(role === "doctor" ? "/dashboard/doctor" : "/dashboard/parent");
+    }
+  };
+
   return (
-    <form className="mt-8 flex flex-col gap-5" onSubmit={(e) => e.preventDefault()}>
+    <form
+      className="mt-8 flex flex-col gap-5"
+      onSubmit={handleSubmit(onSubmit)}
+    >
+      {error && (
+        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
       <div className="flex flex-col gap-2">
         <Label htmlFor="email">{t.common.email}</Label>
         <Input
@@ -21,16 +71,17 @@ export function LoginForm() {
           type="email"
           placeholder="name@example.com"
           autoComplete="email"
+          {...register("email")}
         />
+        {errors.email && (
+          <p className="text-xs text-destructive">{errors.email.message}</p>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="password">{t.common.password}</Label>
-          <Link
-            href="#"
-            className="text-xs text-primary hover:underline"
-          >
+          <Link href="#" className="text-xs text-primary hover:underline">
             {t.auth.forgotPassword}
           </Link>
         </div>
@@ -40,6 +91,7 @@ export function LoginForm() {
             type={showPassword ? "text" : "password"}
             placeholder="••••••••"
             autoComplete="current-password"
+            {...register("password")}
           />
           <button
             type="button"
@@ -53,10 +105,13 @@ export function LoginForm() {
             )}
           </button>
         </div>
+        {errors.password && (
+          <p className="text-xs text-destructive">{errors.password.message}</p>
+        )}
       </div>
 
-      <Button type="submit" className="w-full">
-        {t.auth.signIn}
+      <Button type="submit" className="w-full" disabled={isLoading}>
+        {isLoading ? t.common.loading : t.auth.signIn}
       </Button>
 
       <div className="relative my-2">
@@ -71,6 +126,7 @@ export function LoginForm() {
       </div>
 
       <Button type="button" variant="outline" className="w-full bg-transparent">
+        <GoogleIcon />
         Google
       </Button>
     </form>

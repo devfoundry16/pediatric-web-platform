@@ -2,7 +2,9 @@
 
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { UserNavMenu } from "@/components/layout/user-nav-menu";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Menu, Heart } from "lucide-react";
@@ -11,6 +13,7 @@ import { useState } from "react";
 export function SiteHeader() {
   const { dictionary: t, isRtl } = useI18n();
   const [open, setOpen] = useState(false);
+  const user = useAuthStore((s) => s.user);
 
   const navLinks = [
     { href: "/", label: t.common.home },
@@ -46,14 +49,20 @@ export function SiteHeader() {
 
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
-          <Link href="/auth/login" className="hidden sm:block">
-            <Button variant="ghost" size="sm">
-              {t.common.login}
-            </Button>
-          </Link>
-          <Link href="/auth/register" className="hidden sm:block">
-            <Button size="sm">{t.common.register}</Button>
-          </Link>
+          {user ? (
+            <UserNavMenu user={user} />
+          ) : (
+            <>
+              <Link href="/auth/login" className="hidden sm:block">
+                <Button variant="ghost" size="sm">
+                  {t.common.login}
+                </Button>
+              </Link>
+              <Link href="/auth/register" className="hidden sm:block">
+                <Button size="sm">{t.common.register}</Button>
+              </Link>
+            </>
+          )}
 
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild className="md:hidden">
@@ -74,16 +83,24 @@ export function SiteHeader() {
                     {link.label}
                   </Link>
                 ))}
-                <div className="mt-4 flex flex-col gap-2">
-                  <Link href="/auth/login" onClick={() => setOpen(false)}>
-                    <Button variant="outline" className="w-full bg-transparent">
-                      {t.common.login}
-                    </Button>
-                  </Link>
-                  <Link href="/auth/register" onClick={() => setOpen(false)}>
-                    <Button className="w-full">{t.common.register}</Button>
-                  </Link>
-                </div>
+                {!user && (
+                  <div className="mt-4 flex flex-col gap-2">
+                    <Link href="/auth/login" onClick={() => setOpen(false)}>
+                      <Button
+                        variant="outline"
+                        className="w-full bg-transparent"
+                      >
+                        {t.common.login}
+                      </Button>
+                    </Link>
+                    <Link
+                      href="/auth/register"
+                      onClick={() => setOpen(false)}
+                    >
+                      <Button className="w-full">{t.common.register}</Button>
+                    </Link>
+                  </div>
+                )}
               </nav>
             </SheetContent>
           </Sheet>

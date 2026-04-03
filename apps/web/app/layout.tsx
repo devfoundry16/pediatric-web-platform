@@ -5,6 +5,8 @@ import { I18nProvider } from "@/lib/i18n/i18n-context";
 import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { defaultLocale } from "@/lib/i18n/config";
 import { ThemeProvider } from "@/components/theme-provider";
+import { AuthProvider } from "@/components/auth/auth-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 import "./globals.css";
 
@@ -53,7 +55,10 @@ export default async function RootLayout({
             initialLocale={defaultLocale}
             initialDictionary={dictionary}
           >
-            {children}
+            <AuthProvider>
+              {children}
+              <Toaster richColors position="top-center" />
+            </AuthProvider>
           </I18nProvider>
         </ThemeProvider>
       </body>
