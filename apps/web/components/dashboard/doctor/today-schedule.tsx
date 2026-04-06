@@ -10,6 +10,26 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Clock, Video, FileText } from "lucide-react";
+import { TimezoneNotice } from "@/components/booking/timezone-notice";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
+
+function mockConsultationLabel(t: Dictionary, type: string): string {
+  const map: Record<string, string> = {
+    Quick: t.landing.quick,
+    Standard: t.landing.standard,
+    Extended: t.landing.extended,
+  };
+  return map[type] ?? type;
+}
+
+function mockStatusLabel(t: Dictionary, status: string): string {
+  const map: Record<string, string> = {
+    "in-progress": t.doctorDashboard.statusInProgress,
+    upcoming: t.doctorDashboard.statusUpcoming,
+    completed: t.doctorDashboard.statusCompleted,
+  };
+  return map[status] ?? status;
+}
 
 const mockSchedule = [
   {
@@ -79,16 +99,17 @@ export function TodaySchedule() {
               <p className="text-xs text-muted-foreground">
                 {item.parentName}
               </p>
-              <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+              <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
                   {item.time}
                 </span>
+                <TimezoneNotice variant="compact" />
                 <span>
                   {item.duration} {t.common.minutes}
                 </span>
                 <Badge variant="secondary" className="text-xs">
-                  {item.type}
+                  {mockConsultationLabel(t, item.type)}
                 </Badge>
               </div>
             </div>
@@ -96,12 +117,12 @@ export function TodaySchedule() {
               <span
                 className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[item.status]}`}
               >
-                {item.status}
+                {mockStatusLabel(t, item.status)}
               </span>
               {item.status === "in-progress" && (
                 <Button size="sm" className="gap-1.5">
                   <Video className="h-3.5 w-3.5" />
-                  Join
+                  {t.doctorDashboard.joinSession}
                 </Button>
               )}
               <Button size="sm" variant="ghost">

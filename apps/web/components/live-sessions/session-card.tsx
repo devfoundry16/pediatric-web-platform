@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, Clock, Users, Video } from "lucide-react";
+import { TimezoneNotice } from "@/components/booking/timezone-notice";
 
 interface SessionCardProps {
   session: {
@@ -53,9 +54,10 @@ export function SessionCard({ session }: SessionCardProps) {
             <CalendarDays className="h-4 w-4" />
             {session.date}
           </span>
-          <span className="flex items-center gap-1.5">
+          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
             <Clock className="h-4 w-4" />
             {session.time} ({session.duration} {t.common.minutes})
+            <TimezoneNotice variant="compact" />
           </span>
           <span className="flex items-center gap-1.5">
             <Users className="h-4 w-4" />

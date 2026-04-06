@@ -2,6 +2,8 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import childrenRouter from "./routes/children";
+import doctorsRouter from "./routes/doctors";
+import appointmentsRouter from "./routes/appointments";
 
 dotenv.config();
 
@@ -32,6 +34,8 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.use("/api/children", childrenRouter);
+app.use("/api/doctors", doctorsRouter);
+app.use("/api/appointments", appointmentsRouter);
 
 const PORT = process.env.PORT || 4000;
 

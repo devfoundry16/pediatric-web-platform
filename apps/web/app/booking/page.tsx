@@ -10,18 +10,30 @@ import { StepSelectType } from "@/components/booking/step-select-type";
 import { StepSelectDateTime } from "@/components/booking/step-select-datetime";
 import { StepSymptoms } from "@/components/booking/step-symptoms";
 import { StepReview } from "@/components/booking/step-review";
+import { StepConfirmation } from "@/components/booking/step-confirmation";
 import { Button } from "@/components/ui/button";
+import { appointmentsApi } from "@/lib/api/appointments";
+import { childrenApi } from "@/lib/api/children";
+import type { ConsultationTypeId } from "@/types/appointment";
+import { Loader2 } from "lucide-react";
+
+const TOTAL_STEPS = 5;
 
 export default function BookingPage() {
   const { dictionary: t } = useI18n();
   const [currentStep, setCurrentStep] = useState(0);
   const [bookingData, setBookingData] = useState({
     childId: "",
-    typeId: "",
+    childName: "",
+    doctorId: "",
+    typeId: "" as ConsultationTypeId | "",
     date: "",
     time: "",
     symptoms: "",
   });
+  const [confirmedAppointmentId, setConfirmedAppointmentId] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const steps = [
     t.booking.selectChild,
@@ -35,29 +47,106 @@ export default function BookingPage() {
     setBookingData((prev) => ({ ...prev, ...data }));
   };
 
+  const handleChildSelect = async (id: string) => {
+    updateBooking({ childId: id, childName: "" });
+    try {
+      const child = await childrenApi.getById(id);
+      updateBooking({
+        childId: id,
+        childName: `${child.personalInfo.firstName} ${child.personalInfo.lastName}`,
+      });
+    } catch {
+      updateBooking({ childId: id });
+    }
+  };
+
+  const isStepValid = (): boolean => {
+    switch (currentStep) {
+      case 0:
+        return !!bookingData.childId;
+      case 1:
+        return !!bookingData.typeId;
+      case 2:
+        return !!bookingData.date && !!bookingData.time;
+      case 3:
+        return true;
+      case 4:
+        return true;
+      default:
+        return false;
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!bookingData.childId || !bookingData.typeId || !bookingData.date || !bookingData.time) {
+      setSubmitError(t.booking.completeFieldsError);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setSubmitError(null);
+
+    try {
+      const appointment = await appointmentsApi.create({
+        childId: bookingData.childId,
+        doctorId: bookingData.doctorId || undefined,
+        consultationType: bookingData.typeId as ConsultationTypeId,
+        date: bookingData.date,
+        time: bookingData.time,
+        symptoms: bookingData.symptoms || undefined,
+      });
+
+      setConfirmedAppointmentId(appointment.id);
+      setCurrentStep(TOTAL_STEPS);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : t.booking.bookingFailedError;
+      setSubmitError(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const renderStep = () => {
+    if (currentStep === TOTAL_STEPS) {
+      return (
+        <StepConfirmation
+          appointmentId={confirmedAppointmentId}
+          bookingData={{
+            typeId: bookingData.typeId as string,
+            date: bookingData.date,
+            time: bookingData.time,
+            childName: bookingData.childName,
+          }}
+        />
+      );
+    }
+
     switch (currentStep) {
       case 0:
         return (
           <StepSelectChild
             selected={bookingData.childId}
-            onSelect={(id) => updateBooking({ childId: id })}
+            onSelect={handleChildSelect}
           />
         );
       case 1:
         return (
           <StepSelectType
             selected={bookingData.typeId}
-            onSelect={(id) => updateBooking({ typeId: id })}
+            onSelect={(id) => updateBooking({ typeId: id as ConsultationTypeId, date: "", time: "" })}
           />
         );
       case 2:
         return (
           <StepSelectDateTime
+            doctorId={bookingData.doctorId}
+            typeId={bookingData.typeId}
             selectedDate={bookingData.date}
             selectedTime={bookingData.time}
-            onSelectDate={(date) => updateBooking({ date })}
+            onSelectDate={(date) => updateBooking({ date, time: "" })}
             onSelectTime={(time) => updateBooking({ time })}
+            onDoctorResolved={(id) => updateBooking({ doctorId: id })}
           />
         );
       case 3:
@@ -68,11 +157,24 @@ export default function BookingPage() {
           />
         );
       case 4:
-        return <StepReview bookingData={bookingData} />;
+        return (
+          <StepReview
+            bookingData={{
+              childId: bookingData.childId,
+              childName: bookingData.childName,
+              typeId: bookingData.typeId,
+              date: bookingData.date,
+              time: bookingData.time,
+              symptoms: bookingData.symptoms,
+            }}
+          />
+        );
       default:
         return null;
     }
   };
+
+  const isConfirmed = currentStep === TOTAL_STEPS;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -83,32 +185,53 @@ export default function BookingPage() {
             {t.booking.title}
           </h1>
 
-          <div className="mb-10 mt-6">
-            <BookingStepper steps={steps} currentStep={currentStep} />
-          </div>
+          {!isConfirmed && (
+            <div className="mb-10 mt-6">
+              <BookingStepper steps={steps} currentStep={currentStep} />
+            </div>
+          )}
 
           <div className="min-h-[400px]">{renderStep()}</div>
 
-          <div className="mt-8 flex items-center justify-between">
-            <Button
-              variant="outline"
-              onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
-              disabled={currentStep === 0}
-            >
-              {t.common.previous}
-            </Button>
-            {currentStep < steps.length - 1 ? (
+          {submitError && (
+            <p className="mt-4 text-center text-sm text-destructive">
+              {submitError}
+            </p>
+          )}
+
+          {!isConfirmed && (
+            <div className="mt-8 flex items-center justify-between">
               <Button
-                onClick={() =>
-                  setCurrentStep(Math.min(steps.length - 1, currentStep + 1))
-                }
+                variant="outline"
+                onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
+                disabled={currentStep === 0 || isSubmitting}
               >
-                {t.common.next}
+                {t.common.previous}
               </Button>
-            ) : (
-              <Button>{t.booking.confirmBooking}</Button>
-            )}
-          </div>
+
+              {currentStep < TOTAL_STEPS - 1 ? (
+                <Button
+                  onClick={() =>
+                    setCurrentStep(Math.min(TOTAL_STEPS - 1, currentStep + 1))
+                  }
+                  disabled={!isStepValid()}
+                >
+                  {t.common.next}
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleConfirm}
+                  disabled={isSubmitting}
+                  className="gap-2"
+                >
+                  {isSubmitting && (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  )}
+                  {t.booking.payAndConfirm}
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </main>
       <SiteFooter />

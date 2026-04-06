@@ -1,41 +1,87 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
-import { useState } from "react";
+import { doctorsApi } from "@/lib/api/appointments";
+import { TimezoneNotice } from "@/components/booking/timezone-notice";
 
 interface StepSelectDateTimeProps {
+  doctorId: string;
+  typeId: string;
   selectedDate: string;
   selectedTime: string;
   onSelectDate: (date: string) => void;
   onSelectTime: (time: string) => void;
+  onDoctorResolved: (doctorId: string) => void;
 }
 
-const timeSlots = {
-  morning: ["9:00 AM", "9:30 AM", "10:00 AM", "10:30 AM", "11:00 AM", "11:30 AM"],
-  afternoon: ["1:00 PM", "1:30 PM", "2:00 PM", "2:30 PM", "3:00 PM", "3:30 PM"],
-  evening: ["5:00 PM", "5:30 PM", "6:00 PM", "6:30 PM"],
-};
-
 export function StepSelectDateTime({
+  doctorId,
+  typeId,
   selectedDate,
   selectedTime,
   onSelectDate,
   onSelectTime,
+  onDoctorResolved,
 }: StepSelectDateTimeProps) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, locale } = useI18n();
   const [date, setDate] = useState<Date | undefined>(
     selectedDate ? new Date(selectedDate) : undefined
   );
+  const [slots, setSlots] = useState<string[]>([]);
+  const [isSlotsLoading, setIsSlotsLoading] = useState(false);
+  const [slotsError, setSlotsError] = useState<string | null>(null);
+  const [resolvedDoctorId, setResolvedDoctorId] = useState(doctorId);
+
+  // Resolve a doctor to use for slot fetching if none provided yet
+  useEffect(() => {
+    if (resolvedDoctorId || !typeId) return;
+    doctorsApi
+      .list()
+      .then((doctors) => {
+        if (doctors.length > 0) {
+          setResolvedDoctorId(doctors[0].id);
+          onDoctorResolved(doctors[0].id);
+        }
+      })
+      .catch(() => {});
+  }, [resolvedDoctorId, typeId, onDoctorResolved]);
+
+  // Fetch slots whenever date or doctor or type changes
+  useEffect(() => {
+    if (!selectedDate || !resolvedDoctorId || !typeId) {
+      setSlots([]);
+      return;
+    }
+
+    setIsSlotsLoading(true);
+    setSlotsError(null);
+
+    doctorsApi
+      .getSlots(resolvedDoctorId, selectedDate, typeId)
+      .then((fetchedSlots) => {
+        setSlots(fetchedSlots);
+      })
+      .catch(() => {
+        setSlotsError(t.booking.slotsLoadError);
+      })
+      .finally(() => setIsSlotsLoading(false));
+  }, [selectedDate, resolvedDoctorId, typeId, locale]);
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   return (
     <div className="flex flex-col gap-4">
       <h2 className="text-lg font-semibold text-foreground">
         {t.booking.selectDateTime}
       </h2>
+      <TimezoneNotice />
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardContent className="flex items-center justify-center p-4">
@@ -44,9 +90,10 @@ export function StepSelectDateTime({
               selected={date}
               onSelect={(d) => {
                 setDate(d);
+                onSelectTime("");
                 if (d) onSelectDate(d.toISOString().split("T")[0]);
               }}
-              disabled={(d) => d < new Date()}
+              disabled={(d) => d < today}
               className="rounded-md"
             />
           </CardContent>
@@ -58,27 +105,38 @@ export function StepSelectDateTime({
               {t.booking.availableSlots}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-4">
-            {Object.entries(timeSlots).map(([period, slots]) => (
-              <div key={period} className="flex flex-col gap-2">
-                <p className="text-sm font-medium text-muted-foreground capitalize">
-                  {t.booking[period as keyof typeof t.booking] || period}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {slots.map((slot) => (
-                    <Button
-                      key={slot}
-                      variant={selectedTime === slot ? "default" : "outline"}
-                      size="sm"
-                      onClick={() => onSelectTime(slot)}
-                      className="text-xs"
-                    >
-                      {slot}
-                    </Button>
-                  ))}
-                </div>
+          <CardContent>
+            {!selectedDate ? (
+              <p className="text-sm text-muted-foreground">
+                {t.booking.selectDateForSlots}
+              </p>
+            ) : isSlotsLoading ? (
+              <div className="flex flex-wrap gap-2">
+                {[...Array(8)].map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-20 rounded-md" />
+                ))}
               </div>
-            ))}
+            ) : slotsError ? (
+              <p className="text-sm text-destructive">{slotsError}</p>
+            ) : slots.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {t.booking.noSlotsTryAnother}
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {slots.map((slot) => (
+                  <Button
+                    key={slot}
+                    variant={selectedTime === slot ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => onSelectTime(slot)}
+                    className={cn("text-xs", selectedTime === slot && "ring-1 ring-primary/30")}
+                  >
+                    {slot}
+                  </Button>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
