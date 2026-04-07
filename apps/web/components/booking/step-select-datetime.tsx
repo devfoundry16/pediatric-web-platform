@@ -9,6 +9,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { doctorsApi } from "@/lib/api/appointments";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
+import { formatLocalDateYMD, parseLocalYMD } from "@/lib/timezone";
 
 interface StepSelectDateTimeProps {
   doctorId: string;
@@ -31,7 +32,7 @@ export function StepSelectDateTime({
 }: StepSelectDateTimeProps) {
   const { dictionary: t } = useI18n();
   const [date, setDate] = useState<Date | undefined>(
-    selectedDate ? new Date(selectedDate) : undefined
+    selectedDate ? parseLocalYMD(selectedDate) : undefined
   );
   const [slots, setSlots] = useState<string[]>([]);
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
@@ -105,7 +106,7 @@ export function StepSelectDateTime({
               onSelect={(d) => {
                 setDate(d);
                 onSelectTime("");
-                if (d) onSelectDate(d.toISOString().split("T")[0]);
+                if (d) onSelectDate(formatLocalDateYMD(d));
               }}
               disabled={(d) => d < today}
               className="rounded-md"

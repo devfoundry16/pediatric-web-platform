@@ -33,6 +33,7 @@ import { useI18n } from "@/lib/i18n/i18n-context";
 import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 import { getAppointmentStatusLabel } from "@/lib/i18n/appointment-status";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
+import { formatLocalDateYMD } from "@/lib/timezone";
 
 const STATUS_VARIANTS: Record<
   AppointmentStatus,
@@ -80,7 +81,7 @@ export default function ParentAppointmentsPage() {
   // Fetch slots when reschedule date changes
   useEffect(() => {
     if (!rescheduleDate || !rescheduleAppt) return;
-    const dateStr = rescheduleDate.toISOString().split("T")[0];
+    const dateStr = formatLocalDateYMD(rescheduleDate);
     setIsSlotsLoading(true);
     setRescheduleTime("");
     doctorsApi
@@ -110,7 +111,7 @@ export default function ParentAppointmentsPage() {
     try {
       await appointmentsApi.reschedule(
         rescheduleAppt.id,
-        rescheduleDate.toISOString().split("T")[0],
+        formatLocalDateYMD(rescheduleDate),
         rescheduleTime
       );
       setRescheduleAppt(null);

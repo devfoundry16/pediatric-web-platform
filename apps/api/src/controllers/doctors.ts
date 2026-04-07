@@ -64,13 +64,16 @@ export async function getDoctorSlots(req: Request, res: Response): Promise<void>
     return;
   }
 
-  const dateObj = new Date(date as string);
-  if (isNaN(dateObj.getTime())) {
+  // Interpret `date` as a calendar day (YYYY-MM-DD), not a UTC instant — matches
+  // stored scheduled_date and doctor_schedules.day_of_week (0=Sun … 6=Sat).
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(date).trim());
+  if (!ymd) {
     res.status(400).json({ error: "Invalid date format" });
     return;
   }
-
-  const dayOfWeek = dateObj.getUTCDay();
+  const dayOfWeek = new Date(
+    Date.UTC(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
+  ).getUTCDay();
 
   // Check if date is a holiday for this doctor
   const { data: holidays } = await supabaseAdmin

@@ -7,6 +7,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { UpcomingAppointments } from "./upcoming-appointments";
 import { ChildrenList } from "./children-list";
 import { childrenApi } from "@/lib/api/children";
+import { appointmentsApi } from "@/lib/api/appointments";
 import { Baby, CalendarDays, Package, GraduationCap } from "lucide-react";
 
 export function ParentOverview() {
@@ -17,6 +18,7 @@ export function ParentOverview() {
     "Parent";
 
   const [childrenCount, setChildrenCount] = useState<number | null>(null);
+  const [appointmentCount, setAppointmentCount] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,6 +29,25 @@ export function ParentOverview() {
       })
       .catch(() => {
         if (!cancelled) setChildrenCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    appointmentsApi
+      .list()
+      .then((list) => {
+        if (!cancelled) {
+          setAppointmentCount(
+            list.filter((a) => a.status !== "cancelled").length
+          );
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAppointmentCount(0);
       });
     return () => {
       cancelled = true;
@@ -50,7 +71,7 @@ export function ParentOverview() {
         />
         <StatCard
           title={t.parentDashboard.totalAppointments}
-          value={8}
+          value={appointmentCount ?? "—"}
           icon={CalendarDays}
         />
         <StatCard
