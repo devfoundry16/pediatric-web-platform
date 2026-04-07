@@ -21,6 +21,7 @@ import {
   Video,
   DollarSign,
   UserCircle,
+  CalendarClock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -95,7 +96,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const doctorNav: NavItem[] = [
     {
       href: "/dashboard/doctor",
-      label: t.doctorDashboard.todaySchedule,
+      label: t.doctorDashboard.overview,
       icon: LayoutDashboard,
     },
     {
@@ -107,6 +108,11 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       href: "/dashboard/doctor/appointments",
       label: t.doctorDashboard.appointments,
       icon: CalendarDays,
+    },
+    {
+      href: "/dashboard/doctor/schedule",
+      label: t.doctorDashboard.scheduleTitle,
+      icon: CalendarClock,
     },
     {
       href: "/dashboard/doctor/notes",

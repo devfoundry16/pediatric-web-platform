@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { profileApi } from "@/lib/api/profile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -84,6 +85,12 @@ export function DashboardProfile({ role }: DashboardProfileProps) {
     const { error } = await updateProfileMetadata(values.fullName, values.phone);
     if (error) {
       toast.error(error);
+      return;
+    }
+    try {
+      await profileApi.syncPersonalInfo(values.fullName, values.phone);
+    } catch {
+      toast.error(p.syncProfileError);
       return;
     }
     toast.success(p.profileUpdated);

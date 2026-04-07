@@ -29,7 +29,7 @@ export function StepSelectDateTime({
   onSelectTime,
   onDoctorResolved,
 }: StepSelectDateTimeProps) {
-  const { dictionary: t, locale } = useI18n();
+  const { dictionary: t } = useI18n();
   const [date, setDate] = useState<Date | undefined>(
     selectedDate ? new Date(selectedDate) : undefined
   );
@@ -52,26 +52,40 @@ export function StepSelectDateTime({
       .catch(() => {});
   }, [resolvedDoctorId, typeId, onDoctorResolved]);
 
-  // Fetch slots whenever date or doctor or type changes
+  const canFetchSlots = Boolean(
+    selectedDate && resolvedDoctorId && typeId
+  );
+
+  // Fetch slots when date / doctor / type are ready. State updates run after a microtask so the effect
+  // does not synchronously cascade renders (see react.dev/you-might-not-need-an-effect).
   useEffect(() => {
-    if (!selectedDate || !resolvedDoctorId || !typeId) {
-      setSlots([]);
-      return;
-    }
+    if (!canFetchSlots) return;
 
-    setIsSlotsLoading(true);
-    setSlotsError(null);
+    let cancelled = false;
 
-    doctorsApi
-      .getSlots(resolvedDoctorId, selectedDate, typeId)
-      .then((fetchedSlots) => {
-        setSlots(fetchedSlots);
-      })
-      .catch(() => {
-        setSlotsError(t.booking.slotsLoadError);
-      })
-      .finally(() => setIsSlotsLoading(false));
-  }, [selectedDate, resolvedDoctorId, typeId, locale]);
+    void (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setIsSlotsLoading(true);
+      setSlotsError(null);
+      try {
+        const fetchedSlots = await doctorsApi.getSlots(
+          resolvedDoctorId,
+          selectedDate,
+          typeId
+        );
+        if (!cancelled) setSlots(fetchedSlots);
+      } catch {
+        if (!cancelled) setSlotsError(t.booking.slotsLoadError);
+      } finally {
+        if (!cancelled) setIsSlotsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canFetchSlots, selectedDate, resolvedDoctorId, typeId, t.booking.slotsLoadError]);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);

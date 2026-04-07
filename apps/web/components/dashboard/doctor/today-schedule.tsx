@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState, useCallback } from "react";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,75 +10,93 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Video, FileText } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Clock, Video, FileText, CheckCircle, CalendarX } from "lucide-react";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
-import type { Dictionary } from "@/lib/i18n/get-dictionary";
+import { doctorApi, type DoctorAppointment } from "@/lib/api/doctor";
 
-function mockConsultationLabel(t: Dictionary, type: string): string {
-  const map: Record<string, string> = {
-    Quick: t.landing.quick,
-    Standard: t.landing.standard,
-    Extended: t.landing.extended,
-  };
-  return map[type] ?? type;
+function formatTime(time: string): string {
+  const [h, m] = time.split(":").map(Number);
+  const suffix = h >= 12 ? "PM" : "AM";
+  const hour = h % 12 || 12;
+  return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
 }
 
-function mockStatusLabel(t: Dictionary, status: string): string {
-  const map: Record<string, string> = {
-    "in-progress": t.doctorDashboard.statusInProgress,
-    upcoming: t.doctorDashboard.statusUpcoming,
-    completed: t.doctorDashboard.statusCompleted,
-  };
-  return map[status] ?? status;
+function consultationLabel(type: string): string {
+  return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
-const mockSchedule = [
-  {
-    id: "1",
-    patientName: "Ahmed Al-Rashid",
-    parentName: "Sarah Al-Rashid",
-    type: "Standard",
-    time: "9:00 AM",
-    duration: 30,
-    status: "in-progress",
-  },
-  {
-    id: "2",
-    patientName: "Omar Khalil",
-    parentName: "Fatima Khalil",
-    type: "Quick",
-    time: "10:00 AM",
-    duration: 15,
-    status: "upcoming",
-  },
-  {
-    id: "3",
-    patientName: "Noor Hassan",
-    parentName: "Aisha Hassan",
-    type: "Extended",
-    time: "11:00 AM",
-    duration: 45,
-    status: "upcoming",
-  },
-  {
-    id: "4",
-    patientName: "Youssef Ibrahim",
-    parentName: "Maryam Ibrahim",
-    type: "Standard",
-    time: "2:00 PM",
-    duration: 30,
-    status: "upcoming",
-  },
-];
+function getStatusDisplay(apt: DoctorAppointment): {
+  label: string;
+  className: string;
+  inProgress: boolean;
+} {
+  if (apt.status === "completed")
+    return {
+      label: "Completed",
+      className: "bg-gray-100 text-gray-700",
+      inProgress: false,
+    };
+  if (apt.status === "cancelled")
+    return {
+      label: "Cancelled",
+      className: "bg-red-100 text-red-700",
+      inProgress: false,
+    };
+  if (apt.status === "confirmed" && apt.meeting_url)
+    return {
+      label: "In Progress",
+      className: "bg-green-100 text-green-800",
+      inProgress: true,
+    };
+  return {
+    label: "Upcoming",
+    className: "bg-blue-100 text-blue-800",
+    inProgress: false,
+  };
+}
 
 export function TodaySchedule() {
   const { dictionary: t } = useI18n();
+  const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const statusColors: Record<string, string> = {
-    "in-progress": "bg-green-100 text-green-800",
-    upcoming: "bg-blue-100 text-blue-800",
-    completed: "bg-gray-100 text-gray-800",
-  };
+  const load = useCallback(async () => {
+    try {
+      const today = new Date().toISOString().split("T")[0];
+      const data = await doctorApi.getAppointments(today);
+      setAppointments(data);
+    } catch {
+      // silently fail — error state handled by parent
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function handleStart(id: string) {
+    setActionLoading(id);
+    try {
+      await doctorApi.startSession(id);
+      await load();
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleComplete(id: string) {
+    setActionLoading(id);
+    try {
+      await doctorApi.completeAppointment(id);
+      await load();
+    } finally {
+      setActionLoading(null);
+    }
+  }
 
   return (
     <Card>
@@ -87,50 +106,104 @@ export function TodaySchedule() {
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
-        {mockSchedule.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center justify-between rounded-lg border border-border p-4"
-          >
-            <div className="flex flex-col gap-1">
-              <p className="text-sm font-medium text-foreground">
-                {item.patientName}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {item.parentName}
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
-                  {item.time}
-                </span>
-                <TimezoneNotice variant="compact" />
-                <span>
-                  {item.duration} {t.common.minutes}
-                </span>
-                <Badge variant="secondary" className="text-xs">
-                  {mockConsultationLabel(t, item.type)}
-                </Badge>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusColors[item.status]}`}
-              >
-                {mockStatusLabel(t, item.status)}
-              </span>
-              {item.status === "in-progress" && (
-                <Button size="sm" className="gap-1.5">
-                  <Video className="h-3.5 w-3.5" />
-                  {t.doctorDashboard.joinSession}
-                </Button>
-              )}
-              <Button size="sm" variant="ghost">
-                <FileText className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+        {loading ? (
+          Array.from({ length: 3 }).map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full rounded-lg" />
+          ))
+        ) : appointments.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 py-8 text-center text-muted-foreground">
+            <CalendarX className="h-8 w-8 opacity-40" />
+            <p className="text-sm">{t.doctorDashboard.noAppointmentsToday}</p>
           </div>
-        ))}
+        ) : (
+          appointments.map((apt) => {
+            const display = getStatusDisplay(apt);
+            const childName = apt.child_profiles
+              ? `${apt.child_profiles.first_name} ${apt.child_profiles.last_name}`
+              : "—";
+            const showStart =
+              (apt.status === "pending" || apt.status === "confirmed") &&
+              !apt.meeting_url;
+            const showJoin = apt.status === "confirmed" && !!apt.meeting_url;
+            const showComplete = apt.status === "confirmed";
+
+            return (
+              <div
+                key={apt.id}
+                className="flex items-center justify-between rounded-lg border border-border p-4"
+              >
+                <div className="flex flex-col gap-1">
+                  <p className="text-sm font-medium text-foreground">
+                    {childName}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {apt.parent_name ?? "—"}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {formatTime(apt.scheduled_time)}
+                    </span>
+                    <TimezoneNotice variant="compact" />
+                    <span>
+                      {apt.duration_minutes} {t.common.minutes}
+                    </span>
+                    <Badge variant="secondary" className="text-xs">
+                      {consultationLabel(apt.consultation_type)}
+                    </Badge>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${display.className}`}
+                  >
+                    {display.label}
+                  </span>
+                  {showStart && (
+                    <Button
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={actionLoading === apt.id}
+                      onClick={() => handleStart(apt.id)}
+                    >
+                      <Video className="h-3.5 w-3.5" />
+                      {t.doctorDashboard.startSession}
+                    </Button>
+                  )}
+                  {showJoin && (
+                    <Button size="sm" className="gap-1.5" asChild>
+                      <a
+                        href={apt.meeting_url!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        <Video className="h-3.5 w-3.5" />
+                        {t.doctorDashboard.joinSession}
+                      </a>
+                    </Button>
+                  )}
+                  {showComplete && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5"
+                      disabled={actionLoading === apt.id}
+                      onClick={() => handleComplete(apt.id)}
+                    >
+                      <CheckCircle className="h-3.5 w-3.5" />
+                      {t.doctorDashboard.completeSession}
+                    </Button>
+                  )}
+                  {apt.symptoms && (
+                    <Button size="sm" variant="ghost" title={apt.symptoms}>
+                      <FileText className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </CardContent>
     </Card>
   );

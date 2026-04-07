@@ -7,7 +7,6 @@ import { defaultLocale } from "@/lib/i18n/config";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth/auth-provider";
 import { Toaster } from "@/components/ui/sonner";
-
 import "./globals.css";
 
 const inter = Inter({
