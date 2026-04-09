@@ -6,6 +6,8 @@ import doctorsRouter from "./routes/doctors";
 import appointmentsRouter from "./routes/appointments";
 import doctorDashboardRouter from "./routes/doctor-dashboard";
 import profileRouter from "./routes/profile";
+import medicalRecordsRouter from "./routes/medical-records";
+import medicalFilesRouter from "./routes/medical-files";
 
 dotenv.config();
 
@@ -40,6 +42,8 @@ app.use("/api/doctors", doctorsRouter);
 app.use("/api/appointments", appointmentsRouter);
 app.use("/api/doctor", doctorDashboardRouter);
 app.use("/api/profile", profileRouter);
+app.use("/api/medical-records", medicalRecordsRouter);
+app.use("/api/medical-files", medicalFilesRouter);
 
 const PORT = process.env.PORT || 4000;
 

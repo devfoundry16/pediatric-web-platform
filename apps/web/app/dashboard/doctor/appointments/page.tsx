@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { doctorApi, type DoctorAppointment } from "@/lib/api/doctor";
+import { formatDateDisplayDubai } from "@/lib/timezone";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -36,14 +37,6 @@ function formatTime(time: string): string {
   const suffix = h >= 12 ? "PM" : "AM";
   const hour = h % 12 || 12;
   return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
-}
-
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString("en-AE", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 type FilterTab = "all" | "today" | "upcoming" | "completed" | "cancelled";
@@ -245,7 +238,7 @@ export default function DoctorAppointmentsPage() {
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                        <span>{formatDate(apt.scheduled_date)}</span>
+                        <span>{formatDateDisplayDubai(apt.scheduled_date)}</span>
                         <span className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" />
                           {formatTime(apt.scheduled_time)}

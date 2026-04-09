@@ -19,6 +19,7 @@ import {
 import { CalendarX2, Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { doctorApi, type ScheduleRow, type DoctorHoliday } from "@/lib/api/doctor";
+import { formatHolidayDateDubai } from "@/lib/timezone";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -61,15 +62,6 @@ function scheduleRowsToDayStates(rows: ScheduleRow[]): DayState[] {
       start_time: row ? row.start_time.slice(0, 5) : DEFAULT_START,
       end_time: row ? row.end_time.slice(0, 5) : DEFAULT_END,
     };
-  });
-}
-
-function formatHolidayDate(date: string): string {
-  return new Date(date).toLocaleDateString("en-AE", {
-    weekday: "short",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
   });
 }
 
@@ -293,7 +285,7 @@ function HolidaysCard({
               >
                 <div className="flex flex-col gap-0.5">
                   <p className="text-sm font-medium text-foreground">
-                    {formatHolidayDate(h.holiday_date)}
+                    {formatHolidayDateDubai(h.holiday_date)}
                   </p>
                   {h.reason && (
                     <p className="text-xs text-muted-foreground">{h.reason}</p>

@@ -5,6 +5,35 @@
 export const APPOINTMENT_TIMEZONE_IANA = "Asia/Dubai" as const;
 
 /**
+ * Format a date for display (ISO timestamp or date string) in Dubai time.
+ * Always pass `timeZone` so SSR (Node) and the browser produce identical strings
+ * and avoid React hydration mismatches.
+ */
+export function formatDateDisplayDubai(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-AE", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: APPOINTMENT_TIMEZONE_IANA,
+  });
+}
+
+/** Long form with weekday — use same fixed timezone as SSR-safe display. */
+export function formatHolidayDateDubai(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-AE", {
+    weekday: "short",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: APPOINTMENT_TIMEZONE_IANA,
+  });
+}
+
+/**
  * Calendar date as YYYY-MM-DD in the user's local timezone.
  * Do not use Date#toISOString().split("T")[0] for this — it converts to UTC and
  * shifts the calendar day for timezones ahead of UTC (e.g. UAE), breaking slot lookup.

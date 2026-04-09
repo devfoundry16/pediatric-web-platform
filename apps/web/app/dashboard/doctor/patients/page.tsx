@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, Search } from "lucide-react";
 import { doctorApi, type DoctorPatient } from "@/lib/api/doctor";
+import { formatDateDisplayDubai } from "@/lib/timezone";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -27,14 +28,6 @@ function calcAge(dob: string): string {
 
 function initials(first: string, last: string): string {
   return `${first[0] ?? ""}${last[0] ?? ""}`.toUpperCase();
-}
-
-function formatDate(date: string): string {
-  return new Date(date).toLocaleDateString("en-AE", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -166,7 +159,7 @@ export default function DoctorPatientsPage() {
                           {t.doctorDashboard.lastVisit}
                         </p>
                         <p className="font-medium text-foreground">
-                          {formatDate(patient.last_visit)}
+                          {formatDateDisplayDubai(patient.last_visit)}
                         </p>
                       </div>
                       <div>

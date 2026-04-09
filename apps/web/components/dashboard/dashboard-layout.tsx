@@ -1,11 +1,9 @@
 "use client";
 
-import React from "react"
+import React from "react";
 
-import { useState } from "react";
 import { DashboardSidebar } from "./dashboard-sidebar";
 import { DashboardMobileNav } from "./dashboard-mobile-nav";
-import { useI18n } from "@/lib/i18n/i18n-context";
 
 interface DashboardLayoutProps {
   role: "parent" | "doctor";
@@ -13,8 +11,6 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ role, children }: DashboardLayoutProps) {
-  const { isRtl } = useI18n();
-
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <div className="hidden lg:block">
