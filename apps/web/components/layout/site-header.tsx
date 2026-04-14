@@ -6,9 +6,10 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { UserNavMenu } from "@/components/layout/user-nav-menu";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Menu, Heart } from "lucide-react";
 import { useState } from "react";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 export function SiteHeader() {
   const { dictionary: t, isRtl } = useI18n();
@@ -72,6 +73,11 @@ export function SiteHeader() {
               </Button>
             </SheetTrigger>
             <SheetContent side={isRtl ? "right" : "left"}>
+              <VisuallyHidden asChild>
+                <SheetHeader>
+                  <SheetTitle>Navigation</SheetTitle>
+                </SheetHeader>
+              </VisuallyHidden>
               <nav className="flex flex-col gap-4 pt-8">
                 {navLinks.map((link) => (
                   <Link

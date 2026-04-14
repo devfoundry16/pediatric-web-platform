@@ -37,10 +37,21 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/auth/callback") ||
     pathname.startsWith("/auth/check-email");
 
+  const protectedPaths = [
+    "/dashboard",
+    "/courses",
+    "/booking",
+    "/live-sessions",
+    "/packages",
+  ];
+
+  const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
+
   // Redirect unauthenticated users away from protected routes
-  if (!user && pathname.startsWith("/dashboard")) {
+  if (!user && isProtected) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
+    url.searchParams.set("redirectTo", pathname);
     return NextResponse.redirect(url);
   }
 
@@ -78,5 +89,16 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/auth/:path*"],
+  matcher: [
+    "/dashboard/:path*",
+    "/auth/:path*",
+    "/courses",
+    "/courses/:path*",
+    "/booking",
+    "/booking/:path*",
+    "/live-sessions",
+    "/live-sessions/:path*",
+    "/packages",
+    "/packages/:path*",
+  ],
 };

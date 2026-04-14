@@ -11,6 +11,7 @@
   "dependencies": {
     "@base-ui/react": "^1.1.0",
     "@hookform/resolvers": "^5.2.2",
+    "@radix-ui/react-visually-hidden": "^1.2.4",
     "@react-pdf/renderer": "^4.4.0",
     "@stripe/stripe-js": "^9.1.0",
     "@supabase/ssr": "^0.8.0",

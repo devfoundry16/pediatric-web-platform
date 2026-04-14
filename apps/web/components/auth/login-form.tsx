@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -29,6 +29,7 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export function LoginForm() {
   const { dictionary: t } = useI18n();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
 
   const { signIn, isLoading, error, clearError } = useAuthStore();
@@ -48,8 +49,13 @@ export function LoginForm() {
     const { user } = useAuthStore.getState();
     if (user) {
       toast.success(t.auth.signIn);
-      const role = user.user_metadata?.role as string | undefined;
-      router.push(role === "doctor" ? "/dashboard/doctor" : "/dashboard/parent");
+      const redirectTo = searchParams.get("redirectTo");
+      if (redirectTo) {
+        router.push(redirectTo);
+      } else {
+        const role = user.user_metadata?.role as string | undefined;
+        router.push(role === "doctor" ? "/dashboard/doctor" : "/dashboard/parent");
+      }
     }
   };
 

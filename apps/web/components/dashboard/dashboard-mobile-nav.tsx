@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { DashboardSidebar } from "./dashboard-sidebar";
 import { Menu, Heart } from "lucide-react";
 
@@ -25,7 +26,12 @@ export function DashboardMobileNav({ role }: DashboardMobileNavProps) {
             <span className="sr-only">Toggle sidebar</span>
           </Button>
         </SheetTrigger>
-        <SheetContent side={isRtl ? "right" : "left"} className="w-64 p-0">
+        <SheetContent aria-describedby={undefined} side={isRtl ? "right" : "left"} className="w-64 p-0">
+          <VisuallyHidden asChild>
+            <SheetHeader>
+              <SheetTitle>Navigation</SheetTitle>
+            </SheetHeader>
+          </VisuallyHidden>
           <DashboardSidebar role={role} />
         </SheetContent>
       </Sheet>
