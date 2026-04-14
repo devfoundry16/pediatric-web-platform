@@ -43,6 +43,7 @@ export interface DoctorStats {
   todayAppointments: number;
   totalPatients: number;
   pendingNotes: number;
+  monthlyRevenue: number;
 }
 
 export interface DoctorPatient {

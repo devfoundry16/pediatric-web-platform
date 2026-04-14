@@ -50,7 +50,11 @@ export function DoctorOverview() {
             />
             <StatCard
               title={t.doctorDashboard.monthlyRevenue}
-              value="—"
+              value={
+                stats?.monthlyRevenue != null
+                  ? `${stats.monthlyRevenue.toFixed(0)} AED`
+                  : "0 AED"
+              }
               icon={DollarSign}
             />
             <StatCard

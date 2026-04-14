@@ -97,7 +97,13 @@ export async function getDoctorStats(
 
   const today = new Date().toISOString().split("T")[0];
 
-  const [{ count: todayCount }, { data: allAppts }] = await Promise.all([
+  // Current calendar month bounds (YYYY-MM-01 → YYYY-MM-last)
+  const now = new Date();
+  const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  const monthEnd = `${nextMonth.getFullYear()}-${String(nextMonth.getMonth() + 1).padStart(2, "0")}-01`;
+
+  const [{ count: todayCount }, { data: allAppts }, { data: monthlyAppts }] = await Promise.all([
     supabaseAdmin
       .from("appointments")
       .select("id", { count: "exact", head: true })
@@ -109,14 +115,26 @@ export async function getDoctorStats(
       .select("child_id")
       .eq("doctor_id", doctor.id)
       .not("status", "in", '("cancelled","rescheduled")'),
+    supabaseAdmin
+      .from("appointments")
+      .select("price_aed")
+      .eq("doctor_id", doctor.id)
+      .eq("status", "completed")
+      .gte("scheduled_date", monthStart)
+      .lt("scheduled_date", monthEnd),
   ]);
 
   const uniquePatients = new Set((allAppts ?? []).map((r) => r.child_id)).size;
+  const monthlyRevenue = (monthlyAppts ?? []).reduce(
+    (sum, r) => sum + (Number(r.price_aed) || 0),
+    0
+  );
 
   res.json({
     todayAppointments: todayCount ?? 0,
     totalPatients: uniquePatients,
     pendingNotes: 0,
+    monthlyRevenue,
   });
 }
 

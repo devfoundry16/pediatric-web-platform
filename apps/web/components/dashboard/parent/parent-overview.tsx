@@ -8,6 +8,8 @@ import { UpcomingAppointments } from "./upcoming-appointments";
 import { ChildrenList } from "./children-list";
 import { childrenApi } from "@/lib/api/children";
 import { appointmentsApi } from "@/lib/api/appointments";
+import { packagesApi } from "@/lib/api/packages";
+import { coursesApi } from "@/lib/api/courses";
 import { Baby, CalendarDays, Package, GraduationCap } from "lucide-react";
 
 export function ParentOverview() {
@@ -19,39 +21,41 @@ export function ParentOverview() {
 
   const [childrenCount, setChildrenCount] = useState<number | null>(null);
   const [appointmentCount, setAppointmentCount] = useState<number | null>(null);
+  const [activePackagesCount, setActivePackagesCount] = useState<number | null>(null);
+  const [enrolledCoursesCount, setEnrolledCoursesCount] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
     childrenApi
       .list()
-      .then((list) => {
-        if (!cancelled) setChildrenCount(list.length);
-      })
-      .catch(() => {
-        if (!cancelled) setChildrenCount(0);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+      .then((list) => { if (!cancelled) setChildrenCount(list.length); })
+      .catch(() => { if (!cancelled) setChildrenCount(0); });
 
-  useEffect(() => {
-    let cancelled = false;
     appointmentsApi
       .list()
       .then((list) => {
-        if (!cancelled) {
-          setAppointmentCount(
-            list.filter((a) => a.status !== "cancelled").length
-          );
-        }
+        if (!cancelled)
+          setAppointmentCount(list.filter((a) => a.status !== "cancelled").length);
       })
-      .catch(() => {
-        if (!cancelled) setAppointmentCount(0);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .catch(() => { if (!cancelled) setAppointmentCount(0); });
+
+    packagesApi
+      .getMyPackages()
+      .then((pkgs) => {
+        if (!cancelled)
+          setActivePackagesCount(pkgs.filter((p) => p.status === "active").length);
+      })
+      .catch(() => { if (!cancelled) setActivePackagesCount(0); });
+
+    coursesApi
+      .getMyEnrollments()
+      .then((enrollments) => {
+        if (!cancelled) setEnrolledCoursesCount(enrollments.length);
+      })
+      .catch(() => { if (!cancelled) setEnrolledCoursesCount(0); });
+
+    return () => { cancelled = true; };
   }, []);
 
   return (
@@ -76,12 +80,12 @@ export function ParentOverview() {
         />
         <StatCard
           title={t.parentDashboard.activePackagesCount}
-          value={1}
+          value={activePackagesCount ?? "—"}
           icon={Package}
         />
         <StatCard
           title={t.parentDashboard.enrolledCourses}
-          value={3}
+          value={enrolledCoursesCount ?? "—"}
           icon={GraduationCap}
         />
       </div>

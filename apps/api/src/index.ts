@@ -9,6 +9,7 @@ import profileRouter from "./routes/profile";
 import medicalRecordsRouter from "./routes/medical-records";
 import medicalFilesRouter from "./routes/medical-files";
 import packagesRouter from "./routes/packages";
+import coursesRouter from "./routes/courses";
 import { stripeWebhook } from "./controllers/packages";
 
 dotenv.config();
@@ -54,6 +55,7 @@ app.use("/api/profile", profileRouter);
 app.use("/api/medical-records", medicalRecordsRouter);
 app.use("/api/medical-files", medicalFilesRouter);
 app.use("/api/packages", packagesRouter);
+app.use("/api/courses", coursesRouter);
 
 const PORT = process.env.PORT || 4000;
 
