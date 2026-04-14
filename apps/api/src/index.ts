@@ -9,6 +9,7 @@ import profileRouter from "./routes/profile";
 import medicalRecordsRouter from "./routes/medical-records";
 import medicalFilesRouter from "./routes/medical-files";
 import packagesRouter from "./routes/packages";
+import { stripeWebhook } from "./controllers/packages";
 
 dotenv.config();
 
@@ -20,8 +21,12 @@ app.use(cors({
   credentials: true
 }));
 
-// Stripe webhook must receive raw body — mount BEFORE express.json()
-app.use("/api/packages/webhook", express.raw({ type: "application/json" }));
+// Stripe webhook: raw body + registered before express.json() (signature verification)
+app.use(
+  "/api/packages/webhook",
+  express.raw({ type: "application/json" }),
+  stripeWebhook
+);
 
 // Body parser middleware
 app.use(express.json());

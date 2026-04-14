@@ -1,9 +1,8 @@
-import { Router, raw } from "express";
+import { Router } from "express";
 import { authMiddleware } from "../middleware/auth";
 import {
   listPackages,
   createCheckoutSession,
-  stripeWebhook,
   getMyPackages,
   getUsageLogs,
 } from "../controllers/packages";
@@ -13,8 +12,7 @@ const router = Router();
 // Public: list available packages
 router.get("/", listPackages);
 
-// Stripe webhook — must receive raw body for signature verification
-router.post("/webhook", raw({ type: "application/json" }), stripeWebhook);
+// POST /api/packages/webhook is registered in index.ts (raw body before express.json)
 
 // Protected routes
 router.post("/checkout", authMiddleware, createCheckoutSession);

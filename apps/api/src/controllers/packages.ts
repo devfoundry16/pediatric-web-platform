@@ -150,7 +150,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     res.status(500).json({ error: "Webhook secret not configured" });
     return;
   }
-
   const sig = req.headers["stripe-signature"] as string;
   let event: StripeEvent;
 
@@ -161,7 +160,6 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     res.status(400).json({ error: `Webhook signature verification failed: ${message}` });
     return;
   }
-
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as StripeCheckoutSession;
     const { userId, packageId } = session.metadata ?? {};
