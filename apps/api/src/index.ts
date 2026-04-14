@@ -8,6 +8,7 @@ import doctorDashboardRouter from "./routes/doctor-dashboard";
 import profileRouter from "./routes/profile";
 import medicalRecordsRouter from "./routes/medical-records";
 import medicalFilesRouter from "./routes/medical-files";
+import packagesRouter from "./routes/packages";
 
 dotenv.config();
 
@@ -18,6 +19,9 @@ app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true
 }));
+
+// Stripe webhook must receive raw body — mount BEFORE express.json()
+app.use("/api/packages/webhook", express.raw({ type: "application/json" }));
 
 // Body parser middleware
 app.use(express.json());
@@ -44,6 +48,7 @@ app.use("/api/doctor", doctorDashboardRouter);
 app.use("/api/profile", profileRouter);
 app.use("/api/medical-records", medicalRecordsRouter);
 app.use("/api/medical-files", medicalFilesRouter);
+app.use("/api/packages", packagesRouter);
 
 const PORT = process.env.PORT || 4000;
 

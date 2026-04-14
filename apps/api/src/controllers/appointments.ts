@@ -163,8 +163,36 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     return;
   }
 
-  // Mock payment reference
-  const paymentReference = `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  // Check if the parent has an active package credit matching this consultation type
+  let paymentStatus = "paid";
+  let paymentReference = `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  let usedPackageId: string | null = null;
+
+  const now = new Date().toISOString();
+  const { data: matchingPackages } = await supabaseAdmin
+    .from("user_packages")
+    .select("id, credits_remaining, consultation_packages(applicable_consultation_types)")
+    .eq("user_id", req.userId)
+    .eq("status", "active")
+    .gt("credits_remaining", 0)
+    .gt("expires_at", now)
+    .order("expires_at", { ascending: true })
+    .limit(10);
+
+  if (matchingPackages) {
+    for (const up of matchingPackages) {
+      const pkg = up.consultation_packages as unknown as { applicable_consultation_types: string[] } | null;
+      if (pkg?.applicable_consultation_types?.includes(consultationType)) {
+        usedPackageId = up.id as string;
+        break;
+      }
+    }
+  }
+
+  if (usedPackageId) {
+    paymentStatus = "package_credit";
+    paymentReference = `PKG-${usedPackageId}`;
+  }
 
   const { data: appointment, error } = await supabaseAdmin
     .from("appointments")
@@ -176,12 +204,10 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
       scheduled_date: date,
       scheduled_time: time,
       duration_minutes: config.duration,
-      price_aed: config.price,
+      price_aed: usedPackageId ? 0 : config.price,
       symptoms: symptoms ?? null,
       status: "confirmed",
-      // Mock payment: mark as paid immediately
-      // TODO: Replace with real payment gateway (Stripe/Telr) before production
-      payment_status: "paid",
+      payment_status: paymentStatus,
       payment_reference: paymentReference,
     })
     .select("id, status, payment_reference, scheduled_date, scheduled_time, consultation_type, price_aed")
@@ -192,7 +218,38 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     return;
   }
 
-  res.status(201).json({ appointment });
+  // Deduct credit from the matched package and log usage
+  if (usedPackageId && appointment) {
+    const { data: currentPkg } = await supabaseAdmin
+      .from("user_packages")
+      .select("credits_remaining")
+      .eq("id", usedPackageId)
+      .single();
+
+    if (currentPkg) {
+      const newRemaining = (currentPkg.credits_remaining as number) - 1;
+      await supabaseAdmin
+        .from("user_packages")
+        .update({
+          credits_remaining: newRemaining,
+          status: newRemaining === 0 ? "exhausted" : "active",
+        })
+        .eq("id", usedPackageId);
+
+      await supabaseAdmin
+        .from("package_usage_logs")
+        .insert({
+          user_package_id: usedPackageId,
+          appointment_id: appointment.id,
+          credits_used: 1,
+        });
+    }
+  }
+
+  res.status(201).json({
+    appointment,
+    usedPackageCredit: !!usedPackageId,
+  });
 }
 
 export async function cancelAppointment(req: Request, res: Response): Promise<void> {
