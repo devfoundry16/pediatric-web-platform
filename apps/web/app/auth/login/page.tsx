@@ -12,11 +12,11 @@ export default function LoginPage() {
     <div className="flex min-h-screen">
       <div className="hidden w-1/2 bg-primary lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-12">
         <div className="mx-auto max-w-md text-center">
-          <div className="mb-8 flex justify-center">
+          <Link href="/" className="mb-8 flex justify-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-foreground/10">
               <Heart className="h-8 w-8 text-primary-foreground" />
             </div>
-          </div>
+          </Link>
           <h2 className="text-3xl font-bold text-primary-foreground">
             {t.common.appName}
           </h2>
