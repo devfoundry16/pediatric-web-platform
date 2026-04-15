@@ -228,7 +228,7 @@ export function RegisterForm() {
         {isLoading ? t.common.loading : t.auth.signUp}
       </Button>
 
-      <div className="relative my-2">
+      {/* <div className="relative my-2">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-border" />
         </div>
@@ -242,7 +242,7 @@ export function RegisterForm() {
       <Button type="button" variant="outline" className="w-full bg-transparent">
         <GoogleIcon />
         Google
-      </Button>
+      </Button> */}
     </form>
   );
 }
