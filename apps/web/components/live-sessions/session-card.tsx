@@ -4,7 +4,7 @@ import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Clock, Users, Video } from "lucide-react";
+import { CalendarDays, Clock, Users, Video, Radio } from "lucide-react";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 
 interface SessionCardProps {
@@ -19,7 +19,9 @@ interface SessionCardProps {
     currentUsers: number;
     price: number;
     isPast?: boolean;
+    isLive?: boolean;
     hasRecording?: boolean;
+    recordingUrl?: string;
   };
 }
 
@@ -31,11 +33,19 @@ export function SessionCard({ session }: SessionCardProps) {
   return (
     <Card className="transition-all hover:shadow-lg">
       <CardContent className="flex flex-col gap-4 p-6">
-        <div className="flex items-start justify-between">
+        <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
-            <h3 className="text-lg font-semibold text-foreground">
-              {session.title}
-            </h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-lg font-semibold text-foreground">
+                {session.title}
+              </h3>
+              {session.isLive && (
+                <Badge className="gap-1 bg-red-500 text-white hover:bg-red-600">
+                  <Radio className="h-3 w-3" />
+                  {t.liveSessions.live}
+                </Badge>
+              )}
+            </div>
             <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
               {session.description}
             </p>
@@ -68,7 +78,12 @@ export function SessionCard({ session }: SessionCardProps) {
         <div className="flex items-center justify-between">
           {!session.isPast && (
             <>
-              {!isFull ? (
+              {session.isLive ? (
+                <span className="text-sm text-red-500 font-medium flex items-center gap-1">
+                  <Radio className="h-3.5 w-3.5" />
+                  {t.liveSessions.liveNow}
+                </span>
+              ) : !isFull ? (
                 <span className="text-sm text-primary font-medium">
                   {spotsLeft} {t.liveSessions.spotsLeft}
                 </span>
@@ -77,19 +92,40 @@ export function SessionCard({ session }: SessionCardProps) {
                   {t.liveSessions.full}
                 </span>
               )}
-              <Button disabled={isFull} className="gap-2">
+              <Button
+                disabled={isFull && !session.isLive}
+                className="gap-2"
+                variant={session.isLive ? "default" : "default"}
+              >
                 <Video className="h-4 w-4" />
-                {t.liveSessions.registerSession}
+                {session.isLive
+                  ? t.liveSessions.joinSession
+                  : t.liveSessions.registerSession}
               </Button>
             </>
           )}
-          {session.isPast && session.hasRecording && (
+          {session.isPast && (
             <>
-              <Badge variant="outline">{t.liveSessions.recording}</Badge>
-              <Button variant="outline" className="gap-2 bg-transparent">
-                <Video className="h-4 w-4" />
-                {t.liveSessions.recording}
-              </Button>
+              {session.hasRecording && session.recordingUrl ? (
+                <>
+                  <Badge variant="outline">{t.liveSessions.recording}</Badge>
+                  <Button
+                    variant="outline"
+                    className="gap-2 bg-transparent"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(session.recordingUrl, "_blank");
+                    }}
+                  >
+                    <Video className="h-4 w-4" />
+                    {t.liveSessions.watchRecording}
+                  </Button>
+                </>
+              ) : (
+                <span className="text-sm text-muted-foreground">
+                  {t.liveSessions.sessionEnded}
+                </span>
+              )}
             </>
           )}
         </div>

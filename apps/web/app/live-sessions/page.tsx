@@ -1,78 +1,37 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SessionCard } from "@/components/live-sessions/session-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-const mockUpcomingSessions = [
-  {
-    id: "1",
-    title: "Child Nutrition Workshop",
-    description: "Learn about balanced diets and healthy eating habits for children aged 1-5. Interactive Q&A included.",
-    date: "Feb 20, 2026",
-    time: "7:00 PM",
-    duration: 60,
-    maxUsers: 30,
-    currentUsers: 22,
-    price: 50,
-  },
-  {
-    id: "2",
-    title: "Fever Management for Parents",
-    description: "Understanding when to worry about fevers, home remedies, and when to seek emergency care.",
-    date: "Feb 25, 2026",
-    time: "6:00 PM",
-    duration: 45,
-    maxUsers: 25,
-    currentUsers: 25,
-    price: 0,
-  },
-  {
-    id: "3",
-    title: "Vaccination Guidance Session",
-    description: "Complete walkthrough of the UAE vaccination schedule with tips to prepare your child and manage side effects.",
-    date: "Mar 3, 2026",
-    time: "7:30 PM",
-    duration: 60,
-    maxUsers: 40,
-    currentUsers: 15,
-    price: 0,
-  },
-];
-
-const mockPastSessions = [
-  {
-    id: "4",
-    title: "Sleep Training Basics",
-    description: "Evidence-based approaches to help your baby sleep through the night.",
-    date: "Jan 28, 2026",
-    time: "7:00 PM",
-    duration: 60,
-    maxUsers: 30,
-    currentUsers: 30,
-    price: 50,
-    isPast: true,
-    hasRecording: true,
-  },
-  {
-    id: "5",
-    title: "Breastfeeding Support Group",
-    description: "Open discussion and expert guidance on common breastfeeding challenges.",
-    date: "Jan 15, 2026",
-    time: "6:00 PM",
-    duration: 45,
-    maxUsers: 20,
-    currentUsers: 18,
-    price: 0,
-    isPast: true,
-    hasRecording: true,
-  },
-];
+import { liveSessionsApi, type GroupSession } from "@/lib/api/live-sessions";
 
 export default function LiveSessionsPage() {
   const { dictionary: t } = useI18n();
+  const [upcoming, setUpcoming] = useState<GroupSession[]>([]);
+  const [past, setPast] = useState<GroupSession[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [up, pa] = await Promise.all([
+          liveSessionsApi.listSessions("upcoming"),
+          liveSessionsApi.listSessions("past"),
+        ]);
+        setUpcoming(up);
+        setPast(pa);
+      } catch {
+        // leave empty arrays on error
+      } finally {
+        setLoading(false);
+      }
+    }
+    void load();
+  }, []);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -95,15 +54,81 @@ export default function LiveSessionsPage() {
               </TabsTrigger>
               <TabsTrigger value="past">{t.liveSessions.past}</TabsTrigger>
             </TabsList>
+
             <TabsContent value="upcoming" className="mt-6 flex flex-col gap-4">
-              {mockUpcomingSessions.map((session) => (
-                <SessionCard key={session.id} session={session} />
-              ))}
+              {loading ? (
+                <p className="text-center text-muted-foreground py-12">
+                  {t.common.loading}
+                </p>
+              ) : upcoming.length === 0 ? (
+                <p className="text-center text-muted-foreground py-12">
+                  {t.liveSessions.noSessions}
+                </p>
+              ) : (
+                upcoming.map((session) => (
+                  <Link key={session.id} href={`/live-sessions/${session.id}`}>
+                    <SessionCard
+                      session={{
+                        id: session.id,
+                        title: session.title,
+                        description: session.description ?? "",
+                        date: new Date(session.scheduled_at).toLocaleDateString(
+                          "en-AE",
+                          { day: "numeric", month: "short", year: "numeric" }
+                        ),
+                        time: new Date(session.scheduled_at).toLocaleTimeString(
+                          "en-AE",
+                          { hour: "2-digit", minute: "2-digit" }
+                        ),
+                        duration: session.duration_minutes,
+                        maxUsers: session.max_participants,
+                        currentUsers: session.participant_count,
+                        price: Number(session.price_aed),
+                        isLive: session.status === "live",
+                      }}
+                    />
+                  </Link>
+                ))
+              )}
             </TabsContent>
+
             <TabsContent value="past" className="mt-6 flex flex-col gap-4">
-              {mockPastSessions.map((session) => (
-                <SessionCard key={session.id} session={session} />
-              ))}
+              {loading ? (
+                <p className="text-center text-muted-foreground py-12">
+                  {t.common.loading}
+                </p>
+              ) : past.length === 0 ? (
+                <p className="text-center text-muted-foreground py-12">
+                  {t.liveSessions.noSessions}
+                </p>
+              ) : (
+                past.map((session) => (
+                  <Link key={session.id} href={`/live-sessions/${session.id}`}>
+                    <SessionCard
+                      session={{
+                        id: session.id,
+                        title: session.title,
+                        description: session.description ?? "",
+                        date: new Date(session.scheduled_at).toLocaleDateString(
+                          "en-AE",
+                          { day: "numeric", month: "short", year: "numeric" }
+                        ),
+                        time: new Date(session.scheduled_at).toLocaleTimeString(
+                          "en-AE",
+                          { hour: "2-digit", minute: "2-digit" }
+                        ),
+                        duration: session.duration_minutes,
+                        maxUsers: session.max_participants,
+                        currentUsers: session.participant_count,
+                        price: Number(session.price_aed),
+                        isPast: true,
+                        hasRecording: !!session.recording_url,
+                        recordingUrl: session.recording_url ?? undefined,
+                      }}
+                    />
+                  </Link>
+                ))
+              )}
             </TabsContent>
           </Tabs>
         </div>

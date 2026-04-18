@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.1.0",
+    "@daily-co/daily-js": "^0.89.1",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@react-pdf/renderer": "^4.4.0",

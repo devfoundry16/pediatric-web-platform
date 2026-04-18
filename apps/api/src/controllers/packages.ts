@@ -162,7 +162,38 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
   }
   if (event.type === "checkout.session.completed") {
     const session = event.data.object as StripeCheckoutSession;
-    const { userId, packageId } = session.metadata ?? {};
+    const metadata = session.metadata ?? {};
+
+    // ── Group session payment ──────────────────────────────────────────────
+    if (metadata.type === "group_session") {
+      const { sessionId, userId } = metadata;
+
+      if (!sessionId || !userId) {
+        res.status(400).json({ error: "Missing metadata on session" });
+        return;
+      }
+
+      const { error: updateError } = await supabaseAdmin
+        .from("session_registrations")
+        .update({ payment_status: "paid", stripe_session_id: session.id })
+        .eq("session_id", sessionId)
+        .eq("user_id", userId);
+
+      if (updateError) {
+        console.error(
+          "[webhook] Failed to confirm group session registration:",
+          updateError.message
+        );
+        res.status(500).json({ error: updateError.message });
+        return;
+      }
+
+      res.json({ received: true });
+      return;
+    }
+
+    // ── Consultation package payment ───────────────────────────────────────
+    const { userId, packageId } = metadata;
 
     if (!userId || !packageId) {
       res.status(400).json({ error: "Missing metadata on session" });

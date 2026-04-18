@@ -1,0 +1,807 @@
+import type { Request, Response } from "express";
+import { supabaseAdmin } from "../lib/supabase";
+import { createRoom, createMeetingToken } from "../lib/daily";
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const StripeLib: new (key: string) => StripeClient = require("stripe");
+
+interface StripePrice {
+  currency: string;
+  unit_amount: number;
+  product_data: { name: string; description?: string };
+}
+interface StripeLineItem {
+  quantity: number;
+  price_data: StripePrice;
+}
+interface StripeSessionCreate {
+  mode: "payment";
+  line_items: StripeLineItem[];
+  metadata: Record<string, string>;
+  success_url: string;
+  cancel_url: string;
+}
+interface StripeCheckoutSessionResponse {
+  id: string;
+  payment_status: string;
+  metadata: Record<string, string> | null;
+}
+interface StripeClient {
+  checkout: {
+    sessions: {
+      create(params: StripeSessionCreate): Promise<{ url: string | null }>;
+      retrieve(id: string): Promise<StripeCheckoutSessionResponse>;
+    };
+  };
+}
+
+function getStripe(): StripeClient | null {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  return new StripeLib(key);
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function resolveDoctor(
+  userId: string
+): Promise<{ id: string } | null> {
+  if (!supabaseAdmin) return null;
+  const { data } = await supabaseAdmin
+    .from("doctors")
+    .select("id")
+    .eq("profile_id", userId)
+    .single();
+  return data ?? null;
+}
+
+function participantCount(
+  registrations: Array<{ payment_status: string }>
+): number {
+  return registrations.filter(
+    (r) => r.payment_status === "free" || r.payment_status === "paid"
+  ).length;
+}
+
+// ─── Public ───────────────────────────────────────────────────────────────────
+
+// GET /api/live-sessions
+export async function listSessions(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { filter } = req.query;
+
+  let query = supabaseAdmin
+    .from("group_sessions")
+    .select(
+      `id, title, description, scheduled_at, duration_minutes,
+       max_participants, price_aed, is_free, status, daily_room_url,
+       recording_url, is_published, created_at,
+       doctors (id, full_name, specialty, avatar_url),
+       session_registrations (payment_status)`
+    )
+    .eq("is_published", true)
+    .neq("status", "cancelled");
+
+  if (filter === "past") {
+    query = query.in("status", ["ended"]);
+  } else if (filter === "upcoming") {
+    query = query.in("status", ["scheduled", "live"]);
+  }
+
+  const { data, error } = await query.order("scheduled_at", { ascending: true });
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const sessions = (data ?? []).map((s) => {
+    const regs = Array.isArray(s.session_registrations)
+      ? (s.session_registrations as Array<{ payment_status: string }>)
+      : [];
+    return {
+      ...s,
+      session_registrations: undefined,
+      participant_count: participantCount(regs),
+    };
+  });
+
+  res.json({ sessions });
+}
+
+// GET /api/live-sessions/:id
+export async function getSession(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { id } = req.params;
+
+  const { data, error } = await supabaseAdmin
+    .from("group_sessions")
+    .select(
+      `id, title, description, scheduled_at, duration_minutes,
+       max_participants, price_aed, is_free, status, daily_room_url,
+       recording_url, is_published, created_at,
+       doctors (id, full_name, specialty, avatar_url),
+       session_registrations (payment_status)`
+    )
+    .eq("id", id)
+    .eq("is_published", true)
+    .single();
+
+  if (error || !data) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  const regs = Array.isArray(data.session_registrations)
+    ? (data.session_registrations as Array<{ payment_status: string }>)
+    : [];
+
+  res.json({
+    session: {
+      ...data,
+      session_registrations: undefined,
+      participant_count: participantCount(regs),
+    },
+  });
+}
+
+// ─── Doctor ───────────────────────────────────────────────────────────────────
+
+// GET /api/live-sessions/doctor/mine
+export async function getDoctorSessions(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const doctor = await resolveDoctor(req.userId!);
+  if (!doctor) {
+    res.status(404).json({ error: "No doctor profile found" });
+    return;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("group_sessions")
+    .select(
+      `id, title, description, scheduled_at, duration_minutes,
+       max_participants, price_aed, is_free, status,
+       daily_room_url, recording_url, is_published, created_at,
+       session_registrations (payment_status)`
+    )
+    .eq("doctor_id", doctor.id)
+    .order("scheduled_at", { ascending: false });
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const sessions = (data ?? []).map((s) => {
+    const regs = Array.isArray(s.session_registrations)
+      ? (s.session_registrations as Array<{ payment_status: string }>)
+      : [];
+    return {
+      ...s,
+      session_registrations: undefined,
+      participant_count: participantCount(regs),
+    };
+  });
+
+  res.json({ sessions });
+}
+
+// POST /api/live-sessions
+export async function createSession(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const doctor = await resolveDoctor(req.userId!);
+  if (!doctor) {
+    res.status(403).json({ error: "Only doctors can create sessions" });
+    return;
+  }
+
+  const {
+    title,
+    description,
+    scheduled_at,
+    duration_minutes,
+    max_participants,
+    price_aed,
+    is_published,
+  } = req.body as {
+    title?: string;
+    description?: string;
+    scheduled_at?: string;
+    duration_minutes?: number;
+    max_participants?: number;
+    price_aed?: number;
+    is_published?: boolean;
+  };
+
+  if (!title || !scheduled_at) {
+    res.status(400).json({ error: "title and scheduled_at are required" });
+    return;
+  }
+
+  const priceNum = Number(price_aed ?? 0);
+  const isFree = priceNum === 0;
+
+  const { data, error } = await supabaseAdmin
+    .from("group_sessions")
+    .insert({
+      doctor_id: doctor.id,
+      title,
+      description: description ?? null,
+      scheduled_at,
+      duration_minutes: duration_minutes ?? 60,
+      max_participants: max_participants ?? 30,
+      price_aed: priceNum,
+      is_free: isFree,
+      is_published: is_published ?? false,
+    })
+    .select()
+    .single();
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.status(201).json({ session: data });
+}
+
+// PATCH /api/live-sessions/:id
+export async function updateSession(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const doctor = await resolveDoctor(req.userId!);
+  if (!doctor) {
+    res.status(403).json({ error: "Only doctors can update sessions" });
+    return;
+  }
+
+  const { id } = req.params;
+  const {
+    title,
+    description,
+    scheduled_at,
+    duration_minutes,
+    max_participants,
+    price_aed,
+    is_published,
+  } = req.body as {
+    title?: string;
+    description?: string;
+    scheduled_at?: string;
+    duration_minutes?: number;
+    max_participants?: number;
+    price_aed?: number;
+    is_published?: boolean;
+  };
+
+  const updates: Record<string, unknown> = {};
+  if (title !== undefined) updates.title = title;
+  if (description !== undefined) updates.description = description;
+  if (scheduled_at !== undefined) updates.scheduled_at = scheduled_at;
+  if (duration_minutes !== undefined) updates.duration_minutes = duration_minutes;
+  if (max_participants !== undefined) updates.max_participants = max_participants;
+  if (price_aed !== undefined) {
+    const priceNum = Number(price_aed);
+    updates.price_aed = priceNum;
+    updates.is_free = priceNum === 0;
+  }
+  if (is_published !== undefined) updates.is_published = is_published;
+
+  const { data, error } = await supabaseAdmin
+    .from("group_sessions")
+    .update(updates)
+    .eq("id", id)
+    .eq("doctor_id", doctor.id)
+    .select()
+    .single();
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  if (!data) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  res.json({ session: data });
+}
+
+// DELETE /api/live-sessions/:id
+export async function cancelSession(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const doctor = await resolveDoctor(req.userId!);
+  if (!doctor) {
+    res.status(403).json({ error: "Only doctors can cancel sessions" });
+    return;
+  }
+
+  const { id } = req.params;
+
+  const { data, error } = await supabaseAdmin
+    .from("group_sessions")
+    .update({ status: "cancelled" })
+    .eq("id", id)
+    .eq("doctor_id", doctor.id)
+    .select("id")
+    .single();
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  if (!data) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  res.json({ success: true });
+}
+
+// PATCH /api/live-sessions/:id/go-live
+export async function goLive(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const doctor = await resolveDoctor(req.userId!);
+  if (!doctor) {
+    res.status(403).json({ error: "Only doctors can start sessions" });
+    return;
+  }
+
+  const { id } = req.params;
+
+  const { data: existing, error: fetchError } = await supabaseAdmin
+    .from("group_sessions")
+    .select("id, status, scheduled_at, duration_minutes")
+    .eq("id", id)
+    .eq("doctor_id", doctor.id)
+    .single();
+
+  if (fetchError || !existing) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  if (existing.status !== "scheduled") {
+    res
+      .status(400)
+      .json({ error: `Cannot go live from status: ${existing.status}` });
+    return;
+  }
+
+  const expiryEpoch =
+    Math.floor(Date.now() / 1000) + existing.duration_minutes * 60 + 3600;
+
+  let roomName: string;
+  let roomUrl: string;
+  try {
+    const room = await createRoom(String(id), expiryEpoch);
+    roomName = room.name;
+    roomUrl = room.url;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to create room";
+    res.status(500).json({ error: message });
+    return;
+  }
+
+  const { data: updated, error: updateError } = await supabaseAdmin
+    .from("group_sessions")
+    .update({
+      status: "live",
+      daily_room_name: roomName,
+      daily_room_url: roomUrl,
+    })
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (updateError) {
+    res.status(500).json({ error: updateError.message });
+    return;
+  }
+
+  // Create an owner token for the doctor so they can join directly
+  const tokenExpiry = expiryEpoch;
+  let doctorToken: string | null = null;
+  try {
+    doctorToken = await createMeetingToken(
+      roomName,
+      req.userId!,
+      true,
+      tokenExpiry
+    );
+  } catch {
+    // Non-fatal — doctor can still join the room URL
+  }
+
+  res.json({ session: updated, doctorToken });
+}
+
+// PATCH /api/live-sessions/:id/end
+export async function endSession(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const doctor = await resolveDoctor(req.userId!);
+  if (!doctor) {
+    res.status(403).json({ error: "Only doctors can end sessions" });
+    return;
+  }
+
+  const { id } = req.params;
+  const { recording_url } = req.body as { recording_url?: string };
+
+  const { data, error } = await supabaseAdmin
+    .from("group_sessions")
+    .update({
+      status: "ended",
+      recording_url: recording_url ?? null,
+    })
+    .eq("id", id)
+    .eq("doctor_id", doctor.id)
+    .select()
+    .single();
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  if (!data) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  res.json({ session: data });
+}
+
+// ─── Authenticated (parent) ───────────────────────────────────────────────────
+
+// POST /api/live-sessions/:id/register
+export async function registerForSession(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { id } = req.params;
+  const userId = req.userId!;
+
+  const { data: session, error: sessionError } = await supabaseAdmin
+    .from("group_sessions")
+    .select(
+      "id, title, price_aed, is_free, status, is_published, max_participants, session_registrations (payment_status)"
+    )
+    .eq("id", id)
+    .eq("is_published", true)
+    .single();
+
+  if (sessionError || !session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  if (session.status === "cancelled" || session.status === "ended") {
+    res.status(400).json({ error: "This session is no longer available" });
+    return;
+  }
+
+  const regs = Array.isArray(session.session_registrations)
+    ? (session.session_registrations as Array<{ payment_status: string }>)
+    : [];
+  if (participantCount(regs) >= session.max_participants) {
+    res.status(400).json({ error: "This session is full" });
+    return;
+  }
+
+  // Check if already registered
+  const { data: existing } = await supabaseAdmin
+    .from("session_registrations")
+    .select("id, payment_status")
+    .eq("session_id", id)
+    .eq("user_id", userId)
+    .single();
+
+  if (existing) {
+    if (existing.payment_status === "free" || existing.payment_status === "paid") {
+      res.status(400).json({ error: "Already registered for this session" });
+      return;
+    }
+  }
+
+  // Free session — register immediately
+  if (session.is_free) {
+    const { data: reg, error: regError } = await supabaseAdmin
+      .from("session_registrations")
+      .upsert(
+        { session_id: id, user_id: userId, payment_status: "free" },
+        { onConflict: "session_id,user_id" }
+      )
+      .select()
+      .single();
+
+    if (regError) {
+      res.status(500).json({ error: regError.message });
+      return;
+    }
+
+    res.json({ registration: reg });
+    return;
+  }
+
+  // Paid session — create Stripe checkout
+  const stripe = getStripe();
+  if (!stripe) {
+    res.status(500).json({ error: "Payment service not configured" });
+    return;
+  }
+
+  const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3333";
+
+  const { error: pendingError } = await supabaseAdmin
+    .from("session_registrations")
+    .upsert(
+      { session_id: id, user_id: userId, payment_status: "pending" },
+      { onConflict: "session_id,user_id" }
+    );
+
+  if (pendingError) {
+    res.status(500).json({ error: pendingError.message });
+    return;
+  }
+
+  const checkoutSession = await stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "aed",
+          unit_amount: Math.round(Number(session.price_aed) * 100),
+          product_data: {
+            name: session.title,
+            description: `Live group session ticket`,
+          },
+        },
+      },
+    ],
+    metadata: {
+      type: "group_session",
+      sessionId: String(id),
+      userId,
+    },
+    success_url: `${frontendUrl}/live-sessions/${id}?registered=1&stripe_session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${frontendUrl}/live-sessions/${id}?cancelled=1`,
+  });
+
+  res.json({ checkoutUrl: checkoutSession.url });
+}
+
+// GET /api/live-sessions/registered
+export async function getMyRegistrations(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("session_registrations")
+    .select(
+      `id, payment_status, registered_at,
+       group_sessions (
+         id, title, description, scheduled_at, duration_minutes,
+         max_participants, price_aed, is_free, status,
+         daily_room_url, recording_url,
+         doctors (id, full_name, specialty, avatar_url)
+       )`
+    )
+    .eq("user_id", req.userId!)
+    .order("registered_at", { ascending: false });
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json({ registrations: data ?? [] });
+}
+
+// GET /api/live-sessions/:id/join
+export async function joinSession(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { id } = req.params;
+  const userId = req.userId!;
+
+  // Fetch session including doctor_id so we can grant host bypass
+  const { data: session, error: sessionError } = await supabaseAdmin
+    .from("group_sessions")
+    .select(
+      "id, status, daily_room_name, daily_room_url, duration_minutes, doctor_id"
+    )
+    .eq("id", id)
+    .single();
+
+  if (sessionError || !session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  if (session.status !== "live") {
+    res.status(400).json({ error: "Session is not currently live" });
+    return;
+  }
+
+  if (!session.daily_room_name || !session.daily_room_url) {
+    res.status(500).json({ error: "Room not configured yet" });
+    return;
+  }
+
+  // Check if the requester is the doctor who owns this session
+  const doctor = await resolveDoctor(userId);
+  const isDoctorHost =
+    doctor !== null && session.doctor_id === doctor.id;
+
+  if (!isDoctorHost) {
+    // Verify participant registration with confirmed payment
+    const { data: registration } = await supabaseAdmin
+      .from("session_registrations")
+      .select("id, payment_status")
+      .eq("session_id", id)
+      .eq("user_id", userId)
+      .single();
+
+    if (
+      !registration ||
+      !["free", "paid"].includes(registration.payment_status)
+    ) {
+      res
+        .status(403)
+        .json({ error: "You are not registered for this session" });
+      return;
+    }
+  }
+
+  const expiryEpoch =
+    Math.floor(Date.now() / 1000) + session.duration_minutes * 60 + 1800;
+
+  let token: string;
+  try {
+    token = await createMeetingToken(
+      session.daily_room_name,
+      userId,
+      isDoctorHost,
+      expiryEpoch
+    );
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to create token";
+    res.status(500).json({ error: message });
+    return;
+  }
+
+  res.json({ token, roomUrl: session.daily_room_url });
+}
+
+// GET /api/live-sessions/user/verify-payment?stripe_session_id=xxx
+// Called from the frontend after Stripe redirects to the success URL.
+// Acts as a webhook fallback to confirm payment without relying on server-to-server events.
+export async function verifySessionPayment(
+  req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const stripeSessionId =
+    typeof req.query.stripe_session_id === "string"
+      ? req.query.stripe_session_id
+      : null;
+
+  if (!stripeSessionId) {
+    res.status(400).json({ error: "stripe_session_id query param is required" });
+    return;
+  }
+
+  const stripe = getStripe();
+  if (!stripe) {
+    res.status(500).json({ error: "Payment service not configured" });
+    return;
+  }
+
+  let checkoutSession: StripeCheckoutSessionResponse;
+  try {
+    checkoutSession = await stripe.checkout.sessions.retrieve(stripeSessionId);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Failed to retrieve session";
+    res.status(400).json({ error: message });
+    return;
+  }
+
+  if (checkoutSession.payment_status !== "paid") {
+    res.status(400).json({ error: "Payment not completed" });
+    return;
+  }
+
+  const metadata = checkoutSession.metadata ?? {};
+  if (metadata.type !== "group_session" || !metadata.sessionId) {
+    res.status(400).json({ error: "Invalid session metadata" });
+    return;
+  }
+
+  const { sessionId } = metadata;
+  const userId = req.userId!;
+
+  const { error } = await supabaseAdmin
+    .from("session_registrations")
+    .update({ payment_status: "paid", stripe_session_id: stripeSessionId })
+    .eq("session_id", sessionId)
+    .eq("user_id", userId);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json({ success: true, sessionId });
+}

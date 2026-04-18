@@ -82,6 +82,11 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       icon: GraduationCap,
     },
     {
+      href: "/dashboard/parent/live-sessions",
+      label: t.parentDashboard.liveSessions,
+      icon: Video,
+    },
+    {
       href: "/dashboard/parent/files",
       label: t.parentDashboard.files,
       icon: Paperclip,
