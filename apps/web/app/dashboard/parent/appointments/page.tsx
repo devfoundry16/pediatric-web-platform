@@ -28,6 +28,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { appointmentsApi, doctorsApi } from "@/lib/api/appointments";
+import axios from "axios";
+import { createClient } from "@/lib/supabase/client";
 import type { Appointment, AppointmentStatus } from "@/types/appointment";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
@@ -46,11 +48,29 @@ const STATUS_VARIANTS: Record<
   rescheduled: "secondary",
 };
 
+const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api").replace(/\/$/, "");
+
+async function getJoinUrl(appointmentId: string): Promise<string | null> {
+  try {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return null;
+    const { data } = await axios.get<{ tokenUrl: string }>(
+      `${API_BASE}/appointments/${appointmentId}/join`,
+      { headers: { Authorization: `Bearer ${session.access_token}` } }
+    );
+    return data.tokenUrl;
+  } catch {
+    return null;
+  }
+}
+
 export default function ParentAppointmentsPage() {
   const { dictionary: t } = useI18n();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
 
   // Cancel dialog
   const [cancelId, setCancelId] = useState<string | null>(null);
@@ -192,12 +212,24 @@ export default function ParentAppointmentsPage() {
 
           <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
             {appt.status === "confirmed" && appt.meeting_url && (
-              <a href={appt.meeting_url} target="_blank" rel="noopener noreferrer">
-                <Button size="sm" className="gap-1.5">
+              <Button
+                size="sm"
+                className="gap-1.5"
+                disabled={joiningId === appt.id}
+                onClick={async () => {
+                  setJoiningId(appt.id);
+                  const url = await getJoinUrl(appt.id);
+                  setJoiningId(null);
+                  if (url) window.open(url, "_blank", "noopener,noreferrer");
+                }}
+              >
+                {joiningId === appt.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
                   <Video className="h-3.5 w-3.5" />
-                  {t.appointments.join}
-                </Button>
-              </a>
+                )}
+                {t.appointments.join}
+              </Button>
             )}
             {canReschedule && (
               <Button

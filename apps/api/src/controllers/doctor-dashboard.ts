@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
+import { createRoom, createMeetingToken } from "../lib/daily";
 
 // ─── Doctor identity resolution ───────────────────────────────────────────────
 
@@ -223,7 +224,7 @@ export async function startSession(
 
   const { data: existing } = await supabaseAdmin
     .from("appointments")
-    .select("id, status")
+    .select("id, status, scheduled_date, scheduled_time, duration_minutes, meeting_url")
     .eq("id", id)
     .eq("doctor_id", doctor.id)
     .single();
@@ -240,7 +241,23 @@ export async function startSession(
     return;
   }
 
-  const meetingUrl = `https://meet.littlecare.ae/room/${id}`;
+  // If the room was already created (idempotent restart), reuse existing URL
+  let meetingUrl = existing.meeting_url as string | null;
+
+  if (!meetingUrl) {
+    // Calculate room expiry: scheduled end + 30 min buffer
+    const scheduledStart = new Date(`${existing.scheduled_date}T${existing.scheduled_time}`);
+    const durationMs = ((existing.duration_minutes as number) + 30) * 60 * 1000;
+    const expiryEpoch = Math.floor((scheduledStart.getTime() + durationMs) / 1000);
+
+    try {
+      const room = await createRoom(`appt-${id}`, expiryEpoch);
+      meetingUrl = room.url;
+    } catch (dailyErr) {
+      res.status(502).json({ error: "Failed to create video room", detail: String(dailyErr) });
+      return;
+    }
+  }
 
   const { data: updated, error } = await supabaseAdmin
     .from("appointments")
@@ -255,7 +272,20 @@ export async function startSession(
     return;
   }
 
-  res.json({ appointment: updated });
+  // Generate a host token for the doctor so they can join immediately
+  const expiryEpoch = Math.floor(Date.now() / 1000) + 4 * 60 * 60; // 4h from now
+  let doctorToken: string | null = null;
+  try {
+    const roomName = `appt-${id}`;
+    doctorToken = await createMeetingToken(roomName, req.userId!, true, expiryEpoch);
+  } catch {
+    // Non-fatal: doctor can still use the base URL
+  }
+
+  res.json({
+    appointment: updated,
+    tokenUrl: doctorToken ? `${meetingUrl}?t=${doctorToken}` : meetingUrl,
+  });
 }
 
 export async function completeAppointment(

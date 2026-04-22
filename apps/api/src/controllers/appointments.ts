@@ -1,11 +1,30 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
+import { createMeetingToken } from "../lib/daily";
+import {
+  sendBookingConfirmation,
+  sendCancellationEmail,
+  sendRescheduleEmail,
+} from "../lib/resend";
 
 const CONSULTATION_CONFIG: Record<string, { duration: number; price: number }> = {
   quick: { duration: 15, price: 150 },
   standard: { duration: 30, price: 250 },
   extended: { duration: 45, price: 350 },
 };
+
+async function resolveParentEmail(userId: string): Promise<{ email: string; name: string } | null> {
+  if (!supabaseAdmin) return null;
+  const { data } = await supabaseAdmin.auth.admin.getUserById(userId);
+  const email = data?.user?.email ?? null;
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("full_name")
+    .eq("id", userId)
+    .single();
+  if (!email) return null;
+  return { email, name: profile?.full_name ?? "Parent" };
+}
 
 export async function listAppointments(req: Request, res: Response): Promise<void> {
   if (!supabaseAdmin) {
@@ -246,6 +265,30 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     }
   }
 
+  // Fire confirmation email (non-blocking)
+  if (appointment) {
+    resolveParentEmail(req.userId!).then(async (parent) => {
+      if (!parent) return;
+      const { data: doctor } = await supabaseAdmin!
+        .from("doctors")
+        .select("full_name")
+        .eq("id", assignedDoctorId)
+        .single();
+      sendBookingConfirmation({
+        appointmentId: appointment.id,
+        parentEmail: parent.email,
+        parentName: parent.name,
+        parentUserId: req.userId,
+        doctorName: doctor?.full_name ?? "Your doctor",
+        scheduledDate: date,
+        scheduledTime: time,
+        consultationType: consultationType,
+        durationMinutes: config.duration,
+        priceAed: usedPackageId ? 0 : config.price,
+      }).catch(() => {});
+    }).catch(() => {});
+  }
+
   res.status(201).json({
     appointment,
     usedPackageCredit: !!usedPackageId,
@@ -293,7 +336,82 @@ export async function cancelAppointment(req: Request, res: Response): Promise<vo
     return;
   }
 
+  // Fire cancellation email (non-blocking)
+  resolveParentEmail(req.userId!).then(async (parent) => {
+    if (!parent) return;
+    const { data: apptFull } = await supabaseAdmin!
+      .from("appointments")
+      .select("scheduled_date, scheduled_time, doctors!appointments_doctor_id_fkey(full_name)")
+      .eq("id", id)
+      .single();
+    if (!apptFull) return;
+    const doc = apptFull.doctors as unknown as { full_name: string } | null;
+    sendCancellationEmail({
+      appointmentId: id as string,
+      parentEmail: parent.email,
+      parentName: parent.name,
+      parentUserId: req.userId,
+      doctorName: doc?.full_name ?? "Your doctor",
+      scheduledDate: apptFull.scheduled_date,
+      scheduledTime: apptFull.scheduled_time,
+      consultationType: "",
+      durationMinutes: 0,
+    }).catch(() => {});
+  }).catch(() => {});
+
   res.json({ message: "Appointment cancelled successfully" });
+}
+
+export async function joinAppointment(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { id } = req.params;
+
+  const { data: appt } = await supabaseAdmin
+    .from("appointments")
+    .select("id, status, meeting_url, parent_id, doctor_id, scheduled_date, scheduled_time, duration_minutes")
+    .eq("id", id)
+    .single();
+
+  if (!appt) {
+    res.status(404).json({ error: "Appointment not found" });
+    return;
+  }
+
+  // Only the parent or the doctor can join
+  const isParent = appt.parent_id === req.userId;
+  if (!isParent) {
+    // Check if user is the doctor for this appointment
+    const { data: doctorRow } = await supabaseAdmin
+      .from("doctors")
+      .select("id")
+      .eq("profile_id", req.userId)
+      .single();
+    const isDoctor = doctorRow && appt.doctor_id === doctorRow.id;
+    if (!isDoctor) {
+      res.status(403).json({ error: "Not authorized to join this appointment" });
+      return;
+    }
+  }
+
+  if (!appt.meeting_url) {
+    res.status(400).json({ error: "Meeting room has not been started yet" });
+    return;
+  }
+
+  const roomName = `appt-${id}`;
+  const expiryEpoch = Math.floor(Date.now() / 1000) + 4 * 60 * 60;
+
+  try {
+    const token = await createMeetingToken(roomName, req.userId!, false, expiryEpoch);
+    res.json({ tokenUrl: `${appt.meeting_url}?t=${token}` });
+  } catch {
+    // If token generation fails, return the base URL
+    res.json({ tokenUrl: appt.meeting_url });
+  }
 }
 
 export async function rescheduleAppointment(req: Request, res: Response): Promise<void> {
@@ -359,6 +477,27 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
     res.status(500).json({ error: error.message });
     return;
   }
+
+  // Fire reschedule email (non-blocking)
+  resolveParentEmail(req.userId!).then(async (parent) => {
+    if (!parent) return;
+    const { data: docRow } = await supabaseAdmin!
+      .from("doctors")
+      .select("full_name")
+      .eq("id", existing.doctor_id)
+      .single();
+    sendRescheduleEmail({
+      appointmentId: id as string,
+      parentEmail: parent.email,
+      parentName: parent.name,
+      parentUserId: req.userId,
+      doctorName: docRow?.full_name ?? "Your doctor",
+      scheduledDate: newDate as string,
+      scheduledTime: newTime as string,
+      consultationType: existing.consultation_type as string,
+      durationMinutes: 0,
+    }).catch(() => {});
+  }).catch(() => {});
 
   res.json({ appointment: updated });
 }

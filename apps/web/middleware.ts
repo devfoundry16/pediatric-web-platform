@@ -31,6 +31,19 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  // Role for routing: prefer `profiles.role` (DB) over JWT `user_metadata.role`.
+  // Admins promoted in SQL may not have updated auth metadata, which would
+  // otherwise keep sending them to the parent dashboard.
+  let dashboardRole: string | undefined;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    dashboardRole = profile?.role ?? (user.user_metadata?.role as string | undefined);
+  }
+
   const { pathname } = request.nextUrl;
 
   const skipAuthLoggedInRedirect =
@@ -55,33 +68,56 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Doctors may only access /dashboard/doctor/*; parents (and any non-doctor role) only /dashboard/parent/*
+  // Role-based dashboard routing
   if (user && pathname.startsWith("/dashboard")) {
-    const role = user.user_metadata?.role as string | undefined;
+    const role = dashboardRole;
     const isDoctor = role === "doctor";
+    const isAdmin = role === "admin";
     const onDoctorPath = pathname.startsWith("/dashboard/doctor");
     const onParentPath = pathname.startsWith("/dashboard/parent");
+    const onAdminPath = pathname.startsWith("/dashboard/admin");
 
-    if (isDoctor && onParentPath) {
+    // Admin may only access /dashboard/admin/*
+    if (isAdmin && !onAdminPath) {
       const url = request.nextUrl.clone();
-      url.pathname = "/dashboard/doctor";
+      url.pathname = "/dashboard/admin";
       url.search = "";
       return NextResponse.redirect(url);
     }
-    if (!isDoctor && onDoctorPath) {
+    // Non-admins may not access admin paths
+    if (!isAdmin && onAdminPath) {
       const url = request.nextUrl.clone();
-      url.pathname = "/dashboard/parent";
+      url.pathname = isDoctor ? "/dashboard/doctor" : "/dashboard/parent";
       url.search = "";
       return NextResponse.redirect(url);
+    }
+    // Doctor/parent cross-routing guards
+    if (!isAdmin) {
+      if (isDoctor && onParentPath) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard/doctor";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
+      if (!isDoctor && onDoctorPath) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard/parent";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
     }
   }
 
   // Redirect authenticated users away from auth pages to their dashboard
   if (user && pathname.startsWith("/auth") && !skipAuthLoggedInRedirect) {
-    const role = user.user_metadata?.role as string | undefined;
     const url = request.nextUrl.clone();
+    const role = dashboardRole;
     url.pathname =
-      role === "doctor" ? "/dashboard/doctor" : "/dashboard/parent";
+      role === "doctor"
+        ? "/dashboard/doctor"
+        : role === "admin"
+          ? "/dashboard/admin"
+          : "/dashboard/parent";
     return NextResponse.redirect(url);
   }
 
