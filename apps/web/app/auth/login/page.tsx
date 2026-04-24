@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { LoginForm } from "@/components/auth/login-form";
@@ -42,7 +43,9 @@ export default function LoginPage() {
           </h1>
           <p className="mt-2 text-muted-foreground">{t.auth.loginSubtitle}</p>
 
-          <LoginForm />
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             {t.auth.noAccount}{" "}

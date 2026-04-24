@@ -35,7 +35,8 @@ export async function listCourses(_req: Request, res: Response): Promise<void> {
 
   const { data, error } = await supabaseAdmin
     .from("courses")
-    .select(`
+    .select(
+      `
       id,
       slug,
       title,
@@ -49,7 +50,8 @@ export async function listCourses(_req: Request, res: Response): Promise<void> {
         full_name
       ),
       course_lessons ( id )
-    `)
+    `,
+    )
     .eq("is_published", true)
     .order("created_at", { ascending: false });
 
@@ -78,7 +80,8 @@ export async function getCourse(req: Request, res: Response): Promise<void> {
 
   const { data: course, error } = await supabaseAdmin
     .from("courses")
-    .select(`
+    .select(
+      `
       id,
       slug,
       title,
@@ -99,7 +102,8 @@ export async function getCourse(req: Request, res: Response): Promise<void> {
         order_index,
         is_preview
       )
-    `)
+    `,
+    )
     .eq("id", id)
     .eq("is_published", true)
     .single();
@@ -110,9 +114,9 @@ export async function getCourse(req: Request, res: Response): Promise<void> {
   }
 
   // Sort lessons by order_index
-  const lessons = (Array.isArray(course.course_lessons) ? course.course_lessons : []).sort(
-    (a, b) => a.order_index - b.order_index
-  );
+  const lessons = (
+    Array.isArray(course.course_lessons) ? course.course_lessons : []
+  ).sort((a, b) => a.order_index - b.order_index);
 
   res.json({ course: { ...course, course_lessons: lessons } });
 }
@@ -144,7 +148,9 @@ export async function enrollCourse(req: Request, res: Response): Promise<void> {
 
   // Only free courses can be enrolled directly (paid courses would need payment)
   if (!course.is_free) {
-    res.status(400).json({ error: "Paid courses are not yet supported for direct enrollment" });
+    res.status(400).json({
+      error: "Paid courses are not yet supported for direct enrollment",
+    });
     return;
   }
 
@@ -167,7 +173,10 @@ export async function enrollCourse(req: Request, res: Response): Promise<void> {
 }
 
 // GET /api/courses/my
-export async function getMyEnrollments(req: Request, res: Response): Promise<void> {
+export async function getMyEnrollments(
+  req: Request,
+  res: Response,
+): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
@@ -177,7 +186,8 @@ export async function getMyEnrollments(req: Request, res: Response): Promise<voi
 
   const { data, error } = await supabaseAdmin
     .from("course_enrollments")
-    .select(`
+    .select(
+      `
       id,
       enrolled_at,
       completed_at,
@@ -192,7 +202,8 @@ export async function getMyEnrollments(req: Request, res: Response): Promise<voi
         doctors ( id, full_name ),
         course_lessons ( id )
       )
-    `)
+    `,
+    )
     .eq("user_id", userId)
     .order("enrolled_at", { ascending: false });
 
@@ -217,17 +228,25 @@ export async function getMyEnrollments(req: Request, res: Response): Promise<voi
     }
   }
 
-  const enrollments = (data ?? []).map((e) => {
+  const enrollments = (data ?? []).map((e: any) => {
     const totalLessons = Array.isArray(e.courses?.course_lessons)
       ? e.courses.course_lessons.length
       : 0;
-    const completedLessons = progressMap[(e.courses as { id: string } | null)?.id ?? ""] ?? 0;
+    const completedLessons =
+      progressMap[(e.courses as { id: string } | null)?.id ?? ""] ?? 0;
     return {
       ...e,
       courses: e.courses
-        ? { ...e.courses, lesson_count: totalLessons, course_lessons: undefined }
+        ? {
+            ...e.courses,
+            lesson_count: totalLessons,
+            course_lessons: undefined,
+          }
         : null,
-      progress_percent: totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0,
+      progress_percent:
+        totalLessons > 0
+          ? Math.round((completedLessons / totalLessons) * 100)
+          : 0,
       completed_lessons: completedLessons,
       total_lessons: totalLessons,
     };
@@ -266,9 +285,11 @@ export async function streamLesson(req: Request, res: Response): Promise<void> {
 
   // Non-preview lessons require enrollment
   if (!lesson.is_preview) {
-    const enrolled = await isEnrolled(userId, courseId);
+    const enrolled = await isEnrolled(userId, courseId as string);
     if (!enrolled) {
-      res.status(403).json({ error: "You must be enrolled to watch this lesson" });
+      res
+        .status(403)
+        .json({ error: "You must be enrolled to watch this lesson" });
       return;
     }
   }
@@ -287,7 +308,10 @@ export async function streamLesson(req: Request, res: Response): Promise<void> {
 }
 
 // POST /api/courses/:id/lessons/:lessonId/progress
-export async function markLessonComplete(req: Request, res: Response): Promise<void> {
+export async function markLessonComplete(
+  req: Request,
+  res: Response,
+): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
@@ -297,7 +321,7 @@ export async function markLessonComplete(req: Request, res: Response): Promise<v
   const { id: courseId, lessonId } = req.params;
 
   // Must be enrolled
-  const enrolled = await isEnrolled(userId, courseId);
+  const enrolled = await isEnrolled(userId, courseId as string);
   if (!enrolled) {
     res.status(403).json({ error: "You must be enrolled to track progress" });
     return;
@@ -308,7 +332,7 @@ export async function markLessonComplete(req: Request, res: Response): Promise<v
     .from("lesson_progress")
     .upsert(
       { user_id: userId, lesson_id: lessonId, course_id: courseId },
-      { onConflict: "user_id,lesson_id" }
+      { onConflict: "user_id,lesson_id" },
     );
 
   if (progressError) {
@@ -353,7 +377,10 @@ export async function markLessonComplete(req: Request, res: Response): Promise<v
 // ─── Doctor: Course Management ─────────────────────────────────────────────────
 
 // GET /api/courses/created
-export async function getCreatedCourses(req: Request, res: Response): Promise<void> {
+export async function getCreatedCourses(
+  req: Request,
+  res: Response,
+): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
@@ -367,7 +394,8 @@ export async function getCreatedCourses(req: Request, res: Response): Promise<vo
 
   const { data, error } = await supabaseAdmin
     .from("courses")
-    .select(`
+    .select(
+      `
       id,
       slug,
       title,
@@ -380,7 +408,8 @@ export async function getCreatedCourses(req: Request, res: Response): Promise<vo
       updated_at,
       course_lessons ( id ),
       course_enrollments ( id )
-    `)
+    `,
+    )
     .eq("doctor_id", doctorId)
     .order("created_at", { ascending: false });
 
@@ -392,7 +421,9 @@ export async function getCreatedCourses(req: Request, res: Response): Promise<vo
   const courses = (data ?? []).map((c) => ({
     ...c,
     lesson_count: Array.isArray(c.course_lessons) ? c.course_lessons.length : 0,
-    enrollment_count: Array.isArray(c.course_enrollments) ? c.course_enrollments.length : 0,
+    enrollment_count: Array.isArray(c.course_enrollments)
+      ? c.course_enrollments.length
+      : 0,
     course_lessons: undefined,
     course_enrollments: undefined,
   }));
@@ -466,7 +497,14 @@ export async function updateCourse(req: Request, res: Response): Promise<void> {
   }
 
   const { id } = req.params;
-  const { title, description, thumbnail_url, is_free, price_aed, is_published } = req.body;
+  const {
+    title,
+    description,
+    thumbnail_url,
+    is_free,
+    price_aed,
+    is_published,
+  } = req.body;
 
   const { data, error } = await supabaseAdmin
     .from("courses")
@@ -492,7 +530,10 @@ export async function updateCourse(req: Request, res: Response): Promise<void> {
 }
 
 // GET /api/courses/:id/lessons (doctor view — includes video_path)
-export async function getCourseLesson(req: Request, res: Response): Promise<void> {
+export async function getCourseLesson(
+  req: Request,
+  res: Response,
+): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
@@ -561,7 +602,14 @@ export async function addLesson(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const { title, description, video_path, duration_seconds, order_index, is_preview } = req.body;
+  const {
+    title,
+    description,
+    video_path,
+    duration_seconds,
+    order_index,
+    is_preview,
+  } = req.body;
 
   if (!title) {
     res.status(400).json({ error: "title is required" });
@@ -628,7 +676,14 @@ export async function updateLesson(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const { title, description, video_path, duration_seconds, order_index, is_preview } = req.body;
+  const {
+    title,
+    description,
+    video_path,
+    duration_seconds,
+    order_index,
+    is_preview,
+  } = req.body;
 
   const { data, error } = await supabaseAdmin
     .from("course_lessons")
