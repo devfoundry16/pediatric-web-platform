@@ -134,11 +134,11 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
       label: t.doctorDashboard.courses,
       icon: GraduationCap,
     },
-    {
-      href: "/dashboard/doctor/revenue",
-      label: t.doctorDashboard.revenue,
-      icon: DollarSign,
-    },
+    // {
+    //   href: "/dashboard/doctor/revenue",
+    //   label: t.doctorDashboard.revenue,
+    //   icon: DollarSign,
+    // },
     {
       href: "/dashboard/doctor/profile",
       label: t.profile.title,
@@ -169,8 +169,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
               item.href === "/dashboard/doctor";
             const isActive = isOverviewHref
               ? pathname === item.href
-              : pathname === item.href ||
-                pathname.startsWith(`${item.href}/`);
+              : pathname === item.href || pathname.startsWith(`${item.href}/`);
             return (
               <li key={item.href}>
                 <Link
@@ -179,7 +178,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
                     "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                     isActive
                       ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
                   <item.icon className="h-4 w-4 shrink-0" />
