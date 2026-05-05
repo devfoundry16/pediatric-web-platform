@@ -137,6 +137,27 @@ export async function createMedicalFile(req: Request, res: Response): Promise<vo
     }
   }
 
+  // For doctors: verify the child is one of their patients (has an appointment with this doctor)
+  if (role === "doctor") {
+    const doctorId = await getDoctorId(req.userId);
+    if (!doctorId) {
+      res.status(403).json({ error: "Doctor profile not found" });
+      return;
+    }
+    const { data: appt } = await supabaseAdmin!
+      .from("appointments")
+      .select("id")
+      .eq("doctor_id", doctorId)
+      .eq("child_id", childId)
+      .not("status", "in", '("cancelled","rescheduled")')
+      .limit(1)
+      .maybeSingle();
+    if (!appt) {
+      res.status(403).json({ error: "Child is not one of your patients" });
+      return;
+    }
+  }
+
   const { data: file, error } = await supabaseAdmin
     .from("medical_files")
     .insert({

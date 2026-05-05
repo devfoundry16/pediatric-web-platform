@@ -16,7 +16,16 @@ async function resolveDoctor(userId: string): Promise<{ id: string } | null> {
 
   if (linked) return linked;
 
-  // 2. Claim the first unlinked active doctor (makes seeded rows usable)
+  // 2. Verify the user actually has the "doctor" role before allowing a claim
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .single();
+
+  if (profile?.role !== "doctor") return null;
+
+  // 3. Claim the first unlinked active doctor (makes seeded rows usable)
   const { data: unlinked } = await supabaseAdmin
     .from("doctors")
     .select("id")

@@ -12,9 +12,26 @@ export async function GET(request: NextRequest) {
     const { error, data } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.user) {
-      const role = data.user.user_metadata?.role as string | undefined;
+      // Prefer DB role over JWT metadata so admin promotions are reflected
+      // immediately without requiring a token refresh.
+      let role: string | undefined = data.user.user_metadata?.role as string | undefined;
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
+          .maybeSingle();
+        if (profile?.role) role = profile.role as string;
+      } catch {
+        // Non-fatal: fall back to metadata role
+      }
+
       const dashboard =
-        role === "doctor" ? "/dashboard/doctor" : "/dashboard/parent";
+        role === "doctor"
+          ? "/dashboard/doctor"
+          : role === "admin"
+            ? "/dashboard/admin"
+            : "/dashboard/parent";
 
       return NextResponse.redirect(`${origin}${dashboard}`);
     }

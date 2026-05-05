@@ -154,6 +154,8 @@ export async function getSession(
     session: {
       ...data,
       session_registrations: undefined,
+      // daily_room_url is only provided to authenticated participants via /join
+      daily_room_url: undefined,
       participant_count: participantCount(regs),
     },
   });
