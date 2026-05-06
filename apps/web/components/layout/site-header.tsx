@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { UserNavMenu } from "@/components/layout/user-nav-menu";
 import { Button } from "@/components/ui/button";
 import {
@@ -56,6 +57,7 @@ export function SiteHeader() {
 
         <div className="flex items-center gap-2">
           <LanguageSwitcher />
+          <ThemeToggle />
           {user ? (
             <UserNavMenu user={user} />
           ) : (
