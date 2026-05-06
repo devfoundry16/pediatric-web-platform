@@ -18,7 +18,7 @@ interface AuthActions {
     password: string,
     fullName: string,
     phone: string,
-    role: "parent" | "doctor"
+    role: "parent" | "doctor",
   ) => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (user: User | null) => void;
@@ -27,7 +27,7 @@ interface AuthActions {
   initialize: () => () => void;
   updateProfileMetadata: (
     fullName: string,
-    phone: string
+    phone: string,
   ) => Promise<{ error: string | null }>;
   updateUserEmail: (email: string) => Promise<{ error: string | null }>;
   updateUserPassword: (password: string) => Promise<{ error: string | null }>;
@@ -43,8 +43,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   setUser: (user) => set({ user }),
 
-  setSession: (session) =>
-    set({ session, user: session?.user ?? null }),
+  setSession: (session) => set({ session, user: session?.user ?? null }),
 
   clearError: () => set({ error: null }),
 
@@ -66,7 +65,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
       // TOKEN_REFRESH_FAILED fires when the stored refresh token is revoked
       // or not found (e.g. after a long period of inactivity). Treat it the
       // same as SIGNED_OUT so the client state is fully cleared.
-      if (event === "TOKEN_REFRESH_FAILED" || event === "SIGNED_OUT") {
+      if (event === "SIGNED_OUT") {
         set({ session: null, user: null });
         return;
       }
@@ -157,9 +156,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     if (data.user) {
       set((state) => ({
         user: data.user,
-        session: state.session
-          ? { ...state.session, user: data.user }
-          : null,
+        session: state.session ? { ...state.session, user: data.user } : null,
       }));
     }
 
@@ -177,9 +174,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     if (data.user) {
       set((state) => ({
         user: data.user,
-        session: state.session
-          ? { ...state.session, user: data.user }
-          : null,
+        session: state.session ? { ...state.session, user: data.user } : null,
       }));
     }
 
@@ -197,9 +192,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     if (data.user) {
       set((state) => ({
         user: data.user,
-        session: state.session
-          ? { ...state.session, user: data.user }
-          : null,
+        session: state.session ? { ...state.session, user: data.user } : null,
       }));
     }
 

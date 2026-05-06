@@ -6,7 +6,13 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { UserNavMenu } from "@/components/layout/user-nav-menu";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Menu, Heart } from "lucide-react";
 import { useState } from "react";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
@@ -99,10 +105,7 @@ export function SiteHeader() {
                         {t.common.login}
                       </Button>
                     </Link>
-                    <Link
-                      href="/auth/register"
-                      onClick={() => setOpen(false)}
-                    >
+                    <Link href="/auth/register" onClick={() => setOpen(false)}>
                       <Button className="w-full">{t.common.register}</Button>
                     </Link>
                   </div>

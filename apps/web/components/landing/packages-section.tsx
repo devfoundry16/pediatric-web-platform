@@ -54,9 +54,7 @@ export function PackagesSection() {
             >
               <CardHeader className="pb-4 pt-6">
                 <CardTitle className="text-xl">{pkg.name}</CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {pkg.desc}
-                </p>
+                <p className="mt-1 text-sm text-muted-foreground">{pkg.desc}</p>
               </CardHeader>
               <CardContent className="flex flex-col gap-4 pb-6">
                 <div>
@@ -81,7 +79,10 @@ export function PackagesSection() {
                   </div>
                 </div>
                 <Link href="/booking">
-                  <Button variant="outline" className="w-full gap-2 bg-transparent">
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2 bg-transparent"
+                  >
                     {t.common.bookNow}
                     <ArrowRight className="h-4 w-4" />
                   </Button>
