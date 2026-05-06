@@ -51,13 +51,25 @@ export const useAuthStore = create<AuthStore>((set) => ({
   initialize: () => {
     const supabase = createClient();
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        // Session could not be read or refreshed — treat as signed out.
+        set({ session: null, user: null });
+        return;
+      }
       set({ session, user: session?.user ?? null });
     });
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      // TOKEN_REFRESH_FAILED fires when the stored refresh token is revoked
+      // or not found (e.g. after a long period of inactivity). Treat it the
+      // same as SIGNED_OUT so the client state is fully cleared.
+      if (event === "TOKEN_REFRESH_FAILED" || event === "SIGNED_OUT") {
+        set({ session: null, user: null });
+        return;
+      }
       set({ session, user: session?.user ?? null });
     });
 

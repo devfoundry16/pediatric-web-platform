@@ -25,25 +25,6 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Refresh session — do NOT use getSession() here; getUser() contacts Supabase
-  // and is the only reliable way to validate the token server-side.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Role for routing: prefer `profiles.role` (DB) over JWT `user_metadata.role`.
-  // Admins promoted in SQL may not have updated auth metadata, which would
-  // otherwise keep sending them to the parent dashboard.
-  let dashboardRole: string | undefined;
-  if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .maybeSingle();
-    dashboardRole = profile?.role ?? (user.user_metadata?.role as string | undefined);
-  }
-
   const { pathname } = request.nextUrl;
 
   const skipAuthLoggedInRedirect =
@@ -59,6 +40,50 @@ export async function middleware(request: NextRequest) {
   ];
 
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));
+
+  // Refresh session — do NOT use getSession() here; getUser() contacts Supabase
+  // and is the only reliable way to validate the token server-side.
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  // When the refresh token is revoked or no longer exists (e.g. the user
+  // hasn't visited in a long time), getUser() returns an error instead of
+  // silently returning null. The stale `sb-*` cookies must be deleted from
+  // the response so the browser stops re-sending them on every subsequent
+  // request, which would otherwise cause an "Invalid Refresh Token" console
+  // error on each page load until the cookies naturally expire.
+  if (authError) {
+    const response = isProtected
+      ? (() => {
+          const loginUrl = request.nextUrl.clone();
+          loginUrl.pathname = "/auth/login";
+          loginUrl.searchParams.set("redirectTo", pathname);
+          return NextResponse.redirect(loginUrl);
+        })()
+      : supabaseResponse;
+
+    request.cookies
+      .getAll()
+      .filter((c) => c.name.startsWith("sb-"))
+      .forEach((c) => response.cookies.delete(c.name));
+
+    return response;
+  }
+
+  // Role for routing: prefer `profiles.role` (DB) over JWT `user_metadata.role`.
+  // Admins promoted in SQL may not have updated auth metadata, which would
+  // otherwise keep sending them to the parent dashboard.
+  let dashboardRole: string | undefined;
+  if (user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+    dashboardRole = profile?.role ?? (user.user_metadata?.role as string | undefined);
+  }
 
   // Redirect unauthenticated users away from protected routes
   if (!user && isProtected) {
