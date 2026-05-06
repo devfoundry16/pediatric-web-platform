@@ -59,14 +59,25 @@ function SessionRow({
   session,
   onGoLive,
   onEnd,
+  onPublish,
 }: {
   session: GroupSession;
   onGoLive: (id: string) => Promise<void>;
   onEnd: (id: string) => Promise<void>;
+  onPublish: (id: string) => Promise<void>;
 }) {
   const { dictionary: t } = useI18n();
   const router = useRouter();
   const [actionLoading, setActionLoading] = useState(false);
+
+  async function handlePublish() {
+    setActionLoading(true);
+    try {
+      await onPublish(session.id);
+    } finally {
+      setActionLoading(false);
+    }
+  }
 
   const scheduledDate = new Date(session.scheduled_at);
 
@@ -98,6 +109,11 @@ function SessionRow({
                 {session.title}
               </h3>
               {statusBadge(session.status, t)}
+              {!session.is_published && (
+                <Badge variant="outline" className="text-xs border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/30">
+                  Draft
+                </Badge>
+              )}
               {session.is_free ? (
                 <Badge variant="secondary" className="text-xs">
                   {t.liveSessions.free}
@@ -134,6 +150,18 @@ function SessionRow({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
+            {!session.is_published && session.status === "scheduled" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 border-amber-400 text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:hover:bg-amber-950/30"
+                disabled={actionLoading}
+                onClick={handlePublish}
+              >
+                Publish
+              </Button>
+            )}
+
             {session.status === "scheduled" && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -268,6 +296,22 @@ export default function DoctorLiveSessionsPage() {
     }
   }
 
+  async function handlePublish(id: string) {
+    try {
+      const session = await liveSessionsApi.updateSession(id, {
+        is_published: true,
+      });
+      setSessions((prev) =>
+        prev.map((s) => (s.id === id ? { ...s, ...session } : s))
+      );
+      toast.success("Session published — parents can now see it");
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error ? err.message : "Failed to publish session";
+      toast.error(msg);
+    }
+  }
+
   const upcoming = sessions.filter(
     (s) => s.status === "scheduled" || s.status === "live"
   );
@@ -318,6 +362,7 @@ export default function DoctorLiveSessionsPage() {
                       session={s}
                       onGoLive={handleGoLive}
                       onEnd={handleEnd}
+                      onPublish={handlePublish}
                     />
                   ))}
                 </CardContent>
@@ -338,6 +383,7 @@ export default function DoctorLiveSessionsPage() {
                       session={s}
                       onGoLive={handleGoLive}
                       onEnd={handleEnd}
+                      onPublish={handlePublish}
                     />
                   ))}
                 </CardContent>

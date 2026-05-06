@@ -56,7 +56,7 @@ export default function NewLiveSessionPage() {
       duration_minutes: 60,
       max_participants: 30,
       price_aed: 0,
-      is_published: false,
+      is_published: true,
     },
   });
 
