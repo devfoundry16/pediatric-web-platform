@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, ArrowRight } from "lucide-react";
+import { useEmergencyPackage } from "@/components/landing/emergency-package";
 
 export function PackagesSection() {
   const { dictionary: t } = useI18n();
+  const emergencyPackage = useEmergencyPackage();
 
   const packages = [
     {
@@ -25,13 +27,7 @@ export function PackagesSection() {
       validity: 30,
       price: 600,
     },
-    {
-      name: t.landing.emergencyPriority,
-      desc: t.landing.emergencyPriorityDesc,
-      sessions: 1,
-      validity: 7,
-      price: 350,
-    },
+    emergencyPackage,
   ];
 
   return (
