@@ -9,6 +9,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { FormSection } from "@/components/forms/form-section";
 import { SelectField } from "@/components/forms/select-field";
 import { useI18n } from "@/lib/i18n/i18n-context";
@@ -58,11 +59,12 @@ export function StepGuardianInfo({ control }: StepGuardianInfoProps) {
             <FormItem>
               <FormLabel>{t.patient.mobileNumber}</FormLabel>
               <FormControl>
-                <Input
+                <PhoneInput
                   {...field}
-                  type="tel"
+                  defaultCountry="AE"
                   autoComplete="tel"
-                  placeholder="+9715XXXXXXXX"
+                  searchPlaceholder={t.common.search}
+                  emptyText={t.common.noResults}
                 />
               </FormControl>
               <FormMessage />
@@ -94,12 +96,12 @@ export function StepGuardianInfo({ control }: StepGuardianInfoProps) {
           <FormItem>
             <FormLabel>{t.childForm.secondaryContact}</FormLabel>
             <FormControl>
-              <Input
+              <PhoneInput
                 value={field.value ?? ""}
-                onChange={(e) =>
-                  field.onChange(e.target.value || null)
-                }
-                type="tel"
+                onChange={(value: string) => field.onChange(value || null)}
+                defaultCountry="AE"
+                searchPlaceholder={t.common.search}
+                emptyText={t.common.noResults}
               />
             </FormControl>
             <FormMessage />
@@ -132,12 +134,12 @@ export function StepGuardianInfo({ control }: StepGuardianInfoProps) {
             <FormItem>
               <FormLabel>{t.patient.emergencyPhone}</FormLabel>
               <FormControl>
-                <Input
+                <PhoneInput
                   value={field.value ?? ""}
-                  onChange={(e) =>
-                    field.onChange(e.target.value || null)
-                  }
-                  type="tel"
+                  onChange={(value: string) => field.onChange(value || null)}
+                  defaultCountry="AE"
+                  searchPlaceholder={t.common.search}
+                  emptyText={t.common.noResults}
                 />
               </FormControl>
               <FormMessage />

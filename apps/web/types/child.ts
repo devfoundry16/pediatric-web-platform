@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isValidPhoneNumber } from "react-phone-number-input";
 
 export type Gender = "male" | "female" | "prefer_not_to_say";
 export type GuardianRelationship = "mother" | "father" | "guardian";
@@ -170,7 +171,12 @@ const healthBackgroundSchema = z
     }
   });
 
-const uaeMobileRegex = /^(\+971|00971|0)?[0-9]{9,10}$/;
+const optionalPhoneSchema = z
+  .string()
+  .nullable()
+  .refine((v) => !v || isValidPhoneNumber(v), {
+    message: "Enter a valid phone number",
+  });
 
 const guardianInfoSchema = z.object({
   guardianName: z.string().min(1, "Guardian name is required"),
@@ -178,16 +184,16 @@ const guardianInfoSchema = z.object({
   guardianMobile: z
     .string()
     .min(1, "Mobile number is required")
-    .refine((v) => uaeMobileRegex.test(v.replace(/\s/g, "")), {
-      message: "Enter a valid UAE mobile number",
+    .refine((v) => isValidPhoneNumber(v), {
+      message: "Enter a valid phone number",
     }),
   guardianEmail: z
     .string()
     .min(1, "Email is required")
     .pipe(z.email("Enter a valid email")),
-  secondaryContactPhone: z.string().nullable(),
+  secondaryContactPhone: optionalPhoneSchema,
   emergencyContactName: z.string().nullable(),
-  emergencyContactPhone: z.string().nullable(),
+  emergencyContactPhone: optionalPhoneSchema,
 });
 
 const lifestyleSchema = z.object({
