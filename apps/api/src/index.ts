@@ -19,7 +19,7 @@ dotenv.config();
 const app = express();
 
 // CORS configuration
-const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:3333")
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3333")
   .split(",")
   .map((o) => o.trim());
 
