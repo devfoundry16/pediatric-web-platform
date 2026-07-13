@@ -19,29 +19,34 @@ dotenv.config();
 const app = express();
 
 // CORS configuration
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3333',
-  credentials: true
-}));
+const allowedOrigins = (process.env.FRONTEND_URL || "http://localhost:3333")
+  .split(",")
+  .map((o) => o.trim());
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  }),
+);
 
 // Stripe webhook: raw body + registered before express.json() (signature verification)
 app.use(
   "/api/packages/webhook",
   express.raw({ type: "application/json" }),
-  stripeWebhook
+  stripeWebhook,
 );
 
 // Body parser middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-
 // Root endpoint
 app.get("/", (_req, res) => {
-  res.json({ 
+  res.json({
     message: "Pediatric Telemedicine API",
     version: "1.0.0",
-    status: "running"
+    status: "running",
   });
 });
 
