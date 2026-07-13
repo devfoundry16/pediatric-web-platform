@@ -12,6 +12,7 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput, isValidPhoneNumber } from "@/components/ui/phone-input";
 import {
   Select,
   SelectContent,
@@ -29,7 +30,12 @@ const registerSchema = z
       .string()
       .min(1, "Email is required")
       .pipe(z.email("Enter a valid email")),
-    phone: z.string().min(7, "Enter a valid phone number"),
+    phone: z
+      .string()
+      .min(1, "Phone number is required")
+      .refine((v) => isValidPhoneNumber(v), {
+        message: "Enter a valid phone number",
+      }),
     role: z.enum(["parent", "doctor"], {
       message: "Please select your role",
     }),
@@ -120,11 +126,19 @@ export function RegisterForm() {
 
       <div className="flex flex-col gap-2">
         <Label htmlFor="phone">{t.auth.phoneNumber}</Label>
-        <Input
-          id="phone"
-          type="tel"
-          placeholder="+971 XX XXX XXXX"
-          {...register("phone")}
+        <Controller
+          name="phone"
+          control={control}
+          render={({ field }) => (
+            <PhoneInput
+              id="phone"
+              defaultCountry="AE"
+              autoComplete="tel"
+              searchPlaceholder={t.common.search}
+              emptyText={t.common.noResults}
+              {...field}
+            />
+          )}
         />
         {errors.phone && (
           <p className="text-xs text-destructive">{errors.phone.message}</p>
