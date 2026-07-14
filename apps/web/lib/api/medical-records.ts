@@ -1,10 +1,10 @@
 import axios from "axios";
 import { createClient } from "@/lib/supabase/client";
+import { getApiBaseUrl } from "./config";
 import type { MedicalRecord } from "@/types/medical-record";
 
 function getBaseUrl(): string {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
-  return base.replace(/\/$/, "");
+  return getApiBaseUrl();
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
