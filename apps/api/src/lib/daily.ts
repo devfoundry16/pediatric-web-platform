@@ -39,18 +39,27 @@ interface DailyTokenResponse {
 }
 
 /**
- * Create a Daily room for a group session.
- * @param sessionId - used as the room name prefix for uniqueness
+ * Create a Daily room.
+ *
+ * The room is created PRIVATE so that possession of the room URL alone does not
+ * grant entry — every participant must present a server-minted meeting token
+ * (see createMeetingToken). This is the core access control for 1:1 pediatric
+ * consultations and paid group sessions: without it, anyone with the URL could
+ * join a live session (PHI/privacy leak).
+ *
+ * @param roomName - the exact Daily room name (must match the room_name used
+ *   when minting meeting tokens, otherwise Daily rejects the token)
  * @param expiryEpoch - Unix timestamp (seconds) when the room should expire
  */
 export async function createRoom(
-  sessionId: string,
+  roomName: string,
   expiryEpoch: number
 ): Promise<{ name: string; url: string }> {
   const room = await dailyRequest<DailyRoomResponse>("/rooms", {
     method: "POST",
     body: JSON.stringify({
-      name: `session-${sessionId}`,
+      name: roomName,
+      privacy: "private",
       properties: {
         exp: expiryEpoch,
         enable_recording: "cloud",

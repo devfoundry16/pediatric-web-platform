@@ -208,9 +208,23 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     }
   }
 
+  // Atomically reserve a package credit BEFORE creating the appointment. This
+  // guarded decrement (see consume_package_credit) prevents two concurrent
+  // bookings from consuming the same credit. If reservation fails (exhausted,
+  // expired, or lost the race), fall back to a normal paid appointment.
   if (usedPackageId) {
-    paymentStatus = "package_credit";
-    paymentReference = `PKG-${usedPackageId}`;
+    const { data: consumed, error: consumeError } = await supabaseAdmin.rpc(
+      "consume_package_credit",
+      { p_user_package_id: usedPackageId }
+    );
+    if (consumeError || consumed !== true) {
+      usedPackageId = null;
+      paymentStatus = "paid";
+      paymentReference = `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    } else {
+      paymentStatus = "package_credit";
+      paymentReference = `PKG-${usedPackageId}`;
+    }
   }
 
   const { data: appointment, error } = await supabaseAdmin
@@ -233,36 +247,25 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     .single();
 
   if (error) {
+    // Give back the reserved credit so it isn't lost when the booking fails.
+    if (usedPackageId) {
+      await supabaseAdmin.rpc("restore_package_credit", {
+        p_user_package_id: usedPackageId,
+      });
+    }
     res.status(500).json({ error: error.message });
     return;
   }
 
-  // Deduct credit from the matched package and log usage
+  // Credit was already reserved above — just record the usage log.
   if (usedPackageId && appointment) {
-    const { data: currentPkg } = await supabaseAdmin
-      .from("user_packages")
-      .select("credits_remaining")
-      .eq("id", usedPackageId)
-      .single();
-
-    if (currentPkg) {
-      const newRemaining = (currentPkg.credits_remaining as number) - 1;
-      await supabaseAdmin
-        .from("user_packages")
-        .update({
-          credits_remaining: newRemaining,
-          status: newRemaining === 0 ? "exhausted" : "active",
-        })
-        .eq("id", usedPackageId);
-
-      await supabaseAdmin
-        .from("package_usage_logs")
-        .insert({
-          user_package_id: usedPackageId,
-          appointment_id: appointment.id,
-          credits_used: 1,
-        });
-    }
+    await supabaseAdmin
+      .from("package_usage_logs")
+      .insert({
+        user_package_id: usedPackageId,
+        appointment_id: appointment.id,
+        credits_used: 1,
+      });
   }
 
   // Fire confirmation email (non-blocking)
@@ -383,6 +386,7 @@ export async function joinAppointment(req: Request, res: Response): Promise<void
 
   // Only the parent or the doctor can join
   const isParent = appt.parent_id === req.userId;
+  let isDoctor = false;
   if (!isParent) {
     // Check if user is the doctor for this appointment
     const { data: doctorRow } = await supabaseAdmin
@@ -390,7 +394,7 @@ export async function joinAppointment(req: Request, res: Response): Promise<void
       .select("id")
       .eq("profile_id", req.userId)
       .single();
-    const isDoctor = doctorRow && appt.doctor_id === doctorRow.id;
+    isDoctor = !!doctorRow && appt.doctor_id === doctorRow.id;
     if (!isDoctor) {
       res.status(403).json({ error: "Not authorized to join this appointment" });
       return;
@@ -402,14 +406,20 @@ export async function joinAppointment(req: Request, res: Response): Promise<void
     return;
   }
 
+  // Rooms are private (see createRoom), so a token is required to join. The
+  // doctor joins as owner (host controls / recording); the parent as a
+  // participant. The room name must match the one used at creation in
+  // startSession (`appt-<id>`).
   const roomName = `appt-${id}`;
   const expiryEpoch = Math.floor(Date.now() / 1000) + 4 * 60 * 60;
 
   try {
-    const token = await createMeetingToken(roomName, req.userId!, false, expiryEpoch);
+    const token = await createMeetingToken(roomName, req.userId!, isDoctor, expiryEpoch);
     res.json({ tokenUrl: `${appt.meeting_url}?t=${token}` });
   } catch {
-    // If token generation fails, return the base URL
+    // If token generation fails, return the base URL. NOTE: with private rooms
+    // this URL will not grant entry without a token — surfaced so the client
+    // can show a retry rather than a silent failure.
     res.json({ tokenUrl: appt.meeting_url });
   }
 }
