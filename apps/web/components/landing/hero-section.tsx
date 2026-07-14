@@ -54,19 +54,17 @@ export function HeroSection() {
               </Link>
             </div>
 
-            <div className="mt-8 flex flex-col gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-8 flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3 text-start">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-amber-500/15">
-                  <Zap className="h-5 w-5 text-amber-600" />
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                  <Zap className="h-5 w-5 text-primary" />
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="font-semibold text-foreground">
                       {emergencyPackage.name}
                     </p>
-                    <Badge className="bg-amber-500 text-white hover:bg-amber-500">
-                      {t.landing.priorityBadge}
-                    </Badge>
+                    <Badge variant="secondary">{t.landing.priorityBadge}</Badge>
                   </div>
                   <p className="mt-0.5 text-sm text-muted-foreground">
                     {emergencyPackage.desc}
@@ -74,10 +72,7 @@ export function HeroSection() {
                 </div>
               </div>
               <Link href="/booking" className="shrink-0">
-                <Button
-                  size="sm"
-                  className="w-full gap-1.5 bg-amber-500 text-white hover:bg-amber-600 sm:w-auto"
-                >
+                <Button size="sm" className="w-full gap-1.5 sm:w-auto">
                   {t.common.bookNow}
                   <ArrowRight className="h-4 w-4" />
                 </Button>
