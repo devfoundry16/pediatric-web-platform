@@ -28,8 +28,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { appointmentsApi, doctorsApi } from "@/lib/api/appointments";
-import axios from "axios";
-import { createClient } from "@/lib/supabase/client";
 import type { Appointment, AppointmentStatus } from "@/types/appointment";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
@@ -48,22 +46,9 @@ const STATUS_VARIANTS: Record<
   rescheduled: "secondary",
 };
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api").replace(/\/$/, "");
-
-async function getJoinUrl(appointmentId: string): Promise<string | null> {
-  try {
-    const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.access_token) return null;
-    const { data } = await axios.get<{ tokenUrl: string }>(
-      `${API_BASE}/appointments/${appointmentId}/join`,
-      { headers: { Authorization: `Bearer ${session.access_token}` } }
-    );
-    return data.tokenUrl;
-  } catch {
-    return null;
-  }
-}
+// Rooms are private; the join URL (with a meeting token) comes from the API.
+const getJoinUrl = (appointmentId: string): Promise<string | null> =>
+  appointmentsApi.join(appointmentId);
 
 export default function ParentAppointmentsPage() {
   const { dictionary: t } = useI18n();
