@@ -7,43 +7,19 @@ import { createRoom, createMeetingToken } from "../lib/daily";
 async function resolveDoctor(userId: string): Promise<{ id: string } | null> {
   if (!supabaseAdmin) return null;
 
-  // 1. Find doctor already linked to this auth user
+  // Return only the doctors row explicitly linked to this auth user.
+  //
+  // Previously this auto-claimed "the first unlinked active doctor" for any
+  // user with role='doctor'. That let a newly-provisioned doctor silently take
+  // over an unrelated doctor's row (and their appointments/patients/PHI). The
+  // profile_id link must be set explicitly at provisioning time instead.
   const { data: linked } = await supabaseAdmin
     .from("doctors")
     .select("id")
     .eq("profile_id", userId)
-    .single();
+    .maybeSingle();
 
-  if (linked) return linked;
-
-  // 2. Verify the user actually has the "doctor" role before allowing a claim
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .single();
-
-  if (profile?.role !== "doctor") return null;
-
-  // 3. Claim the first unlinked active doctor (makes seeded rows usable)
-  const { data: unlinked } = await supabaseAdmin
-    .from("doctors")
-    .select("id")
-    .is("profile_id", null)
-    .eq("is_active", true)
-    .limit(1)
-    .single();
-
-  if (!unlinked) return null;
-
-  const { data: claimed } = await supabaseAdmin
-    .from("doctors")
-    .update({ profile_id: userId })
-    .eq("id", unlinked.id)
-    .select("id")
-    .single();
-
-  return claimed ?? null;
+  return linked ?? null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
