@@ -87,7 +87,10 @@ export function LoginForm() {
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <Label htmlFor="password">{t.common.password}</Label>
-          <Link href="#" className="text-xs text-primary hover:underline">
+          <Link
+            href="/auth/forgot-password"
+            className="text-xs text-primary hover:underline"
+          >
             {t.auth.forgotPassword}
           </Link>
         </div>

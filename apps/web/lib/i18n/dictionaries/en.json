@@ -123,7 +123,18 @@
     "checkEmailTitle": "Check your email",
     "checkEmailDescription": "We sent a confirmation link to",
     "checkEmailHint": "Click the link in the email to verify your account. If you don't see it, check your spam folder.",
-    "backToSignIn": "Back to sign in"
+    "backToSignIn": "Back to sign in",
+    "forgotPasswordTitle": "Reset your password",
+    "forgotPasswordSubtitle": "Enter your email and we'll send you a reset link",
+    "sendResetLink": "Send reset link",
+    "resetLinkSentTitle": "Check your email",
+    "resetLinkSentDescription": "If an account exists for that email, we've sent a password reset link. Check your spam folder if you don't see it.",
+    "resetPasswordTitle": "Set a new password",
+    "resetPasswordSubtitle": "Enter a new password for your account",
+    "newPassword": "New password",
+    "updatePassword": "Update password",
+    "passwordUpdated": "Password updated. Please sign in.",
+    "resetLinkInvalid": "This reset link is invalid or has expired. Please request a new one."
   },
   "profile": {
     "title": "Profile",
