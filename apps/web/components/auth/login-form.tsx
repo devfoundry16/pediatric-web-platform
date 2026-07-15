@@ -34,6 +34,10 @@ export function LoginForm() {
 
   const { signIn, isLoading, error, clearError } = useAuthStore();
 
+  // Surface failures from the email-confirmation callback (invalid/expired link).
+  const confirmationFailed =
+    searchParams.get("error") === "confirmation_failed";
+
   const {
     register,
     handleSubmit,
@@ -67,6 +71,12 @@ export function LoginForm() {
       {error && (
         <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
+        </p>
+      )}
+
+      {!error && confirmationFailed && (
+        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {t.auth.confirmationFailed}
         </p>
       )}
 

@@ -134,7 +134,11 @@
     "newPassword": "New password",
     "updatePassword": "Update password",
     "passwordUpdated": "Password updated. Please sign in.",
-    "resetLinkInvalid": "This reset link is invalid or has expired. Please request a new one."
+    "resetLinkInvalid": "This reset link is invalid or has expired. Please request a new one.",
+    "confirmedTitle": "Email confirmed",
+    "confirmedDescription": "Your email address has been confirmed. You're all set.",
+    "continue": "Continue",
+    "confirmationFailed": "Your confirmation link was invalid or has expired. Please sign in or request a new link."
   },
   "profile": {
     "title": "Profile",

@@ -30,6 +30,9 @@ export async function middleware(request: NextRequest) {
   const skipAuthLoggedInRedirect =
     pathname.startsWith("/auth/callback") ||
     pathname.startsWith("/auth/check-email") ||
+    // Email confirmation lands here with a freshly-exchanged session; show the
+    // success page instead of bouncing the (now authenticated) user away.
+    pathname.startsWith("/auth/confirmed") ||
     // Password recovery lands here with a freshly-exchanged session; don't
     // bounce the user to the dashboard before they set a new password.
     pathname.startsWith("/auth/reset-password");

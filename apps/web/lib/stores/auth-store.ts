@@ -100,6 +100,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
       email,
       password,
       options: {
+        // Route the confirmation link back into the app so /auth/callback can
+        // exchange the code and land the user on the success page.
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/auth/confirmed`,
         data: {
           full_name: fullName,
           phone,
@@ -174,7 +177,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   updateUserEmail: async (email) => {
     const supabase = createClient();
-    const { data, error } = await supabase.auth.updateUser({ email });
+    const { data, error } = await supabase.auth.updateUser(
+      { email },
+      {
+        // The email-change confirmation link routes through /auth/callback and
+        // lands on the same success page as signup confirmation.
+        emailRedirectTo: `${window.location.origin}/auth/callback?next=/auth/confirmed`,
+      },
+    );
 
     if (error) {
       return { error: error.message };
