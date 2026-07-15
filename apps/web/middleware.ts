@@ -29,8 +29,10 @@ export async function middleware(request: NextRequest) {
 
   const skipAuthLoggedInRedirect =
     pathname.startsWith("/auth/callback") ||
+    // Email confirmation verifies the token_hash here before redirecting on.
+    pathname.startsWith("/auth/confirm") ||
     pathname.startsWith("/auth/check-email") ||
-    // Email confirmation lands here with a freshly-exchanged session; show the
+    // Email confirmation lands here with a freshly-verified session; show the
     // success page instead of bouncing the (now authenticated) user away.
     pathname.startsWith("/auth/confirmed") ||
     // Password recovery lands here with a freshly-exchanged session; don't

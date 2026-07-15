@@ -100,9 +100,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
       email,
       password,
       options: {
-        // Route the confirmation link back into the app so /auth/callback can
-        // exchange the code and land the user on the success page.
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/auth/confirmed`,
+        // Route the confirmation link to /auth/confirm, which verifies the
+        // token_hash (no PKCE code_verifier needed) and lands the user on the
+        // success page. Works cross-browser/device.
+        emailRedirectTo: `${window.location.origin}/auth/confirm?next=/auth/confirmed`,
         data: {
           full_name: fullName,
           phone,
@@ -180,9 +181,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const { data, error } = await supabase.auth.updateUser(
       { email },
       {
-        // The email-change confirmation link routes through /auth/callback and
-        // lands on the same success page as signup confirmation.
-        emailRedirectTo: `${window.location.origin}/auth/callback?next=/auth/confirmed`,
+        // The email-change confirmation link routes through /auth/confirm
+        // (token_hash / verifyOtp) and lands on the same success page.
+        emailRedirectTo: `${window.location.origin}/auth/confirm?next=/auth/confirmed`,
       },
     );
 
