@@ -100,6 +100,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
       email,
       password,
       options: {
+        // Route the confirmation link to /auth/confirm, which verifies the
+        // token_hash (no PKCE code_verifier needed) and lands the user on the
+        // success page. Works cross-browser/device.
+        emailRedirectTo: `${window.location.origin}/auth/confirm?next=/auth/confirmed`,
         data: {
           full_name: fullName,
           phone,
@@ -174,7 +178,14 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
   updateUserEmail: async (email) => {
     const supabase = createClient();
-    const { data, error } = await supabase.auth.updateUser({ email });
+    const { data, error } = await supabase.auth.updateUser(
+      { email },
+      {
+        // The email-change confirmation link routes through /auth/confirm
+        // (token_hash / verifyOtp) and lands on the same success page.
+        emailRedirectTo: `${window.location.origin}/auth/confirm?next=/auth/confirmed`,
+      },
+    );
 
     if (error) {
       return { error: error.message };
