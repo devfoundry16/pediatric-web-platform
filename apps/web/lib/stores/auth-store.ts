@@ -96,7 +96,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const supabase = createClient();
     set({ isLoading: true, error: null });
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -110,6 +110,15 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
     if (error) {
       set({ isLoading: false, error: error.message });
+      return;
+    }
+
+    if (data.session) {
+      set({
+        isLoading: false,
+        session: data.session,
+        user: data.session.user,
+      });
       return;
     }
 

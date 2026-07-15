@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
@@ -78,12 +79,22 @@ export function RegisterForm() {
       values.role
     );
 
-    const storeError = useAuthStore.getState().error;
-    if (!storeError) {
+    const { error: storeError, session } = useAuthStore.getState();
+    if (storeError) return;
+
+    if (session) {
+      toast.success(t.auth.signUp);
       router.push(
-        `/auth/check-email?email=${encodeURIComponent(values.email)}`
+        values.role === "doctor"
+          ? "/dashboard/doctor"
+          : "/dashboard/parent"
       );
+      return;
     }
+
+    router.push(
+      `/auth/check-email?email=${encodeURIComponent(values.email)}`
+    );
   };
 
   return (
