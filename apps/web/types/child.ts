@@ -96,7 +96,12 @@ export type CreateChildInput = {
 const personalInfoSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  dateOfBirth: z.string().min(1, "Date of birth is required"),
+  dateOfBirth: z
+    .string()
+    .min(1, "Date of birth is required")
+    .refine((v) => v <= new Date().toLocaleDateString("en-CA"), {
+      message: "Date of birth cannot be in the future",
+    }),
   gender: z.enum(["male", "female", "prefer_not_to_say"]),
   nationality: z.string().nullable(),
   emiratesIdPassport: z.string().nullable(),

@@ -32,6 +32,10 @@ export function StepPersonalInfo({ control }: StepPersonalInfoProps) {
   const { dictionary: t } = useI18n();
   const nicuStay = useWatch({ control, name: "birthHistory.nicuStay" });
 
+  // A child cannot be born in the future — cap the date picker at today
+  // (local YYYY-MM-DD). The schema enforces the same rule on submit.
+  const todayStr = new Date().toLocaleDateString("en-CA");
+
   return (
     <div className="flex flex-col gap-6">
       <FormSection
@@ -74,7 +78,7 @@ export function StepPersonalInfo({ control }: StepPersonalInfoProps) {
             <FormItem>
               <FormLabel>{t.patient.dateOfBirth}</FormLabel>
               <FormControl>
-                <Input type="date" {...field} />
+                <Input type="date" max={todayStr} {...field} />
               </FormControl>
               <FormMessage />
             </FormItem>

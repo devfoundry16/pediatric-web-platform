@@ -154,6 +154,25 @@ function isCreateChildInput(body: unknown): body is CreateChildInput {
   );
 }
 
+/**
+ * Backstop validation for date of birth (the client also enforces this via the
+ * date picker's `max` and the Zod schema, but those can be bypassed). Returns
+ * an error string, or null if valid. A 1-day tolerance beyond "now" absorbs
+ * timezone differences so a legitimate newborn registered around midnight is
+ * never falsely rejected, while clearly-future dates are blocked.
+ */
+function validateDateOfBirth(input: CreateChildInput): string | null {
+  const dob = input.personalInfo?.dateOfBirth;
+  if (!dob) return "Date of birth is required";
+  const parsed = new Date(dob);
+  if (Number.isNaN(parsed.getTime())) return "Date of birth is invalid";
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  if (parsed.getTime() - Date.now() > ONE_DAY_MS) {
+    return "Date of birth cannot be in the future";
+  }
+  return null;
+}
+
 export async function listChildren(req: Request, res: Response): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
@@ -184,6 +203,12 @@ export async function createChild(req: Request, res: Response): Promise<void> {
 
   if (!isCreateChildInput(req.body)) {
     res.status(400).json({ error: "Invalid request body" });
+    return;
+  }
+
+  const dobError = validateDateOfBirth(req.body);
+  if (dobError) {
+    res.status(400).json({ error: dobError });
     return;
   }
 
@@ -240,6 +265,12 @@ export async function updateChild(req: Request, res: Response): Promise<void> {
 
   if (!isCreateChildInput(req.body)) {
     res.status(400).json({ error: "Invalid request body" });
+    return;
+  }
+
+  const dobError = validateDateOfBirth(req.body);
+  if (dobError) {
+    res.status(400).json({ error: dobError });
     return;
   }
 
