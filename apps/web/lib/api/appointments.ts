@@ -5,10 +5,10 @@ import type {
   CreateAppointmentPayload,
   Doctor,
 } from "@/types/appointment";
+import { getApiBaseUrl } from "./config";
 
 function getBaseUrl(): string {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
-  return base.replace(/\/$/, "");
+  return getApiBaseUrl();
 }
 
 async function authHeaders(): Promise<Record<string, string>> {
@@ -88,5 +88,20 @@ export const appointmentsApi = {
       { headers: await authHeaders() }
     );
     return data.appointment;
+  },
+
+  // Video rooms are private; joining requires a server-minted meeting token.
+  // This returns the room URL with the token appended (?t=...). Never link to
+  // the bare meeting_url — a private room rejects entry without a token.
+  async join(id: string): Promise<string | null> {
+    try {
+      const { data } = await axios.get<{ tokenUrl: string }>(
+        `${getBaseUrl()}/appointments/${id}/join`,
+        { headers: await authHeaders() }
+      );
+      return data.tokenUrl ?? null;
+    } catch {
+      return null;
+    }
   },
 };

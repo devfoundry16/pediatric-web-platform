@@ -7,10 +7,10 @@ import type {
   CourseLesson,
   DoctorCourse,
 } from "@/types/courses";
+import { getApiBaseUrl } from "./config";
 
 function getBaseUrl(): string {
-  const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
-  return base.replace(/\/$/, "");
+  return getApiBaseUrl();
 }
 
 async function authHeaders(): Promise<Record<string, string>> {

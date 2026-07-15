@@ -66,6 +66,35 @@ app.use("/api/courses", coursesRouter);
 app.use("/api/live-sessions", groupSessionsRouter);
 app.use("/api/admin", adminRouter);
 
+// 404 for unknown API routes
+app.use("/api", (_req, res) => {
+  res.status(404).json({ error: "Not found" });
+});
+
+// Global error handler. Express 5 forwards rejected promises from async route
+// handlers here, so an unexpected throw returns a clean 500 instead of hanging
+// the request or crashing the process. Internal error details are only exposed
+// outside production to avoid leaking schema/stack information to clients.
+const isProduction = process.env.NODE_ENV === "production";
+app.use(
+  (
+    err: unknown,
+    _req: express.Request,
+    res: express.Response,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _next: express.NextFunction,
+  ) => {
+    console.error("[api] Unhandled error:", err);
+    if (res.headersSent) return;
+    res.status(500).json({
+      error: "Internal server error",
+      ...(isProduction
+        ? {}
+        : { detail: err instanceof Error ? err.message : String(err) }),
+    });
+  },
+);
+
 const PORT = process.env.PORT || 4000;
 
 if (process.env.NODE_ENV === "DEVELOPMENT") {

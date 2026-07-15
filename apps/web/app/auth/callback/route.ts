@@ -7,11 +7,20 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get("code");
   const next = searchParams.get("next") ?? "/";
 
+  // Only honor same-origin relative paths to prevent open-redirect abuse.
+  const safeNext =
+    next.startsWith("/") && !next.startsWith("//") ? next : null;
+
   if (code) {
     const supabase = await createClient();
     const { error, data } = await supabase.auth.exchangeCodeForSession(code);
 
     if (!error && data.user) {
+      // Password-recovery / explicit-destination links pass ?next=... — send
+      // the (now authenticated) user straight there instead of a dashboard.
+      if (safeNext && safeNext !== "/") {
+        return NextResponse.redirect(`${origin}${safeNext}`);
+      }
       // Prefer DB role over JWT metadata so admin promotions are reflected
       // immediately without requiring a token refresh.
       let role: string | undefined = data.user.user_metadata?.role as string | undefined;

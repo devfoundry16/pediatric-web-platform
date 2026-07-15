@@ -98,6 +98,13 @@ export function TodaySchedule() {
     }
   }
 
+  async function handleJoin(id: string) {
+    setActionLoading(id);
+    const url = await doctorApi.joinAppointment(id);
+    setActionLoading(null);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -171,15 +178,14 @@ export function TodaySchedule() {
                     </Button>
                   )}
                   {showJoin && (
-                    <Button size="sm" className="gap-1.5" asChild>
-                      <a
-                        href={apt.meeting_url!}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <Video className="h-3.5 w-3.5" />
-                        {t.doctorDashboard.joinSession}
-                      </a>
+                    <Button
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={actionLoading === apt.id}
+                      onClick={() => handleJoin(apt.id)}
+                    >
+                      <Video className="h-3.5 w-3.5" />
+                      {t.doctorDashboard.joinSession}
                     </Button>
                   )}
                   {showComplete && (

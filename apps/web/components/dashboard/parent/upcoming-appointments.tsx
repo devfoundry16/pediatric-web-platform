@@ -23,6 +23,14 @@ export function UpcomingAppointments() {
   const { dictionary: t } = useI18n();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [joiningId, setJoiningId] = useState<string | null>(null);
+
+  async function handleJoin(id: string) {
+    setJoiningId(id);
+    const url = await appointmentsApi.join(id);
+    setJoiningId(null);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  }
 
   useEffect(() => {
     const today = new Date();
@@ -116,20 +124,16 @@ export function UpcomingAppointments() {
                     {getAppointmentStatusLabel(t, appt.status)}
                   </Badge>
                   {appt.status === "confirmed" && appt.meeting_url && (
-                    <a
-                      href={appt.meeting_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 bg-transparent"
+                      disabled={joiningId === appt.id}
+                      onClick={() => handleJoin(appt.id)}
                     >
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-1.5 bg-transparent"
-                      >
-                        <Video className="h-3.5 w-3.5" />
-                        {t.appointments.join}
-                      </Button>
-                    </a>
+                      <Video className="h-3.5 w-3.5" />
+                      {t.appointments.join}
+                    </Button>
                   )}
                 </div>
               </div>

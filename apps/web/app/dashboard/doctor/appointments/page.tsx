@@ -151,6 +151,13 @@ export default function DoctorAppointmentsPage() {
     }
   }
 
+  async function handleJoin(id: string) {
+    setActionLoading(id);
+    const url = await doctorApi.joinAppointment(id);
+    setActionLoading(null);
+    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   const tabs: { key: FilterTab; label: string }[] = [
     { key: "all", label: t.doctorDashboard.filterAll },
     { key: "today", label: t.doctorDashboard.filterToday },
@@ -271,15 +278,14 @@ export default function DoctorAppointmentsPage() {
                         </Button>
                       )}
                       {showJoin && (
-                        <Button size="sm" className="gap-1.5" asChild>
-                          <a
-                            href={apt.meeting_url!}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            <Video className="h-3.5 w-3.5" />
-                            {t.doctorDashboard.joinSession2}
-                          </a>
+                        <Button
+                          size="sm"
+                          className="gap-1.5"
+                          disabled={actionLoading === apt.id}
+                          onClick={() => handleJoin(apt.id)}
+                        >
+                          <Video className="h-3.5 w-3.5" />
+                          {t.doctorDashboard.joinSession2}
                         </Button>
                       )}
                       {showComplete && (

@@ -29,7 +29,6 @@ import {
 } from "@/components/ui/select";
 import {
   MoreHorizontal,
-  Video,
   CheckCircle,
   XCircle,
   CalendarClock,
@@ -213,13 +212,9 @@ export default function AdminAppointmentsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {a.meeting_url && (
-                              <DropdownMenuItem asChild>
-                                <a href={a.meeting_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2">
-                                  <Video className="h-4 w-4" /> Open meeting
-                                </a>
-                              </DropdownMenuItem>
-                            )}
+                            {/* Consultation rooms are private and joinable only
+                                by the parent and the assigned doctor; admins do
+                                not join live sessions. */}
                             {!["completed", "cancelled"].includes(a.status) && (
                               <>
                                 <DropdownMenuItem onClick={() => quickAction(a.id, "complete")}>

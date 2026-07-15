@@ -201,6 +201,22 @@ export async function createMedicalRecord(req: Request, res: Response): Promise<
     return;
   }
 
+  // Verify the child is actually one of this doctor's patients (has a
+  // non-cancelled appointment with them). Without this a doctor could write
+  // medical records for any child in the system by guessing child ids.
+  const { data: patientAppt } = await supabaseAdmin
+    .from("appointments")
+    .select("id")
+    .eq("doctor_id", doctorId)
+    .eq("child_id", childId)
+    .not("status", "in", '("cancelled","rescheduled")')
+    .limit(1)
+    .maybeSingle();
+  if (!patientAppt) {
+    res.status(403).json({ error: "Child is not one of your patients" });
+    return;
+  }
+
   const { data: record, error } = await supabaseAdmin
     .from("medical_records")
     .insert({

@@ -29,7 +29,10 @@ export async function middleware(request: NextRequest) {
 
   const skipAuthLoggedInRedirect =
     pathname.startsWith("/auth/callback") ||
-    pathname.startsWith("/auth/check-email");
+    pathname.startsWith("/auth/check-email") ||
+    // Password recovery lands here with a freshly-exchanged session; don't
+    // bounce the user to the dashboard before they set a new password.
+    pathname.startsWith("/auth/reset-password");
 
   const protectedPaths = [
     "/dashboard",

@@ -109,6 +109,11 @@ export async function listSessions(
     return {
       ...s,
       session_registrations: undefined,
+      // daily_room_url is only handed out to authenticated participants via the
+      // /join endpoint (which also mints the required meeting token). Leaking it
+      // on this public, unauthenticated list would let anyone join a live paid
+      // session directly.
+      daily_room_url: undefined,
       participant_count: participantCount(regs),
     };
   });
@@ -793,6 +798,14 @@ export async function verifySessionPayment(
 
   const { sessionId } = metadata;
   const userId = req.userId!;
+
+  // Bind the checkout to the caller. Without this, any user could pass a paid
+  // stripe_session_id belonging to someone else's payment for the same session
+  // and have their own pending registration marked paid (free access).
+  if (metadata.userId !== userId) {
+    res.status(403).json({ error: "This payment does not belong to you" });
+    return;
+  }
 
   const { error } = await supabaseAdmin
     .from("session_registrations")

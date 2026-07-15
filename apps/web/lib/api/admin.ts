@@ -1,8 +1,9 @@
 import axios from "axios";
 import { createClient } from "@/lib/supabase/client";
+import { getApiBaseUrl } from "./config";
 
 function getBaseUrl(): string {
-  return (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api").replace(/\/$/, "");
+  return getApiBaseUrl();
 }
 
 async function authHeaders(): Promise<Record<string, string>> {

@@ -26,7 +26,16 @@ interface StripeSessionCreate {
 
 interface StripeCheckoutSession {
   id: string;
+  payment_intent: string | null;
   metadata: Record<string, string> | null;
+}
+
+interface StripeCharge {
+  payment_intent: string | null;
+}
+
+interface StripeDispute {
+  payment_intent: string | null;
 }
 
 interface StripeEvent {
@@ -175,7 +184,11 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
 
       const { error: updateError } = await supabaseAdmin
         .from("session_registrations")
-        .update({ payment_status: "paid", stripe_session_id: session.id })
+        .update({
+          payment_status: "paid",
+          stripe_session_id: session.id,
+          stripe_payment_intent: session.payment_intent,
+        })
         .eq("session_id", sessionId)
         .eq("user_id", userId);
 
@@ -214,22 +227,63 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + pkg.validity_days);
 
+    // Idempotent: a redelivered/retried webhook for the same checkout session
+    // must not create a second package. `ignoreDuplicates` relies on the unique
+    // index on stripe_checkout_session_id (migration 012).
     const { error: insertError } = await supabaseAdmin
       .from("user_packages")
-      .insert({
-        user_id: userId,
-        package_id: packageId,
-        credits_total: pkg.sessions,
-        credits_remaining: pkg.sessions,
-        stripe_checkout_session_id: session.id,
-        expires_at: expiresAt.toISOString(),
-        status: "active",
-      });
+      .upsert(
+        {
+          user_id: userId,
+          package_id: packageId,
+          credits_total: pkg.sessions,
+          credits_remaining: pkg.sessions,
+          stripe_checkout_session_id: session.id,
+          stripe_payment_intent: session.payment_intent,
+          expires_at: expiresAt.toISOString(),
+          status: "active",
+        },
+        { onConflict: "stripe_checkout_session_id", ignoreDuplicates: true }
+      );
 
     if (insertError) {
       console.error("[webhook] Failed to provision package:", insertError.message);
       res.status(500).json({ error: insertError.message });
       return;
+    }
+  }
+
+  // ── Refunds & disputes: revoke what was fulfilled ──────────────────────────
+  // Stripe charge/dispute objects carry a payment_intent (not a checkout
+  // session id), which we persisted at fulfillment. Matching on it lets us
+  // revoke the corresponding package credits and/or session access.
+  if (
+    event.type === "charge.refunded" ||
+    event.type === "charge.dispute.created" ||
+    event.type === "charge.dispute.funds_withdrawn"
+  ) {
+    const obj = event.data.object as StripeCharge & StripeDispute;
+    const paymentIntent = obj.payment_intent;
+
+    if (paymentIntent) {
+      const { error: pkgRevokeError } = await supabaseAdmin
+        .from("user_packages")
+        .update({ status: "refunded", credits_remaining: 0 })
+        .eq("stripe_payment_intent", paymentIntent);
+      if (pkgRevokeError) {
+        console.error("[webhook] Failed to revoke package:", pkgRevokeError.message);
+      }
+
+      const { error: regRevokeError } = await supabaseAdmin
+        .from("session_registrations")
+        .update({ payment_status: "refunded" })
+        .eq("stripe_payment_intent", paymentIntent);
+      if (regRevokeError) {
+        console.error(
+          "[webhook] Failed to revoke session registration:",
+          regRevokeError.message
+        );
+      }
     }
   }
 
