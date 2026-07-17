@@ -25,6 +25,10 @@ interface StepSelectPlanProps {
   childId: string;
   selected: string;
   onSelectOneTime: () => void;
+  // When set, render only this package as a purchase confirmation (no one-time
+  // card, no other packages) — used when a package was pre-selected on the
+  // landing page and the user has no credit yet.
+  restrictToSlug?: string;
 }
 
 // Entry screen for the booking flow: pick the one-time consultation or buy a
@@ -34,6 +38,7 @@ export function StepSelectPlan({
   childId,
   selected,
   onSelectOneTime,
+  restrictToSlug,
 }: StepSelectPlanProps) {
   const { dictionary: t } = useI18n();
   const consult = CONSULTATION_TYPES[0];
@@ -51,6 +56,10 @@ export function StepSelectPlan({
       .catch(() => setError(t.booking.checkoutError))
       .finally(() => setLoading(false));
   }, [t.booking.checkoutError]);
+
+  const visiblePackages = restrictToSlug
+    ? packages.filter((p) => p.slug === restrictToSlug)
+    : packages;
 
   const qtyFor = (id: string) => quantities[id] ?? 1;
   const setQty = (id: string, n: number) =>
@@ -77,7 +86,7 @@ export function StepSelectPlan({
   return (
     <div className="flex flex-col gap-6">
       <h2 className="text-lg font-semibold text-foreground">
-        {t.booking.choosePlanTitle}
+        {restrictToSlug ? t.booking.confirmPackageTitle : t.booking.choosePlanTitle}
       </h2>
 
       {error && (
@@ -87,50 +96,54 @@ export function StepSelectPlan({
         </div>
       )}
 
-      {/* One-time consultation */}
-      <Card
-        className={cn(
-          "cursor-pointer transition-all hover:shadow-md",
-          oneTimeSelected
-            ? "border-primary ring-1 ring-primary/20"
-            : "border-border"
-        )}
-        onClick={onSelectOneTime}
-      >
-        <CardContent className="flex items-center justify-between gap-4 p-6">
-          <div className="flex flex-col gap-1">
-            <p className="font-semibold text-foreground">
-              {t.booking.oneTimeTitle}
-            </p>
-            <p className="text-sm text-muted-foreground">
-              {t.booking.oneTimeDescription}
-            </p>
-            <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              {consult.duration} {t.common.minutes}
-            </div>
-          </div>
-          <div className="flex flex-col items-end gap-2">
-            <p className="text-2xl font-bold text-foreground">
-              {consult.price}{" "}
-              <span className="text-sm font-normal text-muted-foreground">
-                {t.common.aed}
-              </span>
-            </p>
-            {oneTimeSelected && (
-              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary">
-                <Check className="h-4 w-4 text-primary-foreground" />
+      {/* One-time consultation (hidden when a specific package is pre-selected) */}
+      {!restrictToSlug && (
+        <Card
+          className={cn(
+            "cursor-pointer transition-all hover:shadow-md",
+            oneTimeSelected
+              ? "border-primary ring-1 ring-primary/20"
+              : "border-border"
+          )}
+          onClick={onSelectOneTime}
+        >
+          <CardContent className="flex items-center justify-between gap-4 p-6">
+            <div className="flex flex-col gap-1">
+              <p className="font-semibold text-foreground">
+                {t.booking.oneTimeTitle}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                {t.booking.oneTimeDescription}
+              </p>
+              <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                {consult.duration} {t.common.minutes}
               </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <p className="text-2xl font-bold text-foreground">
+                {consult.price}{" "}
+                <span className="text-sm font-normal text-muted-foreground">
+                  {t.common.aed}
+                </span>
+              </p>
+              {oneTimeSelected && (
+                <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary">
+                  <Check className="h-4 w-4 text-primary-foreground" />
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Packages */}
       <div className="flex flex-col gap-3">
-        <h3 className="text-sm font-medium text-muted-foreground">
-          {t.booking.packagesHeading}
-        </h3>
+        {!restrictToSlug && (
+          <h3 className="text-sm font-medium text-muted-foreground">
+            {t.booking.packagesHeading}
+          </h3>
+        )}
 
         {loading ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -140,7 +153,7 @@ export function StepSelectPlan({
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {packages.map((pkg) => {
+            {visiblePackages.map((pkg) => {
               const qty = qtyFor(pkg.id);
               const total = Number(pkg.price_aed) * qty;
               return (

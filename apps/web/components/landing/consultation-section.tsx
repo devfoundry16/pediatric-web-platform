@@ -51,7 +51,7 @@ export function ConsultationSection() {
                   {consult.duration} {t.common.minutes}
                 </span>
               </div>
-              <Link href="/booking" className="w-full">
+              <Link href="/booking?plan=consultation" className="w-full">
                 <Button className="w-full gap-2">
                   {t.common.bookNow}
                   <ArrowRight className="h-4 w-4" />

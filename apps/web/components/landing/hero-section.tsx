@@ -71,7 +71,7 @@ export function HeroSection() {
                   </p>
                 </div>
               </div>
-              <Link href="/booking" className="shrink-0">
+              <Link href={`/booking?plan=${emergencyPackage.slug}`} className="shrink-0">
                 <Button size="sm" className="w-full gap-1.5 sm:w-auto">
                   {t.common.bookNow}
                   <ArrowRight className="h-4 w-4" />

@@ -11,6 +11,7 @@ export function useEmergencyPackage() {
   const { dictionary: t } = useI18n();
 
   return {
+    slug: "emergency_priority",
     name: t.landing.emergencyPriority,
     desc: t.landing.emergencyPriorityDesc,
     sessions: 1,

@@ -325,6 +325,8 @@
     "completeFieldsError": "Please complete all required fields.",
     "bookingFailedError": "Booking failed. Please try again.",
     "planStepLabel": "Choose Plan",
+    "buyStepLabel": "Purchase",
+    "confirmPackageTitle": "Confirm your package",
     "choosePlanTitle": "How would you like to book?",
     "consultationName": "Consultation",
     "oneTimeTitle": "One-time Consultation",
