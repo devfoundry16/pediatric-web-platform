@@ -14,6 +14,7 @@ export function PackagesSection() {
 
   const packages = [
     {
+      slug: "monthly_followup",
       name: t.landing.monthlyFollowUp,
       desc: t.landing.monthlyFollowUpDesc,
       sessions: 4,
@@ -21,6 +22,7 @@ export function PackagesSection() {
       price: 1400,
     },
     {
+      slug: "newborn_care",
       name: t.landing.newbornCare,
       desc: t.landing.newbornCareDesc,
       sessions: 3,
@@ -74,7 +76,7 @@ export function PackagesSection() {
                     </span>
                   </div>
                 </div>
-                <Link href="/booking">
+                <Link href={`/booking?plan=${pkg.slug}`}>
                   <Button
                     variant="outline"
                     className="w-full gap-2 bg-transparent"

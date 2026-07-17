@@ -325,6 +325,8 @@
     "completeFieldsError": "يرجى إكمال جميع الحقول المطلوبة.",
     "bookingFailedError": "فشل الحجز. حاول مرة أخرى.",
     "planStepLabel": "اختر الخطة",
+    "buyStepLabel": "الشراء",
+    "confirmPackageTitle": "أكّد باقتك",
     "choosePlanTitle": "كيف ترغب في الحجز؟",
     "consultationName": "استشارة",
     "oneTimeTitle": "استشارة لمرة واحدة",

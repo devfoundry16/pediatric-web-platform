@@ -19,18 +19,30 @@ import type { UserPackage } from "@/types/packages";
 import type { ConsultationTypeId } from "@/types/appointment";
 import { Loader2, AlertCircle } from "lucide-react";
 
-type StepKey = "child" | "plan" | "datetime" | "symptoms" | "review";
-
-// The plan step is only part of the flow when the user has no usable credit.
-// With an active package credit the consultation is already paid for, so we drop
-// the "Choose Plan" step entirely instead of showing then skipping it.
-const FLOW_WITH_PLAN: StepKey[] = ["child", "plan", "datetime", "symptoms", "review"];
-const FLOW_WITH_CREDIT: StepKey[] = ["child", "datetime", "symptoms", "review"];
+type StepKey = "child" | "plan" | "buy" | "datetime" | "symptoms" | "review";
 
 // Poll budget while waiting for the Stripe webhook to provision a just-purchased
 // package after the customer returns from checkout.
 const RESUME_POLL_ATTEMPTS = 12;
 const RESUME_POLL_INTERVAL_MS = 1500;
+
+// The step sequence depends on what (if anything) the user pre-selected on the
+// landing page and whether they already hold a usable credit:
+//  - no pre-selection  -> show the plan chooser (they haven't decided).
+//  - one-time consult  -> straight to booking (pay 399, or 0 if they have a credit).
+//  - package + credit  -> straight to booking; the credit is deducted at review.
+//  - package + no credit -> a "buy" step to purchase the package first, then book.
+function computeFlow(preselect: string | null, hasCredit: boolean): StepKey[] {
+  if (!preselect) return ["child", "plan", "datetime", "symptoms", "review"];
+  if (preselect === "consultation") return ["child", "datetime", "symptoms", "review"];
+  // a package slug
+  if (hasCredit) return ["child", "datetime", "symptoms", "review"];
+  return ["child", "buy", "datetime", "symptoms", "review"];
+}
+
+function isPackageSlug(preselect: string | null): boolean {
+  return !!preselect && preselect !== "consultation";
+}
 
 function hasActiveConsultCredit(pkgs: UserPackage[]): boolean {
   const now = Date.now();
@@ -48,10 +60,11 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export default function BookingPage() {
   const { dictionary: t } = useI18n();
   const [currentStep, setCurrentStep] = useState(0);
+  const [preselect, setPreselect] = useState<string | null>(null);
   const [hasCredit, setHasCredit] = useState(false);
-  // Gate rendering until the first credit check resolves, so the stepper never
-  // flashes the plan step for a user who actually has credit.
-  const [creditResolved, setCreditResolved] = useState(false);
+  // Gate rendering until the mount effect has read the URL and (when it matters)
+  // resolved credit, so the flow/stepper never flash the wrong steps.
+  const [ready, setReady] = useState(false);
   const [resuming, setResuming] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
 
@@ -69,15 +82,15 @@ export default function BookingPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // One-shot guard for the on-mount work (return-from-Stripe + credit check).
   const bootstrapped = useRef(false);
 
-  const flow = hasCredit ? FLOW_WITH_CREDIT : FLOW_WITH_PLAN;
+  const flow = computeFlow(preselect, hasCredit);
   const stepKey = flow[currentStep];
 
   const labelFor: Record<StepKey, string> = {
     child: t.booking.selectChild,
     plan: t.booking.planStepLabel,
+    buy: t.booking.buyStepLabel,
     datetime: t.booking.selectDateTime,
     symptoms: t.booking.enterSymptoms,
     review: t.booking.reviewBooking,
@@ -88,21 +101,26 @@ export default function BookingPage() {
     setBookingData((prev) => ({ ...prev, ...data }));
   };
 
-  // On mount: handle a return from Stripe (?resume / ?cancelled) and establish
-  // whether the user already holds a usable credit (which removes the plan step).
+  // On mount: read the pre-selected plan + handle a return from Stripe
+  // (?resume / ?cancelled) + resolve credit before showing the flow.
   useEffect(() => {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
 
     const params = new URLSearchParams(window.location.search);
+    const plan = params.get("plan");
     const cancelled = params.get("cancelled");
     const resume = params.get("resume");
     const childId = params.get("childId");
     const clearUrl = () =>
       window.history.replaceState({}, "", window.location.pathname);
 
-    // Package purchased → wait for the credit, then drop the plan step and jump
-    // straight to date/time.
+    if (plan) {
+      setPreselect(plan);
+      setBookingData((prev) => ({ ...prev, typeId: "consultation" }));
+    }
+
+    // Package purchased → wait for the credit, then jump to date/time.
     if (resume === "1" && childId) {
       clearUrl();
       setResuming(true);
@@ -124,9 +142,9 @@ export default function BookingPage() {
             const pkgs = await packagesApi.getMyPackages();
             if (hasActiveConsultCredit(pkgs)) {
               setHasCredit(true);
-              setCreditResolved(true);
               setResuming(false);
-              setCurrentStep(FLOW_WITH_CREDIT.indexOf("datetime"));
+              setReady(true);
+              setCurrentStep(computeFlow(plan, true).indexOf("datetime"));
               return;
             }
           } catch {
@@ -135,18 +153,17 @@ export default function BookingPage() {
           await delay(RESUME_POLL_INTERVAL_MS);
         }
 
-        // Webhook still hasn't provisioned — fall back to the full flow so they
-        // can retry or pay one-time.
+        // Webhook still hasn't provisioned — let them proceed / retry.
         setResuming(false);
-        setCreditResolved(true);
+        setReady(true);
         setNotice(t.booking.resumeFailed);
       })();
       return;
     }
 
     void (async () => {
-      // Checkout abandoned: release the pending one-time appointment (its id is
-      // in the param) so its slot is freed; a package cancel carries "package".
+      // Checkout abandoned: release the pending one-time appointment (id in the
+      // param) so its slot frees up; a package cancel carries "package".
       if (cancelled) {
         if (cancelled !== "package") {
           appointmentsApi.abandon(cancelled).catch(() => {});
@@ -155,17 +172,17 @@ export default function BookingPage() {
         clearUrl();
       }
 
-      try {
-        const pkgs = await packagesApi.getMyPackages();
-        if (hasActiveConsultCredit(pkgs)) {
-          setHasCredit(true);
-          setBookingData((prev) => ({ ...prev, typeId: "consultation" }));
+      // Credit only changes the flow when a package was pre-selected (buy step
+      // vs. straight to booking); otherwise we don't need to block on it.
+      if (isPackageSlug(plan)) {
+        try {
+          const pkgs = await packagesApi.getMyPackages();
+          setHasCredit(hasActiveConsultCredit(pkgs));
+        } catch {
+          setHasCredit(false);
         }
-      } catch {
-        // No/failed credit lookup → full flow with the plan step.
-      } finally {
-        setCreditResolved(true);
       }
+      setReady(true);
     })();
   }, [t.booking.paymentCancelledNotice, t.booking.resumeFailed]);
 
@@ -190,6 +207,9 @@ export default function BookingPage() {
         // "Next" applies only to the one-time consult; buying a package
         // navigates away to Stripe from within the step.
         return bookingData.typeId === "consultation";
+      case "buy":
+        // Must complete the purchase (in-step) to proceed — no "Next".
+        return false;
       case "datetime":
         return !!bookingData.date && !!bookingData.time;
       case "symptoms":
@@ -264,6 +284,15 @@ export default function BookingPage() {
             }
           />
         );
+      case "buy":
+        return (
+          <StepSelectPlan
+            childId={bookingData.childId}
+            selected={bookingData.typeId}
+            onSelectOneTime={() => {}}
+            restrictToSlug={preselect ?? undefined}
+          />
+        );
       case "datetime":
         return (
           <StepSelectDateTime
@@ -302,6 +331,8 @@ export default function BookingPage() {
   };
 
   const isLastStep = currentStep === flow.length - 1;
+  // The "buy" step has no forward "Next" — the purchase button lives in-step.
+  const showNext = !isLastStep && stepKey !== "buy";
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -312,7 +343,7 @@ export default function BookingPage() {
             {t.booking.title}
           </h1>
 
-          {resuming || !creditResolved ? (
+          {resuming || !ready ? (
             <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 text-center">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
               {resuming && (
@@ -364,7 +395,7 @@ export default function BookingPage() {
                   {t.common.previous}
                 </Button>
 
-                {!isLastStep ? (
+                {showNext ? (
                   <Button
                     onClick={() =>
                       setCurrentStep(Math.min(flow.length - 1, currentStep + 1))
@@ -373,7 +404,7 @@ export default function BookingPage() {
                   >
                     {t.common.next}
                   </Button>
-                ) : (
+                ) : isLastStep ? (
                   <Button
                     onClick={handleConfirm}
                     disabled={isSubmitting}
@@ -382,6 +413,8 @@ export default function BookingPage() {
                     {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
                     {t.booking.payAndConfirm}
                   </Button>
+                ) : (
+                  <span />
                 )}
               </div>
             </>

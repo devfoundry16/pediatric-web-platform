@@ -79,7 +79,7 @@ export async function createCheckoutSession(
   // the standalone packages page uses its own success/cancel pages.
   const isBooking = source === "booking";
   const successUrl = isBooking
-    ? `${frontendUrl}/booking?resume=1${childId ? `&childId=${encodeURIComponent(String(childId))}` : ""}`
+    ? `${frontendUrl}/booking?resume=1&plan=${encodeURIComponent(pkg.slug)}${childId ? `&childId=${encodeURIComponent(String(childId))}` : ""}`
     : `${frontendUrl}/dashboard/parent/packages/success?session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = isBooking
     ? `${frontendUrl}/booking?cancelled=package`
