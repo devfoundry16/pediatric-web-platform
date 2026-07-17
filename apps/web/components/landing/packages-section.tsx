@@ -18,14 +18,14 @@ export function PackagesSection() {
       desc: t.landing.monthlyFollowUpDesc,
       sessions: 4,
       validity: 30,
-      price: 750,
+      price: 1400,
     },
     {
       name: t.landing.newbornCare,
       desc: t.landing.newbornCareDesc,
       sessions: 3,
       validity: 30,
-      price: 600,
+      price: 1200,
     },
     emergencyPackage,
   ];
