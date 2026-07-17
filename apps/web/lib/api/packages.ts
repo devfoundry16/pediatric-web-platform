@@ -24,10 +24,18 @@ export const packagesApi = {
     return data.packages;
   },
 
-  async createCheckoutSession(packageId: string): Promise<string> {
+  async createCheckoutSession(
+    packageId: string,
+    opts?: { quantity?: number; source?: "booking" | "packages"; childId?: string }
+  ): Promise<string> {
     const { data } = await axios.post<{ url: string }>(
       `${getBaseUrl()}/packages/checkout`,
-      { packageId },
+      {
+        packageId,
+        quantity: opts?.quantity ?? 1,
+        source: opts?.source ?? "packages",
+        childId: opts?.childId,
+      },
       { headers: await authHeaders() }
     );
     return data.url;

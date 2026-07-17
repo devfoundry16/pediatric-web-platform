@@ -5,6 +5,8 @@ const CONSULTATION_DURATIONS: Record<string, number> = {
   quick: 15,
   standard: 30,
   extended: 45,
+  // Single bookable consultation (booking redesign, migration 013).
+  consultation: 45,
 };
 
 const BUFFER_MINUTES = 10;
@@ -60,7 +62,7 @@ export async function getDoctorSlots(req: Request, res: Response): Promise<void>
   const slotDuration = CONSULTATION_DURATIONS[consultationType];
 
   if (!slotDuration) {
-    res.status(400).json({ error: "type must be quick, standard, or extended" });
+    res.status(400).json({ error: "Invalid consultation type" });
     return;
   }
 

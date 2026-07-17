@@ -1,67 +1,18 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
-
-// Use require-style so TypeScript treats Stripe as a value with CJS NodeNext
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const StripeLib: new (key: string) => StripeClient = require("stripe");
-
-interface StripePrice {
-  currency: string;
-  unit_amount: number;
-  product_data: { name: string; description?: string; metadata: Record<string, string> };
-}
-
-interface StripeLineItem {
-  quantity: number;
-  price_data: StripePrice;
-}
-
-interface StripeSessionCreate {
-  mode: "payment";
-  line_items: StripeLineItem[];
-  metadata: Record<string, string>;
-  success_url: string;
-  cancel_url: string;
-}
-
-interface StripeCheckoutSession {
-  id: string;
-  payment_intent: string | null;
-  metadata: Record<string, string> | null;
-}
-
-interface StripeCharge {
-  payment_intent: string | null;
-}
-
-interface StripeDispute {
-  payment_intent: string | null;
-}
-
-interface StripeEvent {
-  type: string;
-  data: { object: unknown };
-}
-
-interface StripeClient {
-  checkout: {
-    sessions: {
-      create(params: StripeSessionCreate): Promise<{ url: string | null }>;
-    };
-  };
-  webhooks: {
-    constructEvent(payload: Buffer, sig: string, secret: string): StripeEvent;
-  };
-}
-
-function getStripe(): StripeClient | null {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) return null;
-  return new StripeLib(key);
-}
+import { getStripe } from "../lib/stripe";
+import type {
+  StripeCheckoutSession,
+  StripeCharge,
+  StripeDispute,
+  StripeEvent,
+} from "../lib/stripe";
 
 // GET /api/packages
-export async function listPackages(_req: Request, res: Response): Promise<void> {
+export async function listPackages(
+  _req: Request,
+  res: Response,
+): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
@@ -82,7 +33,10 @@ export async function listPackages(_req: Request, res: Response): Promise<void> 
 }
 
 // POST /api/packages/checkout
-export async function createCheckoutSession(req: Request, res: Response): Promise<void> {
+export async function createCheckoutSession(
+  req: Request,
+  res: Response,
+): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
@@ -94,9 +48,16 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
     return;
   }
 
-  const { packageId } = req.body;
+  const { packageId, quantity, source, childId } = req.body;
   if (!packageId) {
     res.status(400).json({ error: "packageId is required" });
+    return;
+  }
+
+  // Quantity: how many of this package to buy at once (N × price, N × credits).
+  const qty = Number.isInteger(quantity) ? (quantity as number) : 1;
+  if (qty < 1 || qty > 10) {
+    res.status(400).json({ error: "quantity must be between 1 and 10" });
     return;
   }
 
@@ -114,11 +75,21 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
 
   const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3333";
 
+  // A booking-initiated purchase returns into the booking flow to pick a time;
+  // the standalone packages page uses its own success/cancel pages.
+  const isBooking = source === "booking";
+  const successUrl = isBooking
+    ? `${frontendUrl}/booking?resume=1${childId ? `&childId=${encodeURIComponent(String(childId))}` : ""}`
+    : `${frontendUrl}/dashboard/parent/packages/success?session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl = isBooking
+    ? `${frontendUrl}/booking?cancelled=package`
+    : `${frontendUrl}/dashboard/parent/packages?cancelled=1`;
+
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     line_items: [
       {
-        quantity: 1,
+        quantity: qty,
         price_data: {
           currency: "aed",
           unit_amount: Math.round(Number(pkg.price_aed) * 100),
@@ -133,16 +104,20 @@ export async function createCheckoutSession(req: Request, res: Response): Promis
     metadata: {
       userId: req.userId!,
       packageId: pkg.id,
+      quantity: String(qty),
     },
-    success_url: `${frontendUrl}/dashboard/parent/packages/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${frontendUrl}/dashboard/parent/packages?cancelled=1`,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
   });
 
   res.json({ url: session.url });
 }
 
 // POST /api/packages/webhook
-export async function stripeWebhook(req: Request, res: Response): Promise<void> {
+export async function stripeWebhook(
+  req: Request,
+  res: Response,
+): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
@@ -163,10 +138,16 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
   let event: StripeEvent;
 
   try {
-    event = stripe.webhooks.constructEvent(req.body as Buffer, sig, webhookSecret);
+    event = stripe.webhooks.constructEvent(
+      req.body as Buffer,
+      sig,
+      webhookSecret,
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error";
-    res.status(400).json({ error: `Webhook signature verification failed: ${message}` });
+    res
+      .status(400)
+      .json({ error: `Webhook signature verification failed: ${message}` });
     return;
   }
   if (event.type === "checkout.session.completed") {
@@ -195,9 +176,44 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
       if (updateError) {
         console.error(
           "[webhook] Failed to confirm group session registration:",
-          updateError.message
+          updateError.message,
         );
         res.status(500).json({ error: updateError.message });
+        return;
+      }
+
+      res.json({ received: true });
+      return;
+    }
+
+    // ── One-time consultation payment ──────────────────────────────────────
+    if (metadata.type === "appointment") {
+      const { appointmentId } = metadata;
+
+      if (!appointmentId) {
+        res.status(400).json({ error: "Missing metadata on session" });
+        return;
+      }
+
+      // Idempotent via the unique index on stripe_checkout_session_id
+      // (migration 013): a redelivered webhook simply re-writes the same values.
+      const { error: apptError } = await supabaseAdmin
+        .from("appointments")
+        .update({
+          payment_status: "paid",
+          status: "confirmed",
+          stripe_checkout_session_id: session.id,
+          stripe_payment_intent: session.payment_intent,
+          payment_reference: session.payment_intent,
+        })
+        .eq("id", appointmentId);
+
+      if (apptError) {
+        console.error(
+          "[webhook] Failed to confirm appointment payment:",
+          apptError.message,
+        );
+        res.status(500).json({ error: apptError.message });
         return;
       }
 
@@ -213,6 +229,10 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
       return;
     }
 
+    // Quantity purchased (N × sessions of credit). Defaults to 1 for older
+    // sessions minted before quantity support.
+    const qty = Number.parseInt(metadata.quantity ?? "1", 10) || 1;
+
     const { data: pkg, error: pkgError } = await supabaseAdmin
       .from("consultation_packages")
       .select("sessions, validity_days")
@@ -227,29 +247,38 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + pkg.validity_days);
 
-    // Idempotent: a redelivered/retried webhook for the same checkout session
-    // must not create a second package. `ignoreDuplicates` relies on the unique
-    // index on stripe_checkout_session_id (migration 012).
-    const { error: insertError } = await supabaseAdmin
+    // Idempotent fulfillment: Stripe delivers events at-least-once. The unique
+    // index on stripe_checkout_session_id is PARTIAL (…WHERE NOT NULL), which
+    // Postgres can't use for ON CONFLICT inference — so dedupe with an explicit
+    // pre-check and treat a concurrent unique violation (23505) as a no-op.
+    const { data: alreadyProvisioned } = await supabaseAdmin
       .from("user_packages")
-      .upsert(
-        {
+      .select("id")
+      .eq("stripe_checkout_session_id", session.id)
+      .maybeSingle();
+
+    if (!alreadyProvisioned) {
+      const { error: insertError } = await supabaseAdmin
+        .from("user_packages")
+        .insert({
           user_id: userId,
           package_id: packageId,
-          credits_total: pkg.sessions,
-          credits_remaining: pkg.sessions,
+          credits_total: pkg.sessions * qty,
+          credits_remaining: pkg.sessions * qty,
           stripe_checkout_session_id: session.id,
           stripe_payment_intent: session.payment_intent,
           expires_at: expiresAt.toISOString(),
           status: "active",
-        },
-        { onConflict: "stripe_checkout_session_id", ignoreDuplicates: true }
-      );
+        });
 
-    if (insertError) {
-      console.error("[webhook] Failed to provision package:", insertError.message);
-      res.status(500).json({ error: insertError.message });
-      return;
+      if (insertError && insertError.code !== "23505") {
+        console.error(
+          "[webhook] Failed to provision package:",
+          insertError.message,
+        );
+        res.status(500).json({ error: insertError.message });
+        return;
+      }
     }
   }
 
@@ -271,7 +300,10 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
         .update({ status: "refunded", credits_remaining: 0 })
         .eq("stripe_payment_intent", paymentIntent);
       if (pkgRevokeError) {
-        console.error("[webhook] Failed to revoke package:", pkgRevokeError.message);
+        console.error(
+          "[webhook] Failed to revoke package:",
+          pkgRevokeError.message,
+        );
       }
 
       const { error: regRevokeError } = await supabaseAdmin
@@ -281,7 +313,19 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
       if (regRevokeError) {
         console.error(
           "[webhook] Failed to revoke session registration:",
-          regRevokeError.message
+          regRevokeError.message,
+        );
+      }
+
+      // One-time consultation appointments: refunding cancels the booking.
+      const { error: apptRevokeError } = await supabaseAdmin
+        .from("appointments")
+        .update({ payment_status: "refunded", status: "cancelled" })
+        .eq("stripe_payment_intent", paymentIntent);
+      if (apptRevokeError) {
+        console.error(
+          "[webhook] Failed to revoke appointment:",
+          apptRevokeError.message,
         );
       }
     }
@@ -291,7 +335,10 @@ export async function stripeWebhook(req: Request, res: Response): Promise<void> 
 }
 
 // GET /api/packages/my
-export async function getMyPackages(req: Request, res: Response): Promise<void> {
+export async function getMyPackages(
+  req: Request,
+  res: Response,
+): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
@@ -307,7 +354,8 @@ export async function getMyPackages(req: Request, res: Response): Promise<void> 
 
   const { data, error } = await supabaseAdmin
     .from("user_packages")
-    .select(`
+    .select(
+      `
       id,
       credits_total,
       credits_remaining,
@@ -326,7 +374,8 @@ export async function getMyPackages(req: Request, res: Response): Promise<void> 
         validity_days,
         applicable_consultation_types
       )
-    `)
+    `,
+    )
     .eq("user_id", req.userId)
     .order("purchased_at", { ascending: false });
 
@@ -347,7 +396,8 @@ export async function getUsageLogs(req: Request, res: Response): Promise<void> {
 
   const { data, error } = await supabaseAdmin
     .from("package_usage_logs")
-    .select(`
+    .select(
+      `
       id,
       credits_used,
       created_at,
@@ -369,7 +419,8 @@ export async function getUsageLogs(req: Request, res: Response): Promise<void> {
           slug
         )
       )
-    `)
+    `,
+    )
     .eq("user_packages.user_id", req.userId)
     .order("created_at", { ascending: false });
 
@@ -381,8 +432,7 @@ export async function getUsageLogs(req: Request, res: Response): Promise<void> {
   // Filter to only logs belonging to the requesting user (RLS on Supabase side;
   // this extra filter handles the join alias edge case)
   const filtered = (data ?? []).filter(
-    (log: Record<string, unknown>) =>
-      log.user_packages !== null
+    (log: Record<string, unknown>) => log.user_packages !== null,
   );
 
   res.json({ usageLogs: filtered });

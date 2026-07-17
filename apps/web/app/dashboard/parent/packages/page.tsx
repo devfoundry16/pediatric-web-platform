@@ -24,6 +24,8 @@ import {
   AlertCircle,
   History,
   ShoppingCart,
+  Minus,
+  Plus,
 } from "lucide-react";
 import { packagesApi } from "@/lib/api/packages";
 import type { ConsultationPackage, UserPackage, PackageUsageLog } from "@/types/packages";
@@ -64,15 +66,19 @@ function daysUntil(iso: string) {
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 }
 
+const MAX_QTY = 10;
+
 interface PackageCardProps {
   pkg: ConsultationPackage;
-  onPurchase: (id: string) => void;
+  onPurchase: (id: string, quantity: number) => void;
   isPurchasing: boolean;
 }
 
 function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
   const Icon = PACKAGE_ICONS[pkg.slug] ?? Package;
   const isEmergency = pkg.slug === "emergency_priority";
+  const [quantity, setQuantity] = useState(1);
+  const total = Number(pkg.price_aed) * quantity;
 
   return (
     <Card className="relative flex flex-col overflow-hidden transition-shadow hover:shadow-md">
@@ -126,27 +132,56 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
           )}
         </ul>
 
-        <div className="mt-auto flex items-center justify-between pt-2">
-          <div>
-            <span className="text-2xl font-bold text-foreground">
-              {Number(pkg.price_aed).toFixed(0)}
-            </span>
-            <span className="ml-1 text-sm text-muted-foreground">AED</span>
+        <div className="mt-auto flex flex-col gap-3 pt-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Quantity</span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                disabled={quantity <= 1}
+                aria-label="Decrease quantity"
+              >
+                <Minus className="h-3.5 w-3.5" />
+              </Button>
+              <span className="w-6 text-center text-sm font-medium">{quantity}</span>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon-sm"
+                onClick={() => setQuantity((q) => Math.min(MAX_QTY, q + 1))}
+                disabled={quantity >= MAX_QTY}
+                aria-label="Increase quantity"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
-          <Button
-            size="sm"
-            onClick={() => onPurchase(pkg.id)}
-            disabled={isPurchasing}
-          >
-            {isPurchasing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                <ShoppingCart className="mr-1.5 h-4 w-4" />
-                Buy Now
-              </>
-            )}
-          </Button>
+
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-2xl font-bold text-foreground">
+                {total.toFixed(0)}
+              </span>
+              <span className="ml-1 text-sm text-muted-foreground">AED</span>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => onPurchase(pkg.id, quantity)}
+              disabled={isPurchasing}
+            >
+              {isPurchasing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  <ShoppingCart className="mr-1.5 h-4 w-4" />
+                  Buy Now
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -256,10 +291,13 @@ export default function PackagesPage() {
     }
   }
 
-  async function handlePurchase(packageId: string) {
+  async function handlePurchase(packageId: string, quantity: number) {
     setPurchasingId(packageId);
     try {
-      const url = await packagesApi.createCheckoutSession(packageId);
+      const url = await packagesApi.createCheckoutSession(packageId, {
+        quantity,
+        source: "packages",
+      });
       window.location.href = url;
     } catch {
       setError("Could not start checkout. Please try again.");

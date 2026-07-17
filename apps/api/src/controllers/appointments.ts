@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
 import { createMeetingToken } from "../lib/daily";
+import { getStripe } from "../lib/stripe";
 import {
   sendBookingConfirmation,
   sendCancellationEmail,
@@ -11,7 +12,14 @@ const CONSULTATION_CONFIG: Record<string, { duration: number; price: number }> =
   quick: { duration: 15, price: 150 },
   standard: { duration: 30, price: 250 },
   extended: { duration: 45, price: 350 },
+  // Single bookable consultation (booking redesign, migration 013).
+  consultation: { duration: 45, price: 399 },
 };
+
+// How long a `pending` (unpaid) appointment may hold its slot while the parent
+// completes Stripe checkout. After this, the reservation is considered stale and
+// no longer blocks the slot.
+const PENDING_HOLD_MINUTES = 15;
 
 async function resolveParentEmail(userId: string): Promise<{ email: string; name: string } | null> {
   if (!supabaseAdmin) return null;
@@ -133,7 +141,7 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
 
   const config = CONSULTATION_CONFIG[consultationType];
   if (!config) {
-    res.status(400).json({ error: "consultationType must be quick, standard, or extended" });
+    res.status(400).json({ error: "Invalid consultationType" });
     return;
   }
 
@@ -167,24 +175,35 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     assignedDoctorId = doctors.id;
   }
 
-  // Verify the slot is still available (prevent double booking)
-  const { data: conflict } = await supabaseAdmin
+  // Verify the slot is still available (prevent double booking). A `pending`
+  // (unpaid) appointment holds the slot only during the checkout window; once it
+  // goes stale it no longer blocks a new booking, so an abandoned Stripe
+  // checkout can't lock a slot forever.
+  const { data: conflicts } = await supabaseAdmin
     .from("appointments")
-    .select("id")
+    .select("id, status, payment_status, created_at")
     .eq("doctor_id", assignedDoctorId)
     .eq("scheduled_date", date)
     .eq("scheduled_time", time)
-    .not("status", "in", '("cancelled","rescheduled")')
-    .limit(1);
+    .not("status", "in", '("cancelled","rescheduled")');
 
-  if (conflict && conflict.length > 0) {
+  const staleBefore = Date.now() - PENDING_HOLD_MINUTES * 60 * 1000;
+  const blocking = (conflicts ?? []).filter((c) => {
+    const isStalePending =
+      c.status === "pending" &&
+      c.payment_status === "pending" &&
+      new Date(c.created_at).getTime() < staleBefore;
+    return !isStalePending;
+  });
+
+  if (blocking.length > 0) {
     res.status(409).json({ error: "This time slot is no longer available" });
     return;
   }
 
-  // Check if the parent has an active package credit matching this consultation type
-  let paymentStatus = "paid";
-  let paymentReference = `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+  // Try to cover this booking with an active package credit matching the
+  // consultation type; otherwise it becomes a one-time paid consult settled
+  // through Stripe.
   let usedPackageId: string | null = null;
 
   const now = new Date().toISOString();
@@ -211,7 +230,7 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
   // Atomically reserve a package credit BEFORE creating the appointment. This
   // guarded decrement (see consume_package_credit) prevents two concurrent
   // bookings from consuming the same credit. If reservation fails (exhausted,
-  // expired, or lost the race), fall back to a normal paid appointment.
+  // expired, or lost the race), fall back to the one-time paid path.
   if (usedPackageId) {
     const { data: consumed, error: consumeError } = await supabaseAdmin.rpc(
       "consume_package_credit",
@@ -219,13 +238,14 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     );
     if (consumeError || consumed !== true) {
       usedPackageId = null;
-      paymentStatus = "paid";
-      paymentReference = `PAY-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
-    } else {
-      paymentStatus = "package_credit";
-      paymentReference = `PKG-${usedPackageId}`;
     }
   }
+
+  // Package credit → confirmed & free. No credit → pending, awaiting Stripe
+  // payment (see createAppointmentCheckout + the webhook that flips it to paid).
+  const paymentStatus = usedPackageId ? "package_credit" : "pending";
+  const status = usedPackageId ? "confirmed" : "pending";
+  const paymentReference = usedPackageId ? `PKG-${usedPackageId}` : null;
 
   const { data: appointment, error } = await supabaseAdmin
     .from("appointments")
@@ -239,11 +259,11 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
       duration_minutes: config.duration,
       price_aed: usedPackageId ? 0 : config.price,
       symptoms: symptoms ?? null,
-      status: "confirmed",
+      status,
       payment_status: paymentStatus,
       payment_reference: paymentReference,
     })
-    .select("id, status, payment_reference, scheduled_date, scheduled_time, consultation_type, price_aed")
+    .select("id, status, payment_status, payment_reference, scheduled_date, scheduled_time, consultation_type, price_aed")
     .single();
 
   if (error) {
@@ -268,8 +288,9 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
       });
   }
 
-  // Fire confirmation email (non-blocking)
-  if (appointment) {
+  // Confirmation email only once the booking is actually confirmed (credit
+  // path). One-time paid consults are emailed after Stripe payment settles.
+  if (appointment && usedPackageId) {
     resolveParentEmail(req.userId!).then(async (parent) => {
       if (!parent) return;
       const { data: doctor } = await supabaseAdmin!
@@ -287,7 +308,7 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
         scheduledTime: time,
         consultationType: consultationType,
         durationMinutes: config.duration,
-        priceAed: usedPackageId ? 0 : config.price,
+        priceAed: 0,
       }).catch(() => {});
     }).catch(() => {});
   }
@@ -295,7 +316,171 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
   res.status(201).json({
     appointment,
     usedPackageCredit: !!usedPackageId,
+    requiresPayment: !usedPackageId,
   });
+}
+
+// POST /api/appointments/:id/checkout
+// Mints a Stripe Checkout session for a pending one-time consultation. The
+// webhook (in controllers/packages.ts) flips the appointment to paid/confirmed
+// once payment settles.
+export async function createAppointmentCheckout(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const stripe = getStripe();
+  if (!stripe) {
+    res.status(500).json({ error: "Payment service not configured" });
+    return;
+  }
+
+  const { id } = req.params;
+
+  const { data: appt, error: apptError } = await supabaseAdmin
+    .from("appointments")
+    .select("id, price_aed, status, payment_status, consultation_type")
+    .eq("id", id)
+    .eq("parent_id", req.userId)
+    .single();
+
+  if (apptError || !appt) {
+    res.status(404).json({ error: "Appointment not found" });
+    return;
+  }
+
+  if (appt.payment_status !== "pending" || appt.status !== "pending") {
+    res.status(400).json({ error: "Appointment is not awaiting payment" });
+    return;
+  }
+
+  const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3333";
+
+  const session = await stripe.checkout.sessions.create({
+    mode: "payment",
+    line_items: [
+      {
+        quantity: 1,
+        price_data: {
+          currency: "aed",
+          unit_amount: Math.round(Number(appt.price_aed) * 100),
+          product_data: {
+            name: "Consultation",
+            description: "One-time pediatric consultation",
+            metadata: { appointmentId: appt.id },
+          },
+        },
+      },
+    ],
+    metadata: {
+      type: "appointment",
+      appointmentId: appt.id,
+      userId: req.userId!,
+    },
+    success_url: `${frontendUrl}/booking/success?appointment=${appt.id}&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${frontendUrl}/booking?cancelled=${appt.id}`,
+  });
+
+  res.json({ url: session.url });
+}
+
+// POST /api/appointments/:id/verify
+// Fallback for when the Stripe webhook is delayed or unreachable (e.g. local dev
+// without `stripe listen`): the return page passes the checkout session id, and
+// we confirm the appointment straight from Stripe. Idempotent with the webhook.
+export async function verifyAppointmentPayment(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { id } = req.params;
+  const sessionId = (req.body?.sessionId ?? req.query?.session_id) as string | undefined;
+
+  const { data: appt, error: apptError } = await supabaseAdmin
+    .from("appointments")
+    .select("id, status, payment_status")
+    .eq("id", id)
+    .eq("parent_id", req.userId)
+    .single();
+
+  if (apptError || !appt) {
+    res.status(404).json({ error: "Appointment not found" });
+    return;
+  }
+
+  // Already settled (e.g. the webhook won the race) — nothing to do.
+  if (appt.payment_status === "paid") {
+    res.json({ paymentStatus: "paid", status: appt.status });
+    return;
+  }
+
+  const stripe = getStripe();
+  if (!stripe || !sessionId) {
+    res.json({ paymentStatus: appt.payment_status, status: appt.status });
+    return;
+  }
+
+  let session;
+  try {
+    session = await stripe.checkout.sessions.retrieve(sessionId);
+  } catch {
+    res.json({ paymentStatus: appt.payment_status, status: appt.status });
+    return;
+  }
+
+  // Only honour a session that actually belongs to this appointment and is paid.
+  if (session.metadata?.appointmentId !== id || session.payment_status !== "paid") {
+    res.json({ paymentStatus: appt.payment_status, status: appt.status });
+    return;
+  }
+
+  const { error: updateError } = await supabaseAdmin
+    .from("appointments")
+    .update({
+      payment_status: "paid",
+      status: "confirmed",
+      stripe_checkout_session_id: session.id,
+      stripe_payment_intent: session.payment_intent,
+      payment_reference: session.payment_intent,
+    })
+    .eq("id", id)
+    .eq("parent_id", req.userId);
+
+  if (updateError) {
+    res.status(500).json({ error: updateError.message });
+    return;
+  }
+
+  res.json({ paymentStatus: "paid", status: "confirmed" });
+}
+
+// DELETE /api/appointments/:id
+// Releases a pending, unpaid appointment (e.g. the parent abandoned checkout) so
+// its slot is freed immediately rather than waiting for the stale-hold window.
+export async function abandonAppointment(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { id } = req.params;
+
+  const { error } = await supabaseAdmin
+    .from("appointments")
+    .delete()
+    .eq("id", id)
+    .eq("parent_id", req.userId)
+    .eq("status", "pending")
+    .eq("payment_status", "pending");
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json({ message: "Pending appointment released" });
 }
 
 export async function cancelAppointment(req: Request, res: Response): Promise<void> {
