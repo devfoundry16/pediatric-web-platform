@@ -1,4 +1,10 @@
-export type ConsultationTypeId = "quick" | "standard" | "extended";
+// Legacy tiers (quick/standard/extended) are kept in the union so historical
+// appointments still type-check; new bookings use the single `consultation`.
+export type ConsultationTypeId =
+  | "quick"
+  | "standard"
+  | "extended"
+  | "consultation";
 
 export interface ConsultationType {
   id: ConsultationTypeId;
@@ -7,7 +13,16 @@ export interface ConsultationType {
   price: number;
 }
 
+// The single bookable consultation (booking redesign). Legacy tiers are no
+// longer offered but remain valid values for existing records.
 export const CONSULTATION_TYPES: ConsultationType[] = [
+  { id: "consultation", name: "Consultation", duration: 45, price: 399 },
+];
+
+// Every consultation type, including retired tiers, for labelling historical
+// appointments.
+export const ALL_CONSULTATION_TYPES: ConsultationType[] = [
+  { id: "consultation", name: "Consultation", duration: 45, price: 399 },
   { id: "quick", name: "Quick Consultation", duration: 15, price: 150 },
   { id: "standard", name: "Standard Consultation", duration: 30, price: 250 },
   { id: "extended", name: "Extended Consultation", duration: 45, price: 350 },

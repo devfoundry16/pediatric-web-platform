@@ -6,6 +6,8 @@ export function getConsultationTypeLabel(
   id: ConsultationTypeId | string
 ): string {
   switch (id) {
+    case "consultation":
+      return t.booking.consultationName;
     case "quick":
       return t.landing.quick;
     case "standard":

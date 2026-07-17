@@ -60,13 +60,52 @@ export const appointmentsApi = {
     return data.appointment;
   },
 
-  async create(payload: CreateAppointmentPayload): Promise<Appointment> {
-    const { data } = await axios.post<{ appointment: Appointment }>(
-      `${getBaseUrl()}/appointments`,
-      payload,
+  async create(
+    payload: CreateAppointmentPayload
+  ): Promise<{ appointment: Appointment; requiresPayment: boolean; usedPackageCredit: boolean }> {
+    const { data } = await axios.post<{
+      appointment: Appointment;
+      requiresPayment: boolean;
+      usedPackageCredit: boolean;
+    }>(`${getBaseUrl()}/appointments`, payload, {
+      headers: await authHeaders(),
+    });
+    return {
+      appointment: data.appointment,
+      requiresPayment: data.requiresPayment,
+      usedPackageCredit: data.usedPackageCredit,
+    };
+  },
+
+  // Mint a Stripe Checkout URL to pay for a pending one-time consultation.
+  async checkout(id: string): Promise<string> {
+    const { data } = await axios.post<{ url: string }>(
+      `${getBaseUrl()}/appointments/${id}/checkout`,
+      {},
       { headers: await authHeaders() }
     );
-    return data.appointment;
+    return data.url;
+  },
+
+  // Confirm a one-time consult straight from Stripe on the return page, as a
+  // fallback when the webhook is delayed/unreachable. Idempotent.
+  async verifyPayment(
+    id: string,
+    sessionId: string
+  ): Promise<{ paymentStatus: string; status: string }> {
+    const { data } = await axios.post<{ paymentStatus: string; status: string }>(
+      `${getBaseUrl()}/appointments/${id}/verify`,
+      { sessionId },
+      { headers: await authHeaders() }
+    );
+    return data;
+  },
+
+  // Release a pending, unpaid appointment (e.g. the parent cancelled checkout).
+  async abandon(id: string): Promise<void> {
+    await axios.delete(`${getBaseUrl()}/appointments/${id}`, {
+      headers: await authHeaders(),
+    });
   },
 
   async cancel(id: string, reason?: string): Promise<void> {
