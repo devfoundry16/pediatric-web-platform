@@ -19,10 +19,13 @@ import type { UserPackage } from "@/types/packages";
 import type { ConsultationTypeId } from "@/types/appointment";
 import { Loader2, AlertCircle } from "lucide-react";
 
-const TOTAL_STEPS = 5;
-// Step index of the plan-selection screen (child → PLAN → date/time → …).
-const PLAN_STEP = 1;
-const DATETIME_STEP = 2;
+type StepKey = "child" | "plan" | "datetime" | "symptoms" | "review";
+
+// The plan step is only part of the flow when the user has no usable credit.
+// With an active package credit the consultation is already paid for, so we drop
+// the "Choose Plan" step entirely instead of showing then skipping it.
+const FLOW_WITH_PLAN: StepKey[] = ["child", "plan", "datetime", "symptoms", "review"];
+const FLOW_WITH_CREDIT: StepKey[] = ["child", "datetime", "symptoms", "review"];
 
 // Poll budget while waiting for the Stripe webhook to provision a just-purchased
 // package after the customer returns from checkout.
@@ -45,6 +48,13 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 export default function BookingPage() {
   const { dictionary: t } = useI18n();
   const [currentStep, setCurrentStep] = useState(0);
+  const [hasCredit, setHasCredit] = useState(false);
+  // Gate rendering until the first credit check resolves, so the stepper never
+  // flashes the plan step for a user who actually has credit.
+  const [creditResolved, setCreditResolved] = useState(false);
+  const [resuming, setResuming] = useState(false);
+  const [showConfirmation, setShowConfirmation] = useState(false);
+
   const [bookingData, setBookingData] = useState({
     childId: "",
     childName: "",
@@ -58,57 +68,45 @@ export default function BookingPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [resuming, setResuming] = useState(false);
 
-  // Auto-skip the plan step at most once, so a parent who presses "Previous"
-  // from date/time isn't bounced straight forward again.
-  const autoSkipChecked = useRef(false);
-  // One-shot guard for the on-mount query-param handling (resume / cancel).
-  const returnHandled = useRef(false);
+  // One-shot guard for the on-mount work (return-from-Stripe + credit check).
+  const bootstrapped = useRef(false);
 
-  const steps = [
-    t.booking.selectChild,
-    t.booking.planStepLabel,
-    t.booking.selectDateTime,
-    t.booking.enterSymptoms,
-    t.booking.reviewBooking,
-  ];
+  const flow = hasCredit ? FLOW_WITH_CREDIT : FLOW_WITH_PLAN;
+  const stepKey = flow[currentStep];
+
+  const labelFor: Record<StepKey, string> = {
+    child: t.booking.selectChild,
+    plan: t.booking.planStepLabel,
+    datetime: t.booking.selectDateTime,
+    symptoms: t.booking.enterSymptoms,
+    review: t.booking.reviewBooking,
+  };
+  const steps = flow.map((k) => labelFor[k]);
 
   const updateBooking = (data: Partial<typeof bookingData>) => {
     setBookingData((prev) => ({ ...prev, ...data }));
   };
 
-  // Handle a return from Stripe: ?resume=1 (package bought → continue booking)
-  // or ?cancelled=<id|package> (checkout abandoned).
+  // On mount: handle a return from Stripe (?resume / ?cancelled) and establish
+  // whether the user already holds a usable credit (which removes the plan step).
   useEffect(() => {
-    if (returnHandled.current) return;
-    returnHandled.current = true;
+    if (bootstrapped.current) return;
+    bootstrapped.current = true;
 
     const params = new URLSearchParams(window.location.search);
     const cancelled = params.get("cancelled");
     const resume = params.get("resume");
     const childId = params.get("childId");
-
     const clearUrl = () =>
       window.history.replaceState({}, "", window.location.pathname);
 
-    if (cancelled) {
-      // A one-time consult cancel carries the pending appointment id — release it
-      // so its slot is freed immediately. A package cancel carries "package".
-      if (cancelled !== "package") {
-        appointmentsApi.abandon(cancelled).catch(() => {});
-      }
-      setNotice(t.booking.paymentCancelledNotice);
-      clearUrl();
-      return;
-    }
-
+    // Package purchased → wait for the credit, then drop the plan step and jump
+    // straight to date/time.
     if (resume === "1" && childId) {
       clearUrl();
-      autoSkipChecked.current = true; // resume owns navigation to date/time
       setResuming(true);
-      (async () => {
-        // Restore the child, then wait for the purchased credit to land.
+      void (async () => {
         try {
           const child = await childrenApi.getById(childId);
           setBookingData((prev) => ({
@@ -125,8 +123,10 @@ export default function BookingPage() {
           try {
             const pkgs = await packagesApi.getMyPackages();
             if (hasActiveConsultCredit(pkgs)) {
+              setHasCredit(true);
+              setCreditResolved(true);
               setResuming(false);
-              setCurrentStep(DATETIME_STEP);
+              setCurrentStep(FLOW_WITH_CREDIT.indexOf("datetime"));
               return;
             }
           } catch {
@@ -135,36 +135,39 @@ export default function BookingPage() {
           await delay(RESUME_POLL_INTERVAL_MS);
         }
 
-        // Webhook still hasn't provisioned — let them proceed manually.
+        // Webhook still hasn't provisioned — fall back to the full flow so they
+        // can retry or pay one-time.
         setResuming(false);
+        setCreditResolved(true);
         setNotice(t.booking.resumeFailed);
-        setCurrentStep(PLAN_STEP);
       })();
+      return;
     }
-  }, [t.booking.paymentCancelledNotice, t.booking.resumeFailed]);
 
-  // Skip the plan step when the parent already holds a usable package credit.
-  useEffect(() => {
-    if (currentStep !== PLAN_STEP || resuming) return;
-    if (autoSkipChecked.current) return;
-    let cancelled = false;
-    packagesApi
-      .getMyPackages()
-      .then((pkgs) => {
-        if (cancelled) return;
-        autoSkipChecked.current = true;
-        if (hasActiveConsultCredit(pkgs)) {
-          setBookingData((prev) => ({ ...prev, typeId: "consultation" }));
-          setCurrentStep(DATETIME_STEP);
+    void (async () => {
+      // Checkout abandoned: release the pending one-time appointment (its id is
+      // in the param) so its slot is freed; a package cancel carries "package".
+      if (cancelled) {
+        if (cancelled !== "package") {
+          appointmentsApi.abandon(cancelled).catch(() => {});
         }
-      })
-      .catch(() => {
-        autoSkipChecked.current = true;
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentStep, resuming]);
+        setNotice(t.booking.paymentCancelledNotice);
+        clearUrl();
+      }
+
+      try {
+        const pkgs = await packagesApi.getMyPackages();
+        if (hasActiveConsultCredit(pkgs)) {
+          setHasCredit(true);
+          setBookingData((prev) => ({ ...prev, typeId: "consultation" }));
+        }
+      } catch {
+        // No/failed credit lookup → full flow with the plan step.
+      } finally {
+        setCreditResolved(true);
+      }
+    })();
+  }, [t.booking.paymentCancelledNotice, t.booking.resumeFailed]);
 
   const handleChildSelect = async (id: string) => {
     updateBooking({ childId: id, childName: "" });
@@ -180,18 +183,18 @@ export default function BookingPage() {
   };
 
   const isStepValid = (): boolean => {
-    switch (currentStep) {
-      case 0:
+    switch (stepKey) {
+      case "child":
         return !!bookingData.childId;
-      case PLAN_STEP:
-        // Advancing via "Next" only applies to the one-time consult; buying a
-        // package navigates away to Stripe from within the step.
+      case "plan":
+        // "Next" applies only to the one-time consult; buying a package
+        // navigates away to Stripe from within the step.
         return bookingData.typeId === "consultation";
-      case DATETIME_STEP:
+      case "datetime":
         return !!bookingData.date && !!bookingData.time;
-      case 3:
+      case "symptoms":
         return true;
-      case 4:
+      case "review":
         return true;
       default:
         return false;
@@ -218,15 +221,13 @@ export default function BookingPage() {
       });
 
       // One-time consult with no package credit → settle through Stripe. The
-      // webhook confirms the appointment and returns the user to /booking/success.
+      // webhook confirms the appointment and returns to /booking/success.
       if (requiresPayment) {
         try {
           const url = await appointmentsApi.checkout(appointment.id);
           window.location.href = url;
           return;
         } catch (checkoutErr) {
-          // Don't leave the pending appointment holding the slot if we couldn't
-          // even start checkout.
           await appointmentsApi.abandon(appointment.id).catch(() => {});
           throw checkoutErr;
         }
@@ -234,7 +235,7 @@ export default function BookingPage() {
 
       // Covered by a package credit → already confirmed.
       setConfirmedAppointmentId(appointment.id);
-      setCurrentStep(TOTAL_STEPS);
+      setShowConfirmation(true);
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : t.booking.bookingFailedError;
@@ -245,37 +246,25 @@ export default function BookingPage() {
   };
 
   const renderStep = () => {
-    if (currentStep === TOTAL_STEPS) {
-      return (
-        <StepConfirmation
-          appointmentId={confirmedAppointmentId}
-          bookingData={{
-            typeId: bookingData.typeId as string,
-            date: bookingData.date,
-            time: bookingData.time,
-            childName: bookingData.childName,
-          }}
-        />
-      );
-    }
-
-    switch (currentStep) {
-      case 0:
+    switch (stepKey) {
+      case "child":
         return (
           <StepSelectChild
             selected={bookingData.childId}
             onSelect={handleChildSelect}
           />
         );
-      case PLAN_STEP:
+      case "plan":
         return (
           <StepSelectPlan
             childId={bookingData.childId}
             selected={bookingData.typeId}
-            onSelectOneTime={() => updateBooking({ typeId: "consultation", date: "", time: "" })}
+            onSelectOneTime={() =>
+              updateBooking({ typeId: "consultation", date: "", time: "" })
+            }
           />
         );
-      case DATETIME_STEP:
+      case "datetime":
         return (
           <StepSelectDateTime
             doctorId={bookingData.doctorId}
@@ -287,14 +276,14 @@ export default function BookingPage() {
             onDoctorResolved={(id) => updateBooking({ doctorId: id })}
           />
         );
-      case 3:
+      case "symptoms":
         return (
           <StepSymptoms
             value={bookingData.symptoms}
             onChange={(symptoms) => updateBooking({ symptoms })}
           />
         );
-      case 4:
+      case "review":
         return (
           <StepReview
             bookingData={{
@@ -312,7 +301,7 @@ export default function BookingPage() {
     }
   };
 
-  const isConfirmed = currentStep === TOTAL_STEPS;
+  const isLastStep = currentStep === flow.length - 1;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -323,23 +312,33 @@ export default function BookingPage() {
             {t.booking.title}
           </h1>
 
-          {resuming ? (
+          {resuming || !creditResolved ? (
             <div className="flex min-h-[400px] flex-col items-center justify-center gap-4 text-center">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              <div>
-                <p className="font-medium text-foreground">{t.booking.resuming}</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {t.booking.resumingHint}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <>
-              {!isConfirmed && (
-                <div className="mb-10 mt-6">
-                  <BookingStepper steps={steps} currentStep={currentStep} />
+              {resuming && (
+                <div>
+                  <p className="font-medium text-foreground">{t.booking.resuming}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {t.booking.resumingHint}
+                  </p>
                 </div>
               )}
+            </div>
+          ) : showConfirmation ? (
+            <StepConfirmation
+              appointmentId={confirmedAppointmentId}
+              bookingData={{
+                typeId: bookingData.typeId as string,
+                date: bookingData.date,
+                time: bookingData.time,
+                childName: bookingData.childName,
+              }}
+            />
+          ) : (
+            <>
+              <div className="mb-10 mt-6">
+                <BookingStepper steps={steps} currentStep={currentStep} />
+              </div>
 
               {notice && (
                 <div className="mb-6 flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
@@ -356,37 +355,35 @@ export default function BookingPage() {
                 </p>
               )}
 
-              {!isConfirmed && (
-                <div className="mt-8 flex items-center justify-between">
-                  <Button
-                    variant="outline"
-                    onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
-                    disabled={currentStep === 0 || isSubmitting}
-                  >
-                    {t.common.previous}
-                  </Button>
+              <div className="mt-8 flex items-center justify-between">
+                <Button
+                  variant="outline"
+                  onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
+                  disabled={currentStep === 0 || isSubmitting}
+                >
+                  {t.common.previous}
+                </Button>
 
-                  {currentStep < TOTAL_STEPS - 1 ? (
-                    <Button
-                      onClick={() =>
-                        setCurrentStep(Math.min(TOTAL_STEPS - 1, currentStep + 1))
-                      }
-                      disabled={!isStepValid()}
-                    >
-                      {t.common.next}
-                    </Button>
-                  ) : (
-                    <Button
-                      onClick={handleConfirm}
-                      disabled={isSubmitting}
-                      className="gap-2"
-                    >
-                      {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                      {t.booking.payAndConfirm}
-                    </Button>
-                  )}
-                </div>
-              )}
+                {!isLastStep ? (
+                  <Button
+                    onClick={() =>
+                      setCurrentStep(Math.min(flow.length - 1, currentStep + 1))
+                    }
+                    disabled={!isStepValid()}
+                  >
+                    {t.common.next}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleConfirm}
+                    disabled={isSubmitting}
+                    className="gap-2"
+                  >
+                    {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {t.booking.payAndConfirm}
+                  </Button>
+                )}
+              </div>
             </>
           )}
         </div>
