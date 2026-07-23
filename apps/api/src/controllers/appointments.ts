@@ -12,8 +12,8 @@ const CONSULTATION_CONFIG: Record<string, { duration: number; price: number }> =
   quick: { duration: 15, price: 150 },
   standard: { duration: 30, price: 250 },
   extended: { duration: 45, price: 350 },
-  // Single bookable consultation (booking redesign, migration 013).
-  consultation: { duration: 45, price: 399 },
+  // Single bookable consultation (booking redesign; repriced in migration 016).
+  consultation: { duration: 30, price: 350 },
 };
 
 // How long a `pending` (unpaid) appointment may hold its slot while the parent

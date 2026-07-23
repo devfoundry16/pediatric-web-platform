@@ -18,7 +18,6 @@ interface AuthActions {
     password: string,
     fullName: string,
     phone: string,
-    role: "parent" | "doctor",
   ) => Promise<void>;
   signOut: () => Promise<void>;
   setUser: (user: User | null) => void;
@@ -92,7 +91,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ isLoading: false });
   },
 
-  signUp: async (email, password, fullName, phone, role) => {
+  signUp: async (email, password, fullName, phone) => {
     const supabase = createClient();
     set({ isLoading: true, error: null });
 
@@ -107,7 +106,9 @@ export const useAuthStore = create<AuthStore>((set) => ({
         data: {
           full_name: fullName,
           phone,
-          role,
+          // Self-service signups are always parents; the DB enforces this too
+          // (migration 012). Doctors/admins are provisioned by an admin.
+          role: "parent",
         },
       },
     });

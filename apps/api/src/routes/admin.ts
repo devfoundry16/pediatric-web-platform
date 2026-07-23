@@ -6,6 +6,8 @@ import {
   listUsers,
   getUser,
   updateUser,
+  createUser,
+  deleteUser,
   listAllAppointments,
   updateAppointmentAdmin,
   getDoctorScheduleAdmin,
@@ -34,8 +36,10 @@ router.get("/stats", getAdminStats);
 
 // Users
 router.get("/users", listUsers);
+router.post("/users", createUser);
 router.get("/users/:id", getUser);
 router.patch("/users/:id", updateUser);
+router.delete("/users/:id", deleteUser);
 
 // Appointments
 router.get("/appointments", listAllAppointments);

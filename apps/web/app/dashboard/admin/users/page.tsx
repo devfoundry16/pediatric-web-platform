@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,11 +20,37 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Search, MoreHorizontal, UserCheck, UserX, Pencil, Loader2 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Search,
+  MoreHorizontal,
+  UserCheck,
+  UserX,
+  Pencil,
+  Trash2,
+  UserPlus,
+  Loader2,
+} from "lucide-react";
 import { adminApi, type AdminUser } from "@/lib/api/admin";
 
-const ROLE_TABS = ["all", "parent", "doctor"] as const;
+const ROLE_TABS = ["all", "parent", "doctor", "admin"] as const;
 type RoleTab = (typeof ROLE_TABS)[number];
+
+const ROLES = ["parent", "doctor", "admin"] as const;
+type Role = (typeof ROLES)[number];
+
+// Surface the backend's guard messages (e.g. "At least one active admin must
+// remain.") instead of a generic failure.
+function extractError(e: unknown, fallback: string): string {
+  const resp = (e as { response?: { data?: { error?: string } } })?.response;
+  return resp?.data?.error ?? fallback;
+}
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
@@ -38,7 +65,21 @@ export default function AdminUsersPage() {
   const [editing, setEditing] = useState<AdminUser | null>(null);
   const [editName, setEditName] = useState("");
   const [editPhone, setEditPhone] = useState("");
+  const [editRole, setEditRole] = useState<Role>("parent");
   const [isSaving, setIsSaving] = useState(false);
+
+  // Create dialog
+  const [creating, setCreating] = useState(false);
+  const [createEmail, setCreateEmail] = useState("");
+  const [createPassword, setCreatePassword] = useState("");
+  const [createName, setCreateName] = useState("");
+  const [createPhone, setCreatePhone] = useState("");
+  const [createRole, setCreateRole] = useState<Role>("parent");
+  const [isCreating, setIsCreating] = useState(false);
+
+  // Delete dialog
+  const [deleting, setDeleting] = useState<AdminUser | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -56,35 +97,98 @@ export default function AdminUsersPage() {
   useEffect(() => { load(); }, [load]);
 
   const handleToggleActive = async (user: AdminUser) => {
-    await adminApi.updateUser(user.id, { is_active: !user.is_active });
-    load();
+    try {
+      await adminApi.updateUser(user.id, { is_active: !user.is_active });
+      load();
+    } catch (e) {
+      toast.error(extractError(e, "Failed to update user."));
+    }
   };
 
   const openEdit = (user: AdminUser) => {
     setEditing(user);
     setEditName(user.full_name ?? "");
     setEditPhone(user.phone ?? "");
+    setEditRole(user.role);
   };
 
   const handleSave = async () => {
     if (!editing) return;
     setIsSaving(true);
     try {
-      await adminApi.updateUser(editing.id, { full_name: editName, phone: editPhone });
+      await adminApi.updateUser(editing.id, {
+        full_name: editName,
+        phone: editPhone,
+        role: editRole,
+      });
+      toast.success("User updated.");
       setEditing(null);
       load();
+    } catch (e) {
+      toast.error(extractError(e, "Failed to update user."));
     } finally {
       setIsSaving(false);
     }
   };
 
+  const openCreate = () => {
+    setCreateEmail("");
+    setCreatePassword("");
+    setCreateName("");
+    setCreatePhone("");
+    setCreateRole("parent");
+    setCreating(true);
+  };
+
+  const handleCreate = async () => {
+    setIsCreating(true);
+    try {
+      await adminApi.createUser({
+        email: createEmail.trim(),
+        password: createPassword,
+        full_name: createName.trim() || undefined,
+        phone: createPhone.trim() || undefined,
+        role: createRole,
+      });
+      toast.success("User created.");
+      setCreating(false);
+      load();
+    } catch (e) {
+      toast.error(extractError(e, "Failed to create user."));
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleting) return;
+    setIsDeleting(true);
+    try {
+      await adminApi.deleteUser(deleting.id);
+      toast.success("User deleted.");
+      setDeleting(null);
+      load();
+    } catch (e) {
+      toast.error(extractError(e, "Failed to delete user."));
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const createValid = createEmail.trim().length > 0 && createPassword.length >= 6;
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-        <p className="text-sm text-muted-foreground">View and manage parents, doctors, and admins</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">User Management</h1>
+          <p className="text-sm text-muted-foreground">View and manage parents, doctors, and admins</p>
+        </div>
+        <Button onClick={openCreate} className="gap-2">
+          <UserPlus className="h-4 w-4" />
+          Create User
+        </Button>
       </div>
 
       {/* Tabs + Search */}
@@ -141,7 +245,7 @@ export default function AdminUsersPage() {
                       <td className="px-4 py-3 font-medium text-foreground">{u.full_name ?? "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{u.email ?? "—"}</td>
                       <td className="px-4 py-3">
-                        <Badge variant="outline" className="capitalize">{u.role}</Badge>
+                        <Badge variant={u.role === "admin" ? "default" : "outline"} className="capitalize">{u.role}</Badge>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${u.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
@@ -168,6 +272,12 @@ export default function AdminUsersPage() {
                               ) : (
                                 <><UserCheck className="mr-2 h-4 w-4" /> Activate</>
                               )}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => setDeleting(u)}
+                              className="text-destructive focus:text-destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -211,12 +321,98 @@ export default function AdminUsersPage() {
               <label className="text-sm font-medium text-foreground">Phone</label>
               <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
             </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">Role</label>
+              <Select value={editRole} onValueChange={(v) => setEditRole(v as Role)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLES.map((r) => (
+                    <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Set to <span className="font-medium">admin</span> to grant admin access, or change away to remove it.
+              </p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
             <Button onClick={handleSave} disabled={isSaving} className="gap-2">
               {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
               Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create dialog */}
+      <Dialog open={creating} onOpenChange={setCreating}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create User</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">Email</label>
+              <Input type="email" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} placeholder="name@example.com" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">Temporary password</label>
+              <Input type="password" value={createPassword} onChange={(e) => setCreatePassword(e.target.value)} placeholder="At least 6 characters" />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">Full name</label>
+              <Input value={createName} onChange={(e) => setCreateName(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">Phone</label>
+              <Input value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-foreground">Role</label>
+              <Select value={createRole} onValueChange={(v) => setCreateRole(v as Role)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLES.map((r) => (
+                    <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button>
+            <Button onClick={handleCreate} disabled={!createValid || isCreating} className="gap-2">
+              {isCreating && <Loader2 className="h-4 w-4 animate-spin" />}
+              Create
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <Dialog open={!!deleting} onOpenChange={() => setDeleting(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Permanently delete{" "}
+            <span className="font-medium text-foreground">
+              {deleting?.full_name ?? deleting?.email ?? "this user"}
+            </span>
+            ? This removes their account and associated data and cannot be undone.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting} className="gap-2">
+              {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>
