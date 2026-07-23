@@ -176,8 +176,16 @@ export const adminApi = {
   listUsers: (params?: { role?: string; search?: string; page?: number; limit?: number }) =>
     get<{ users: AdminUser[]; total: number; page: number; limit: number }>("/users", params as Record<string, string | number | undefined>),
   getUser: (id: string) => get<{ user: AdminUser }>(`/users/${id}`),
-  updateUser: (id: string, data: Partial<Pick<AdminUser, "full_name" | "phone" | "is_active">>) =>
+  updateUser: (id: string, data: Partial<Pick<AdminUser, "full_name" | "phone" | "is_active" | "role">>) =>
     patch<{ user: AdminUser }>(`/users/${id}`, data),
+  createUser: (data: {
+    email: string;
+    password: string;
+    full_name?: string;
+    phone?: string;
+    role: AdminUser["role"];
+  }) => post<{ user: AdminUser }>("/users", data),
+  deleteUser: (id: string) => del(`/users/${id}`),
 
   // Appointments
   listAppointments: (params?: { date?: string; doctorId?: string; status?: string; page?: number; limit?: number }) =>

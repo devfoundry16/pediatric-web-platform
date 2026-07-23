@@ -16,13 +16,13 @@ export interface ConsultationType {
 // The single bookable consultation (booking redesign). Legacy tiers are no
 // longer offered but remain valid values for existing records.
 export const CONSULTATION_TYPES: ConsultationType[] = [
-  { id: "consultation", name: "Consultation", duration: 45, price: 399 },
+  { id: "consultation", name: "Consultation", duration: 30, price: 350 },
 ];
 
 // Every consultation type, including retired tiers, for labelling historical
 // appointments.
 export const ALL_CONSULTATION_TYPES: ConsultationType[] = [
-  { id: "consultation", name: "Consultation", duration: 45, price: 399 },
+  { id: "consultation", name: "Consultation", duration: 30, price: 350 },
   { id: "quick", name: "Quick Consultation", duration: 15, price: 150 },
   { id: "standard", name: "Standard Consultation", duration: 30, price: 250 },
   { id: "extended", name: "Extended Consultation", duration: 45, price: 350 },

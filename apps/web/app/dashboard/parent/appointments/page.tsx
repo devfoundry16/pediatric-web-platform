@@ -23,7 +23,6 @@ import {
   Video,
   User,
   Stethoscope,
-  X,
   RefreshCw,
   Loader2,
 } from "lucide-react";
@@ -56,10 +55,6 @@ export default function ParentAppointmentsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [joiningId, setJoiningId] = useState<string | null>(null);
-
-  // Cancel dialog
-  const [cancelId, setCancelId] = useState<string | null>(null);
-  const [isCancelling, setIsCancelling] = useState(false);
 
   // Reschedule dialog
   const [rescheduleAppt, setRescheduleAppt] = useState<Appointment | null>(null);
@@ -95,20 +90,6 @@ export default function ParentAppointmentsPage() {
       .catch(() => setRescheduleSlots([]))
       .finally(() => setIsSlotsLoading(false));
   }, [rescheduleDate, rescheduleAppt]);
-
-  const handleCancel = async () => {
-    if (!cancelId) return;
-    setIsCancelling(true);
-    try {
-      await appointmentsApi.cancel(cancelId);
-      setCancelId(null);
-      loadAppointments();
-    } catch {
-      // keep dialog open on error
-    } finally {
-      setIsCancelling(false);
-    }
-  };
 
   const handleReschedule = async () => {
     if (!rescheduleAppt || !rescheduleDate || !rescheduleTime) return;
@@ -152,7 +133,6 @@ export default function ParentAppointmentsPage() {
     const isUpcoming =
       !["cancelled", "completed"].includes(appt.status) &&
       new Date(appt.scheduled_date) >= today;
-    const canCancel = ["pending", "confirmed"].includes(appt.status) && isUpcoming;
     const canReschedule = ["pending", "confirmed"].includes(appt.status) && isUpcoming;
 
     return (
@@ -230,17 +210,6 @@ export default function ParentAppointmentsPage() {
               >
                 <RefreshCw className="h-3.5 w-3.5" />
                 {t.appointments.reschedule}
-              </Button>
-            )}
-            {canCancel && (
-              <Button
-                size="sm"
-                variant="ghost"
-                className="gap-1.5 text-destructive hover:text-destructive"
-                onClick={() => setCancelId(appt.id)}
-              >
-                <X className="h-3.5 w-3.5" />
-                {t.appointments.cancel}
               </Button>
             )}
           </div>
@@ -322,32 +291,6 @@ export default function ParentAppointmentsPage() {
           </>
         )}
       </div>
-
-      {/* Cancel Confirmation Dialog */}
-      <Dialog open={!!cancelId} onOpenChange={() => setCancelId(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t.appointments.cancelTitle}</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            {t.appointments.cancelBody}
-          </p>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCancelId(null)}>
-              {t.appointments.keepAppointment}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleCancel}
-              disabled={isCancelling}
-              className="gap-2"
-            >
-              {isCancelling && <Loader2 className="h-4 w-4 animate-spin" />}
-              {t.appointments.yesCancel}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Reschedule Dialog */}
       <Dialog

@@ -7,6 +7,7 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { BookingStepper } from "@/components/booking/booking-stepper";
 import { StepSelectChild } from "@/components/booking/step-select-child";
 import { StepSelectPlan } from "@/components/booking/step-select-plan";
+import { StepSelectDoctor } from "@/components/booking/step-select-doctor";
 import { StepSelectDateTime } from "@/components/booking/step-select-datetime";
 import { StepSymptoms } from "@/components/booking/step-symptoms";
 import { StepReview } from "@/components/booking/step-review";
@@ -19,7 +20,7 @@ import type { UserPackage } from "@/types/packages";
 import type { ConsultationTypeId } from "@/types/appointment";
 import { Loader2, AlertCircle } from "lucide-react";
 
-type StepKey = "child" | "plan" | "buy" | "datetime" | "symptoms" | "review";
+type StepKey = "child" | "plan" | "buy" | "doctor" | "datetime" | "symptoms" | "review";
 
 // Poll budget while waiting for the Stripe webhook to provision a just-purchased
 // package after the customer returns from checkout.
@@ -33,11 +34,11 @@ const RESUME_POLL_INTERVAL_MS = 1500;
 //  - package + credit  -> straight to booking; the credit is deducted at review.
 //  - package + no credit -> a "buy" step to purchase the package first, then book.
 function computeFlow(preselect: string | null, hasCredit: boolean): StepKey[] {
-  if (!preselect) return ["child", "plan", "datetime", "symptoms", "review"];
-  if (preselect === "consultation") return ["child", "datetime", "symptoms", "review"];
+  if (!preselect) return ["child", "plan", "doctor", "datetime", "symptoms", "review"];
+  if (preselect === "consultation") return ["child", "doctor", "datetime", "symptoms", "review"];
   // a package slug
-  if (hasCredit) return ["child", "datetime", "symptoms", "review"];
-  return ["child", "buy", "datetime", "symptoms", "review"];
+  if (hasCredit) return ["child", "doctor", "datetime", "symptoms", "review"];
+  return ["child", "buy", "doctor", "datetime", "symptoms", "review"];
 }
 
 function isPackageSlug(preselect: string | null): boolean {
@@ -91,6 +92,7 @@ export default function BookingPage() {
     child: t.booking.selectChild,
     plan: t.booking.planStepLabel,
     buy: t.booking.buyStepLabel,
+    doctor: t.booking.selectDoctor,
     datetime: t.booking.selectDateTime,
     symptoms: t.booking.enterSymptoms,
     review: t.booking.reviewBooking,
@@ -210,6 +212,8 @@ export default function BookingPage() {
       case "buy":
         // Must complete the purchase (in-step) to proceed — no "Next".
         return false;
+      case "doctor":
+        return !!bookingData.doctorId;
       case "datetime":
         return !!bookingData.date && !!bookingData.time;
       case "symptoms":
@@ -291,6 +295,13 @@ export default function BookingPage() {
             selected={bookingData.typeId}
             onSelectOneTime={() => {}}
             restrictToSlug={preselect ?? undefined}
+          />
+        );
+      case "doctor":
+        return (
+          <StepSelectDoctor
+            selected={bookingData.doctorId}
+            onSelect={(id) => updateBooking({ doctorId: id })}
           />
         );
       case "datetime":

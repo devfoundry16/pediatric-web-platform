@@ -97,19 +97,60 @@ export async function getUser(req: Request, res: Response): Promise<void> {
   res.json({ user: { ...profile, email: authUser?.email ?? null, doctor: doctorRow ?? null } });
 }
 
+const VALID_ROLES = ["parent", "doctor", "admin"] as const;
+
+// Guard: block an operation that would leave the platform with no active admin.
+// Returns true when the operation is safe to proceed.
+async function activeAdminsAboveOne(): Promise<boolean> {
+  const { count } = await supabaseAdmin!
+    .from("profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("role", "admin")
+    .eq("is_active", true);
+  return (count ?? 0) > 1;
+}
+
 export async function updateUser(req: Request, res: Response): Promise<void> {
   if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
 
   const { id } = req.params;
-  const { full_name, phone, is_active } = req.body;
+  const { full_name, phone, is_active, role } = req.body;
 
   const updates: Record<string, unknown> = {};
   if (full_name !== undefined) updates.full_name = full_name;
   if (phone !== undefined) updates.phone = phone;
   if (is_active !== undefined) updates.is_active = is_active;
+  if (role !== undefined) {
+    if (!VALID_ROLES.includes(role)) { res.status(400).json({ error: "Invalid role" }); return; }
+    updates.role = role;
+  }
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No updatable fields provided" });
+    return;
+  }
+
+  // Load the target to enforce admin-safety guards.
+  const { data: target } = await supabaseAdmin
+    .from("profiles")
+    .select("id, role")
+    .eq("id", id)
+    .single();
+
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+
+  const demotingRole = role !== undefined && target.role === "admin" && role !== "admin";
+  const deactivatingAdmin = is_active === false && target.role === "admin";
+
+  // An admin can't lock themselves out.
+  if (id === req.userId) {
+    if (demotingRole) { res.status(400).json({ error: "You cannot remove your own admin role." }); return; }
+    if (is_active === false) { res.status(400).json({ error: "You cannot deactivate your own account." }); return; }
+  }
+
+  // Never leave the platform without an active admin.
+  if ((demotingRole || deactivatingAdmin) && !(await activeAdminsAboveOne())) {
+    res.status(400).json({ error: "At least one active admin must remain." });
     return;
   }
 
@@ -122,6 +163,90 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
 
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ user: data });
+}
+
+export async function createUser(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
+
+  const { email, password, full_name, phone, role } = req.body;
+
+  if (!email || !password || !role) {
+    res.status(400).json({ error: "email, password, and role are required" });
+    return;
+  }
+  if (!VALID_ROLES.includes(role)) { res.status(400).json({ error: "Invalid role" }); return; }
+  if (String(password).length < 6) {
+    res.status(400).json({ error: "Password must be at least 6 characters" });
+    return;
+  }
+
+  // Admin-provisioned accounts skip email confirmation.
+  const { data: created, error: createErr } = await supabaseAdmin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name: full_name ?? "", phone: phone ?? "", role },
+  });
+
+  if (createErr || !created?.user) {
+    res.status(400).json({ error: createErr?.message ?? "Failed to create user" });
+    return;
+  }
+
+  // The handle_new_user trigger inserts the profile as 'parent'; upsert the
+  // intended role (permitted here because the API runs as service_role).
+  const { error: upsertErr } = await supabaseAdmin
+    .from("profiles")
+    .upsert(
+      { id: created.user.id, full_name: full_name ?? null, phone: phone ?? null, role, is_active: true },
+      { onConflict: "id" }
+    );
+
+  if (upsertErr) { res.status(500).json({ error: upsertErr.message }); return; }
+
+  res.status(201).json({
+    user: {
+      id: created.user.id,
+      email,
+      full_name: full_name ?? null,
+      phone: phone ?? null,
+      role,
+      is_active: true,
+      created_at: created.user.created_at,
+    },
+  });
+}
+
+export async function deleteUser(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
+
+  const { id } = req.params;
+
+  if (id === req.userId) {
+    res.status(400).json({ error: "You cannot delete your own account." });
+    return;
+  }
+
+  const { data: target } = await supabaseAdmin
+    .from("profiles")
+    .select("id, role")
+    .eq("id", id)
+    .single();
+
+  if (!target) { res.status(404).json({ error: "User not found" }); return; }
+
+  // Never delete the last active admin.
+  if (target.role === "admin" && !(await activeAdminsAboveOne())) {
+    res.status(400).json({ error: "At least one active admin must remain." });
+    return;
+  }
+
+  // Deleting the auth user cascades to public.profiles (and the parent's
+  // appointments via ON DELETE CASCADE).
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(id as string);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  res.json({ message: "User deleted" });
 }
 
 // ─── Appointments ─────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ export function useEmergencyPackage() {
     name: t.landing.emergencyPriority,
     desc: t.landing.emergencyPriorityDesc,
     sessions: 1,
-    validity: 7,
-    price: 350,
+    validity: 3,
+    price: 450,
   };
 }

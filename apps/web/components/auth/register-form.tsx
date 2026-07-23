@@ -14,13 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneInput, isValidPhoneNumber } from "@/components/ui/phone-input";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import GoogleIcon from "./google-icon";
 
@@ -37,9 +30,6 @@ const registerSchema = z
       .refine((v) => isValidPhoneNumber(v), {
         message: "Enter a valid phone number",
       }),
-    role: z.enum(["parent", "doctor"], {
-      message: "Please select your role",
-    }),
     password: z.string().min(6, "Password must be at least 6 characters"),
     confirmPassword: z.string(),
     terms: z.literal(true, {
@@ -75,8 +65,7 @@ export function RegisterForm() {
       values.email,
       values.password,
       values.fullName,
-      values.phone,
-      values.role
+      values.phone
     );
 
     const { error: storeError, session } = useAuthStore.getState();
@@ -84,11 +73,7 @@ export function RegisterForm() {
 
     if (session) {
       toast.success(t.auth.signUp);
-      router.push(
-        values.role === "doctor"
-          ? "/dashboard/doctor"
-          : "/dashboard/parent"
-      );
+      router.push("/dashboard/parent");
       return;
     }
 
@@ -153,28 +138,6 @@ export function RegisterForm() {
         />
         {errors.phone && (
           <p className="text-xs text-destructive">{errors.phone.message}</p>
-        )}
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="role">{t.auth.roleSelect}</Label>
-        <Controller
-          name="role"
-          control={control}
-          render={({ field }) => (
-            <Select onValueChange={field.onChange} value={field.value}>
-              <SelectTrigger id="role">
-                <SelectValue placeholder={t.auth.roleSelect} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="parent">{t.auth.parent}</SelectItem>
-                <SelectItem value="doctor">{t.auth.doctor}</SelectItem>
-              </SelectContent>
-            </Select>
-          )}
-        />
-        {errors.role && (
-          <p className="text-xs text-destructive">{errors.role.message}</p>
         )}
       </div>
 
