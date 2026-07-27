@@ -32,7 +32,8 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   const [showPassword, setShowPassword] = useState(false);
 
-  const { signIn, isLoading, error, clearError } = useAuthStore();
+  const { signIn, signInWithGoogle, isLoading, error, clearError } =
+    useAuthStore();
 
   // Surface failures from the email-confirmation callback (invalid/expired link).
   const confirmationFailed =
@@ -133,7 +134,7 @@ export function LoginForm() {
         {isLoading ? t.common.loading : t.auth.signIn}
       </Button>
 
-      {/* <div className="relative my-2">
+      <div className="relative my-2">
         <div className="absolute inset-0 flex items-center">
           <div className="w-full border-t border-border" />
         </div>
@@ -144,10 +145,19 @@ export function LoginForm() {
         </div>
       </div>
 
-      <Button type="button" variant="outline" className="w-full bg-transparent">
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full bg-transparent"
+        disabled={isLoading}
+        onClick={() => {
+          clearError();
+          signInWithGoogle();
+        }}
+      >
         <GoogleIcon />
         Google
-      </Button> */}
+      </Button>
     </form>
   );
 }
