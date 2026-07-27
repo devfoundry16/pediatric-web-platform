@@ -13,6 +13,7 @@ interface AuthState {
 
 interface AuthActions {
   signIn: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signUp: (
     email: string,
     password: string,
@@ -89,6 +90,27 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
 
     set({ isLoading: false });
+  },
+
+  signInWithGoogle: async () => {
+    const supabase = createClient();
+    set({ isLoading: true, error: null });
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        // Land on the existing PKCE callback, which exchanges the code for a
+        // session and routes the user to their role-based dashboard. Google
+        // users are created as parents (migration 012) with an empty phone.
+        redirectTo: `${window.location.origin}/auth/callback`,
+      },
+    });
+
+    // On success the browser is redirected to Google's consent screen, so no
+    // further state update runs here. Only surface a failure to start the flow.
+    if (error) {
+      set({ isLoading: false, error: error.message });
+    }
   },
 
   signUp: async (email, password, fullName, phone) => {
