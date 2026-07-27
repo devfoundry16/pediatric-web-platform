@@ -73,6 +73,48 @@ Example customization for "Confirm Signup":
    - ✅ Enable Email provider
    - ✅ Enable Email OTP
 
+## Step 5.5: Enable Google Sign-In (OAuth)
+
+Google Sign-In lets users authenticate with their Google account. It uses the
+same PKCE callback (`/auth/callback`) as the rest of the app, so no extra app
+code is required beyond enabling the provider below.
+
+### A. Create Google OAuth credentials
+
+1. Go to the [Google Cloud Console](https://console.cloud.google.com) and select
+   (or create) a project.
+2. Configure the **OAuth consent screen** (APIs & Services > OAuth consent screen):
+   - User type: **External**
+   - Fill in app name, support email, and developer contact
+   - Add the scopes `.../auth/userinfo.email` and `.../auth/userinfo.profile`
+   - While testing, add your Google account under **Test users**
+3. Create credentials (APIs & Services > Credentials > **Create Credentials** >
+   **OAuth client ID**):
+   - Application type: **Web application**
+   - **Authorized JavaScript origins:** `http://localhost:3000` and your production origin
+   - **Authorized redirect URIs:** `https://<your-project-ref>.supabase.co/auth/v1/callback`
+     (find the exact value in the next step — Supabase shows it for you)
+4. Copy the generated **Client ID** and **Client Secret**.
+
+### B. Enable the Google provider in Supabase
+
+1. In the Supabase dashboard, go to **Authentication** > **Providers** > **Google**.
+2. Toggle **Enable Sign in with Google** on.
+3. Paste the **Client ID** and **Client Secret** from Google Cloud.
+4. Copy the **Callback URL (for OAuth)** shown here and make sure it matches the
+   Authorized redirect URI you set in Google Cloud (step A.3).
+5. Save.
+
+> **Account linking:** By default Supabase links a Google login to an existing
+> email/password account when the email is verified. Leave
+> **Authentication > Providers > "Link accounts with the same email"** at its
+> default unless you have a reason to change it.
+
+> **Profiles:** Google users are created as **parents** with `full_name` from
+> their Google profile and an **empty phone** (the `handle_new_user` trigger
+> hard-codes `role = 'parent'` per migration 012). They can add a phone later in
+> profile settings. Doctors/admins are still provisioned by an admin.
+
 ## Step 6: Configure Redirect URLs
 
 1. Go to **Authentication** > **URL Configuration**
@@ -137,6 +179,14 @@ The app should now be running at `http://localhost:3000`
 7. Click "Verify OTP"
 8. You should be redirected to the dashboard
 
+### Test Google Sign-In:
+
+1. Navigate to `http://localhost:3000/login` (or `/signup`)
+2. Click "Google" under "Or continue with"
+3. Complete the Google consent screen
+4. You should be redirected back through `/auth/callback` to the dashboard
+5. First-time Google users are created as parents with an empty phone
+
 ## Step 10: Create Admin User
 
 By default, all users are created as "parent" or "doctor". To create an admin:
@@ -166,6 +216,11 @@ To find the user ID:
 - Magic link via email
 - 6-digit verification code
 - No password required
+
+✅ **Google Sign-In (OAuth)**
+- One-click login/signup with a Google account
+- Reuses the PKCE `/auth/callback` and role-based redirect
+- New Google users created as parents
 
 ✅ **Role-Based Access Control**
 - Three roles: Parent, Doctor, Admin
