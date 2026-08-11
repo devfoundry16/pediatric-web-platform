@@ -99,6 +99,10 @@ export async function getUser(req: Request, res: Response): Promise<void> {
 
 const VALID_ROLES = ["parent", "doctor", "admin"] as const;
 
+// Supabase expects a Go duration string; there is no "forever", so use ~100
+// years. Reversed with "none" when the account is reactivated.
+const BAN_DURATION = "876000h";
+
 // Guard: block an operation that would leave the platform with no active admin.
 // Returns true when the operation is safe to proceed.
 async function activeAdminsAboveOne(): Promise<boolean> {
@@ -133,7 +137,7 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
   // Load the target to enforce admin-safety guards.
   const { data: target } = await supabaseAdmin
     .from("profiles")
-    .select("id, role")
+    .select("id, role, is_active")
     .eq("id", id)
     .single();
 
@@ -162,6 +166,28 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
     .single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Mirror the flag onto auth.users. Without this, deactivation only stops the
+  // app's own middleware: the existing refresh token keeps minting new access
+  // tokens and a fresh signInWithPassword still succeeds. Banning makes Supabase
+  // itself reject both, which is what actually ends the session.
+  if (is_active !== undefined && is_active !== target.is_active) {
+    const { error: banErr } = await supabaseAdmin.auth.admin.updateUserById(id as string, {
+      ban_duration: is_active ? "none" : BAN_DURATION,
+    });
+
+    if (banErr) {
+      // Don't leave profiles and auth.users disagreeing — a profile flagged
+      // inactive while the account is still usable is the exact bug this fixes.
+      await supabaseAdmin
+        .from("profiles")
+        .update({ is_active: target.is_active })
+        .eq("id", id);
+      res.status(500).json({ error: `Failed to update account access: ${banErr.message}` });
+      return;
+    }
+  }
+
   res.json({ user: data });
 }
 

@@ -29,6 +29,21 @@ export async function authMiddleware(
     return;
   }
 
+  // A deactivated account keeps a valid token until it expires, so validating
+  // the token is not enough. This is the single chokepoint for every
+  // authenticated route (including admin ones, whose adminMiddleware only
+  // checks the role), so the flag is checked here rather than per-router.
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("is_active")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profile?.is_active === false) {
+    res.status(403).json({ error: "Account deactivated" });
+    return;
+  }
+
   req.userId = user.id;
   next();
 }

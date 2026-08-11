@@ -35,6 +35,13 @@ interface AuthActions {
 
 type AuthStore = AuthState & AuthActions;
 
+/**
+ * Sentinel stored in `error` when sign-in is refused because the account was
+ * deactivated. The store has no access to the i18n dictionary, so the form
+ * translates this rather than showing a raw (English-only) Supabase message.
+ */
+export const ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED";
+
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   session: null,
@@ -79,13 +86,32 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const supabase = createClient();
     set({ isLoading: true, error: null });
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
 
     if (error) {
-      set({ isLoading: false, error: error.message });
+      // Deactivating an account bans it in auth.users, which Supabase reports
+      // as a generic error. Map it so the UI can localize it.
+      set({
+        isLoading: false,
+        error: /banned/i.test(error.message) ? ACCOUNT_DEACTIVATED : error.message,
+      });
+      return;
+    }
+
+    // Accounts deactivated before the ban existed still authenticate, so check
+    // the flag directly and drop the session that was just created.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("is_active")
+      .eq("id", data.user.id)
+      .maybeSingle();
+
+    if (profile?.is_active === false) {
+      await supabase.auth.signOut();
+      set({ isLoading: false, error: ACCOUNT_DEACTIVATED, user: null, session: null });
       return;
     }
 
