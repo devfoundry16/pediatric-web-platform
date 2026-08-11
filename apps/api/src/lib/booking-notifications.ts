@@ -1,10 +1,6 @@
 import { supabaseAdmin } from "./supabase";
-import { createRoom } from "./daily";
 import { sendBookingConfirmation, sendBookingNotification } from "./resend";
-import { DEFAULT_TIMEZONE, wallClockToInstant } from "./timezone";
-
-/** Minutes the video room stays open past the scheduled end. */
-const ROOM_GRACE_MINUTES = 30;
+import { DEFAULT_TIMEZONE } from "./timezone";
 
 function frontendUrl(): string {
   return process.env.FRONTEND_URL ?? "http://localhost:3333";
@@ -13,63 +9,21 @@ function frontendUrl(): string {
 /**
  * Where each audience opens the appointment.
  *
- * Deliberately the app, not the Daily room: rooms are private and entry needs a
- * per-user token minted for an authenticated request (see lib/daily.ts), so a
- * room URL in an inbox is either useless or, if rooms were opened up to make it
- * work, a way into a paediatric consultation for anyone holding the mail.
+ * Deliberately the app, not the Daily room. Two reasons:
+ *
+ * Rooms are private and entry needs a per-user token minted for an
+ * authenticated request (see lib/daily.ts), so a room URL in an inbox is either
+ * useless or, if rooms were opened up to make it work, a way into a paediatric
+ * consultation for anyone holding the mail.
+ *
+ * And the room deliberately does not exist yet. It is created when the doctor
+ * presses "Start session", and that absence is what stops a parent walking into
+ * an empty room days early — the parent's Join button keys off meeting_url.
+ * Provisioning it at booking time would quietly remove that guarantee. The
+ * dashboard is the right destination: it shows Start or Join as appropriate.
  */
 function appointmentUrlFor(audience: "parent" | "doctor" | "admin"): string {
   return `${frontendUrl()}/dashboard/${audience}/appointments`;
-}
-
-/**
- * Create the video room for an appointment if it doesn't have one yet, and
- * return its URL.
- *
- * Rooms used to be created only when the doctor pressed "Start session", which
- * left nothing to link to at booking time. Creating it up front also means the
- * room exists if the doctor joins from a cold start. startSession still creates
- * one when missing, so appointments booked before this change keep working.
- *
- * Returns null rather than throwing when Daily is unconfigured or errors — a
- * booking that is already paid for must not be undone because video
- * provisioning failed. The room is created lazily later in that case.
- */
-export async function ensureMeetingRoom(appointment: {
-  id: string;
-  scheduled_date: string;
-  scheduled_time: string;
-  timezone?: string | null;
-  duration_minutes: number;
-  meeting_url?: string | null;
-}): Promise<string | null> {
-  if (appointment.meeting_url) return appointment.meeting_url;
-  if (!supabaseAdmin) return null;
-
-  const start = wallClockToInstant(
-    appointment.scheduled_date,
-    appointment.scheduled_time,
-    appointment.timezone || DEFAULT_TIMEZONE
-  );
-  if (isNaN(start.getTime())) return null;
-
-  const expiryEpoch = Math.floor(
-    (start.getTime() + (appointment.duration_minutes + ROOM_GRACE_MINUTES) * 60_000) / 1000
-  );
-
-  try {
-    // Room name must match what startSession and the join endpoint derive from
-    // the appointment id, or Daily rejects tokens minted for it.
-    const room = await createRoom(`appt-${appointment.id}`, expiryEpoch);
-    await supabaseAdmin
-      .from("appointments")
-      .update({ meeting_url: room.url })
-      .eq("id", appointment.id);
-    return room.url;
-  } catch (err) {
-    console.error(`[booking] Could not create room for ${appointment.id}:`, String(err));
-    return null;
-  }
 }
 
 async function activeAdminRecipients(): Promise<{ email: string; userId: string }[]> {
@@ -128,7 +82,7 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
       .from("appointments")
       .select(`
         id, parent_id, scheduled_date, scheduled_time, timezone, duration_minutes,
-        consultation_type, price_aed, symptoms, meeting_url,
+        consultation_type, price_aed, symptoms,
         child_profiles!appointments_child_id_fkey ( first_name, last_name ),
         doctors!appointments_doctor_id_fkey ( full_name, email )
       `)
@@ -140,8 +94,6 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
     const doctor = appt.doctors as unknown as { full_name: string; email: string | null } | null;
     const child = appt.child_profiles as unknown as { first_name: string; last_name: string } | null;
     const childName = child ? `${child.first_name} ${child.last_name}` : "the patient";
-
-    await ensureMeetingRoom(appt);
 
     const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(appt.parent_id);
     const { data: parentProfile } = await supabaseAdmin
