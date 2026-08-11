@@ -695,7 +695,7 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
       parentEmail: parent.email,
       parentName: parent.name,
       parentUserId: req.userId,
-      appointmentUrl: `${process.env.FRONTEND_URL ?? "http://localhost:3333"}/dashboard/parent/appointments`,
+      appointmentUrl: `${process.env.FRONTEND_URL ?? "http://localhost:3333"}/dashboard/parent/appointments?appointment=${id}`,
       doctorName: docRow?.full_name ?? "Your doctor",
       scheduledDate: newDate as string,
       scheduledTime: newTime as string,

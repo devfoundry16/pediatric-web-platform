@@ -22,8 +22,13 @@ function frontendUrl(): string {
  * Provisioning it at booking time would quietly remove that guarantee. The
  * dashboard is the right destination: it shows Start or Join as appropriate.
  */
-function appointmentUrlFor(audience: "parent" | "doctor" | "admin"): string {
-  return `${frontendUrl()}/dashboard/${audience}/appointments`;
+function appointmentUrlFor(
+  audience: "parent" | "doctor" | "admin",
+  appointmentId: string
+): string {
+  // ?appointment= lets the dashboard scroll to and highlight this booking
+  // rather than dropping the recipient on an undifferentiated list.
+  return `${frontendUrl()}/dashboard/${audience}/appointments?appointment=${appointmentId}`;
 }
 
 async function activeAdminRecipients(): Promise<{ email: string; userId: string }[]> {
@@ -65,8 +70,8 @@ async function alreadyNotified(appointmentId: string): Promise<boolean> {
 }
 
 /**
- * Provision the video room and tell the parent, the doctor and every active
- * admin that the consultation is confirmed.
+ * Tell the parent, the doctor and every active admin that the consultation is
+ * confirmed, each with a link straight to it on their own dashboard.
  *
  * Called from every path that confirms a booking: package credit at creation,
  * the Stripe webhook, and the verify fallback. Safe to call more than once.
@@ -120,7 +125,7 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
         parentName,
         parentUserId: appt.parent_id,
         priceAed: appt.price_aed,
-        appointmentUrl: appointmentUrlFor("parent"),
+        appointmentUrl: appointmentUrlFor("parent", appt.id),
       });
     }
 
@@ -134,7 +139,7 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
         parentName,
         childName,
         symptoms: appt.symptoms,
-        appointmentUrl: appointmentUrlFor("doctor"),
+        appointmentUrl: appointmentUrlFor("doctor", appt.id),
       });
     }
 
@@ -147,7 +152,7 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
         parentName,
         childName,
         symptoms: appt.symptoms,
-        appointmentUrl: appointmentUrlFor("admin"),
+        appointmentUrl: appointmentUrlFor("admin", appt.id),
       });
     }
   } catch (err) {
