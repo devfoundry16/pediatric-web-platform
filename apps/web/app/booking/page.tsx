@@ -14,6 +14,7 @@ import { StepReview } from "@/components/booking/step-review";
 import { StepConfirmation } from "@/components/booking/step-confirmation";
 import { Button } from "@/components/ui/button";
 import { appointmentsApi } from "@/lib/api/appointments";
+import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { childrenApi } from "@/lib/api/children";
 import { packagesApi } from "@/lib/api/packages";
 import type { UserPackage } from "@/types/packages";
@@ -76,6 +77,9 @@ export default function BookingPage() {
     typeId: "" as ConsultationTypeId | "",
     date: "",
     time: "",
+    // The zone `date`/`time` above are wall-clock in — needed to render them
+    // in the visitor's own zone on the review and confirmation steps.
+    doctorTimezone: DEFAULT_TIMEZONE,
     symptoms: "",
   });
   const [confirmedAppointmentId, setConfirmedAppointmentId] = useState("");
@@ -312,7 +316,11 @@ export default function BookingPage() {
             selectedDate={bookingData.date}
             selectedTime={bookingData.time}
             onSelectDate={(date) => updateBooking({ date, time: "" })}
-            onSelectTime={(time) => updateBooking({ time })}
+            // date comes back with the time: a slot's own doctor-local day is
+            // authoritative, not whatever the calendar happens to be showing.
+            onSelectSlot={({ date, time, timezone }) =>
+              updateBooking({ date, time, doctorTimezone: timezone })
+            }
             onDoctorResolved={(id) => updateBooking({ doctorId: id })}
           />
         );
@@ -332,6 +340,7 @@ export default function BookingPage() {
               typeId: bookingData.typeId,
               date: bookingData.date,
               time: bookingData.time,
+              doctorTimezone: bookingData.doctorTimezone,
               symptoms: bookingData.symptoms,
             }}
           />
@@ -373,6 +382,7 @@ export default function BookingPage() {
                 typeId: bookingData.typeId as string,
                 date: bookingData.date,
                 time: bookingData.time,
+                doctorTimezone: bookingData.doctorTimezone,
                 childName: bookingData.childName,
               }}
             />

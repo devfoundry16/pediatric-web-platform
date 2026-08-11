@@ -8,6 +8,8 @@ import { CalendarDays, Clock, User, CreditCard, Ticket } from "lucide-react";
 import { CONSULTATION_TYPES } from "@/types/appointment";
 import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatStoredAppointment } from "@/lib/timezone";
 import { packagesApi } from "@/lib/api/packages";
 import type { UserPackage } from "@/types/packages";
 
@@ -18,12 +20,26 @@ interface StepReviewProps {
     typeId: string;
     date: string;
     time: string;
+    doctorTimezone: string;
     symptoms: string;
   };
 }
 
 export function StepReview({ bookingData }: StepReviewProps) {
   const { dictionary: t } = useI18n();
+
+  // The slot grid showed the visitor their own time; showing the doctor-local
+  // wall clock here instead would look like the booking silently moved.
+  const { timezone: viewerTimezone } = useViewerTimezone(bookingData.doctorTimezone);
+  const shown =
+    bookingData.date && bookingData.time
+      ? formatStoredAppointment(
+          bookingData.date,
+          bookingData.time,
+          bookingData.doctorTimezone,
+          viewerTimezone
+        )
+      : null;
   const type = CONSULTATION_TYPES.find((c) => c.id === bookingData.typeId);
   const typeLabel = bookingData.typeId
     ? getConsultationTypeLabel(t, bookingData.typeId)
@@ -90,11 +106,15 @@ export function StepReview({ bookingData }: StepReviewProps) {
                 {t.booking.dateTime}
               </p>
               <p className="font-medium text-foreground">
-                {bookingData.date || t.booking.notSelected}{" "}
-                {t.booking.dateTimeAt}{" "}
-                {bookingData.time || t.booking.notSelected}
+                {shown
+                  ? `${shown.date} ${t.booking.dateTimeAt} ${shown.time}`
+                  : t.booking.notSelected}
               </p>
-              <TimezoneNotice variant="compact" className="mt-1.5" />
+              <TimezoneNotice
+                timezone={viewerTimezone}
+                variant="compact"
+                className="mt-1.5"
+              />
             </div>
           </div>
           {bookingData.symptoms && (

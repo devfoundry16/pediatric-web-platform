@@ -22,6 +22,21 @@ async function authHeaders(): Promise<Record<string, string>> {
   return { Authorization: `Bearer ${session.access_token}` };
 }
 
+export interface Slot {
+  /** Doctor-local calendar day, YYYY-MM-DD. */
+  date: string;
+  /** Doctor-local wall clock, "HH:MM". This is what gets booked. */
+  time: string;
+  /** The same moment as an absolute instant, for display in any timezone. */
+  startsAt: string;
+}
+
+export interface SlotsResponse {
+  /** The doctor's IANA zone — the one `date`/`time` above are expressed in. */
+  timezone: string;
+  slots: Slot[];
+}
+
 export const doctorsApi = {
   async list(): Promise<Doctor[]> {
     const { data } = await axios.get<{ doctors: Doctor[] }>(
@@ -30,16 +45,24 @@ export const doctorsApi = {
     return data.doctors;
   },
 
+  /**
+   * Bookable slots for a doctor-local calendar day.
+   *
+   * `date`/`time` on each slot are the canonical doctor-local values and are
+   * what must be submitted when booking. `startsAt` is the same moment as an
+   * absolute instant, for rendering in whatever timezone the viewer wants.
+   * Never submit anything derived from `startsAt`.
+   */
   async getSlots(
     doctorId: string,
     date: string,
     type: string
-  ): Promise<string[]> {
-    const { data } = await axios.get<{ slots: string[] }>(
+  ): Promise<SlotsResponse> {
+    const { data } = await axios.get<SlotsResponse>(
       `${getBaseUrl()}/doctors/${doctorId}/slots`,
       { params: { date, type } }
     );
-    return data.slots;
+    return { timezone: data.timezone, slots: data.slots ?? [] };
   },
 };
 
