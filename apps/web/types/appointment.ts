@@ -54,8 +54,14 @@ export interface AppointmentChild {
 export interface Appointment {
   id: string;
   consultation_type: ConsultationTypeId;
+  /** Wall-clock in `timezone` below — not UTC, not the viewer's local time. */
   scheduled_date: string;
   scheduled_time: string;
+  /**
+   * IANA zone the two fields above are expressed in, snapshotted from the
+   * doctor at booking time. Optional only for rows read before migration 018.
+   */
+  timezone?: string;
   duration_minutes: number;
   price_aed: number;
   symptoms: string | null;

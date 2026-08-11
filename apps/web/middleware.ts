@@ -87,9 +87,28 @@ export async function middleware(request: NextRequest) {
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, is_active")
       .eq("id", user.id)
       .maybeSingle();
+
+    // An account deactivated mid-session keeps working until its access token
+    // expires. This query already runs on every matched request, so gating on
+    // it here ends the session on the next navigation instead.
+    if (profile?.is_active === false) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/auth/login";
+      url.search = "";
+      url.searchParams.set("deactivated", "1");
+      const response = NextResponse.redirect(url);
+
+      request.cookies
+        .getAll()
+        .filter((c) => c.name.startsWith("sb-"))
+        .forEach((c) => response.cookies.delete(c.name));
+
+      return response;
+    }
+
     dashboardRole = profile?.role ?? (user.user_metadata?.role as string | undefined);
   }
 

@@ -18,9 +18,12 @@ import type { Appointment } from "@/types/appointment";
 import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 import { getAppointmentStatusLabel } from "@/lib/i18n/appointment-status";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { DEFAULT_TIMEZONE, formatStoredAppointment } from "@/lib/timezone";
 
 export function UpcomingAppointments() {
   const { dictionary: t } = useI18n();
+  const { timezone: viewerTimezone } = useViewerTimezone(DEFAULT_TIMEZONE);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [joiningId, setJoiningId] = useState<string | null>(null);
@@ -94,6 +97,14 @@ export function UpcomingAppointments() {
               ? `${appt.child_profiles.first_name}`
               : t.appointments.dash;
 
+            // Stored wall clock is the doctor's; show it in the parent's zone.
+            const shownAt = formatStoredAppointment(
+              appt.scheduled_date,
+              appt.scheduled_time,
+              appt.timezone ?? DEFAULT_TIMEZONE,
+              viewerTimezone
+            );
+
             return (
               <div
                 key={appt.id}
@@ -106,13 +117,13 @@ export function UpcomingAppointments() {
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <CalendarDays className="h-3 w-3" />
-                      {appt.scheduled_date}
+                      {shownAt.date}
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {appt.scheduled_time}
+                      {shownAt.time}
                     </span>
-                    <TimezoneNotice variant="compact" />
+                    <TimezoneNotice timezone={viewerTimezone} variant="compact" />
                   </div>
                 </div>
                 <div className="flex items-center gap-2">

@@ -1,5 +1,6 @@
 import { Resend } from "resend";
 import { supabaseAdmin } from "./supabase";
+import { DEFAULT_TIMEZONE } from "./timezone";
 
 let resendClient: Resend | null = null;
 
@@ -40,6 +41,8 @@ interface AppointmentEmailData {
   doctorName: string;
   scheduledDate: string;
   scheduledTime: string;
+  /** IANA zone scheduledDate/scheduledTime are wall-clock in. */
+  timezone?: string;
   consultationType: string;
   durationMinutes: number;
   priceAed: number;
@@ -47,6 +50,26 @@ interface AppointmentEmailData {
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? "noreply@littlecare.ae";
 const APP_NAME = "LittleCare";
+
+/**
+ * Email is rendered server-side with no idea where the recipient is, so it
+ * shows the appointment's own zone — and must say so. These times used to be
+ * printed bare, which reads as local time to anyone outside the UAE.
+ */
+function zoneLabel(timezone: string | undefined): string {
+  const tz = timezone || DEFAULT_TIMEZONE;
+  const city = tz.split("/").pop()?.replace(/_/g, " ") ?? tz;
+  let offset = "";
+  try {
+    offset =
+      new Intl.DateTimeFormat("en-US", { timeZone: tz, timeZoneName: "shortOffset" })
+        .formatToParts(new Date())
+        .find((p) => p.type === "timeZoneName")?.value ?? "";
+  } catch {
+    // Unknown zone — fall back to the bare identifier.
+  }
+  return offset ? `${city} time, ${offset}` : `${city} time`;
+}
 
 export async function sendBookingConfirmation(data: AppointmentEmailData): Promise<void> {
   const resend = getResend();
@@ -58,7 +81,7 @@ export async function sendBookingConfirmation(data: AppointmentEmailData): Promi
     <table style="border-collapse:collapse;margin-top:16px">
       <tr><td style="padding:4px 12px 4px 0;color:#666">Doctor</td><td><strong>${data.doctorName}</strong></td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#666">Date</td><td><strong>${data.scheduledDate}</strong></td></tr>
-      <tr><td style="padding:4px 12px 4px 0;color:#666">Time</td><td><strong>${data.scheduledTime}</strong></td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#666">Time</td><td><strong>${data.scheduledTime}</strong> (${zoneLabel(data.timezone)})</td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#666">Type</td><td><strong>${data.consultationType} (${data.durationMinutes} min)</strong></td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#666">Amount</td><td><strong>AED ${data.priceAed}</strong></td></tr>
     </table>
@@ -112,7 +135,7 @@ export async function sendCancellationEmail(data: Omit<AppointmentEmailData, "pr
   const html = `
     <h2>Appointment Cancelled</h2>
     <p>Hello ${data.parentName},</p>
-    <p>Your appointment with <strong>${data.doctorName}</strong> on <strong>${data.scheduledDate}</strong> at <strong>${data.scheduledTime}</strong> has been cancelled.</p>
+    <p>Your appointment with <strong>${data.doctorName}</strong> on <strong>${data.scheduledDate}</strong> at <strong>${data.scheduledTime}</strong> (${zoneLabel(data.timezone)}) has been cancelled.</p>
     <p>If you need to book a new appointment, please visit your dashboard.</p>
     <p>Thank you for using ${APP_NAME}.</p>
   `;
@@ -163,7 +186,7 @@ export async function sendRescheduleEmail(data: Omit<AppointmentEmailData, "pric
   const html = `
     <h2>Appointment Rescheduled</h2>
     <p>Hello ${data.parentName},</p>
-    <p>Your appointment with <strong>${data.doctorName}</strong> has been rescheduled to <strong>${data.scheduledDate}</strong> at <strong>${data.scheduledTime}</strong>.</p>
+    <p>Your appointment with <strong>${data.doctorName}</strong> has been rescheduled to <strong>${data.scheduledDate}</strong> at <strong>${data.scheduledTime}</strong> (${zoneLabel(data.timezone)}).</p>
     <p>Thank you for using ${APP_NAME}.</p>
   `;
 

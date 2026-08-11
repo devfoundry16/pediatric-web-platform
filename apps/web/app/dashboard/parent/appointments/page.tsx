@@ -26,13 +26,24 @@ import {
   RefreshCw,
   Loader2,
 } from "lucide-react";
-import { appointmentsApi, doctorsApi } from "@/lib/api/appointments";
+import { appointmentsApi, doctorsApi, type Slot } from "@/lib/api/appointments";
 import type { Appointment, AppointmentStatus } from "@/types/appointment";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 import { getAppointmentStatusLabel } from "@/lib/i18n/appointment-status";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
-import { formatLocalDateYMD } from "@/lib/timezone";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import {
+  DEFAULT_TIMEZONE,
+  calendarDayInTimezone,
+  formatLocalDateYMD,
+  formatShortDateInTimezone,
+  formatStoredAppointment,
+  formatTimeInTimezone,
+  formatTimezoneLabel,
+  parseLocalYMD,
+  todayInTimezone,
+} from "@/lib/timezone";
 
 const STATUS_VARIANTS: Record<
   AppointmentStatus,
@@ -59,10 +70,14 @@ export default function ParentAppointmentsPage() {
   // Reschedule dialog
   const [rescheduleAppt, setRescheduleAppt] = useState<Appointment | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState<Date | undefined>();
-  const [rescheduleSlots, setRescheduleSlots] = useState<string[]>([]);
-  const [rescheduleTime, setRescheduleTime] = useState("");
+  const [rescheduleSlots, setRescheduleSlots] = useState<Slot[]>([]);
+  const [rescheduleSlot, setRescheduleSlot] = useState<Slot | null>(null);
+  const [rescheduleTimezone, setRescheduleTimezone] = useState(DEFAULT_TIMEZONE);
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
+
+  const { timezone: viewerTimezone } = useViewerTimezone(DEFAULT_TIMEZONE);
+  const rescheduleToday = parseLocalYMD(todayInTimezone(rescheduleTimezone));
 
   const loadAppointments = () => {
     setIsLoading(true);
@@ -83,26 +98,31 @@ export default function ParentAppointmentsPage() {
     if (!rescheduleDate || !rescheduleAppt) return;
     const dateStr = formatLocalDateYMD(rescheduleDate);
     setIsSlotsLoading(true);
-    setRescheduleTime("");
+    setRescheduleSlot(null);
     doctorsApi
       .getSlots(rescheduleAppt.doctors.id, dateStr, rescheduleAppt.consultation_type)
-      .then(setRescheduleSlots)
+      .then(({ slots, timezone }) => {
+        setRescheduleSlots(slots);
+        if (timezone) setRescheduleTimezone(timezone);
+      })
       .catch(() => setRescheduleSlots([]))
       .finally(() => setIsSlotsLoading(false));
   }, [rescheduleDate, rescheduleAppt]);
 
   const handleReschedule = async () => {
-    if (!rescheduleAppt || !rescheduleDate || !rescheduleTime) return;
+    if (!rescheduleAppt || !rescheduleSlot) return;
     setIsRescheduling(true);
     try {
+      // Submit the slot's own doctor-local values, not the calendar selection —
+      // near a day boundary the two can disagree.
       await appointmentsApi.reschedule(
         rescheduleAppt.id,
-        formatLocalDateYMD(rescheduleDate),
-        rescheduleTime
+        rescheduleSlot.date,
+        rescheduleSlot.time
       );
       setRescheduleAppt(null);
       setRescheduleDate(undefined);
-      setRescheduleTime("");
+      setRescheduleSlot(null);
       loadAppointments();
     } catch {
       // keep dialog open on error
@@ -134,6 +154,13 @@ export default function ParentAppointmentsPage() {
       !["cancelled", "completed"].includes(appt.status) &&
       new Date(appt.scheduled_date) >= today;
     const canReschedule = ["pending", "confirmed"].includes(appt.status) && isUpcoming;
+    // Stored wall clock belongs to the doctor's zone; show it in the parent's.
+    const shownAt = formatStoredAppointment(
+      appt.scheduled_date,
+      appt.scheduled_time,
+      appt.timezone ?? DEFAULT_TIMEZONE,
+      viewerTimezone
+    );
 
     return (
       <Card key={appt.id} className="transition-shadow hover:shadow-sm">
@@ -160,13 +187,13 @@ export default function ParentAppointmentsPage() {
             <div className="flex flex-wrap gap-x-4 gap-y-1">
               <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
                 <CalendarDays className="h-3.5 w-3.5" />
-                {appt.scheduled_date}
+                {shownAt.date}
               </span>
               <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" />
-                {appt.scheduled_time} · {appt.duration_minutes}{" "}
+                {shownAt.time} · {appt.duration_minutes}{" "}
                 {t.appointments.minSuffix}
-                <TimezoneNotice variant="compact" />
+                <TimezoneNotice timezone={viewerTimezone} variant="compact" />
               </span>
             </div>
 
@@ -205,7 +232,7 @@ export default function ParentAppointmentsPage() {
                   setRescheduleAppt(appt);
                   setRescheduleDate(undefined);
                   setRescheduleSlots([]);
-                  setRescheduleTime("");
+                  setRescheduleSlot(null);
                 }}
               >
                 <RefreshCw className="h-3.5 w-3.5" />
@@ -240,7 +267,9 @@ export default function ParentAppointmentsPage() {
         </div>
 
         <h1 className="text-2xl font-bold text-foreground">{t.appointments.title}</h1>
-        <p className="text-xs text-muted-foreground">{t.booking.timezoneHint}</p>
+        <p className="text-xs text-muted-foreground">
+          {t.booking.timezoneHint.replace("{timezone}", formatTimezoneLabel(viewerTimezone))}
+        </p>
 
         {isLoading ? (
           <div className="flex flex-col gap-3">
@@ -299,14 +328,16 @@ export default function ParentAppointmentsPage() {
           setRescheduleAppt(null);
           setRescheduleDate(undefined);
           setRescheduleSlots([]);
-          setRescheduleTime("");
+          setRescheduleSlot(null);
         }}
       >
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{t.appointments.rescheduleTitle}</DialogTitle>
           </DialogHeader>
-          <p className="text-xs text-muted-foreground">{t.booking.timezoneHint}</p>
+          <p className="text-xs text-muted-foreground">
+            {t.booking.timezoneHint.replace("{timezone}", formatTimezoneLabel(viewerTimezone))}
+          </p>
 
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-center">
@@ -314,7 +345,9 @@ export default function ParentAppointmentsPage() {
                 mode="single"
                 selected={rescheduleDate}
                 onSelect={setRescheduleDate}
-                disabled={(d) => d < today}
+                // The grid means the DOCTOR's calendar days, so bound it by the
+                // doctor's today rather than the viewer's.
+                disabled={(d) => (rescheduleToday ? d < rescheduleToday : false)}
                 className="rounded-md border"
               />
             </div>
@@ -336,17 +369,28 @@ export default function ParentAppointmentsPage() {
                   </p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
-                    {rescheduleSlots.map((slot) => (
-                      <Button
-                        key={slot}
-                        size="sm"
-                        variant={rescheduleTime === slot ? "default" : "outline"}
-                        className="text-xs"
-                        onClick={() => setRescheduleTime(slot)}
-                      >
-                        {slot}
-                      </Button>
-                    ))}
+                    {rescheduleSlots.map((slot) => {
+                      const shiftedDay =
+                        calendarDayInTimezone(slot.startsAt, viewerTimezone) !== slot.date
+                          ? formatShortDateInTimezone(slot.startsAt, viewerTimezone)
+                          : null;
+                      return (
+                        <Button
+                          key={slot.startsAt}
+                          size="sm"
+                          variant={
+                            rescheduleSlot?.startsAt === slot.startsAt ? "default" : "outline"
+                          }
+                          className="h-auto flex-col gap-0 py-1.5 text-xs"
+                          onClick={() => setRescheduleSlot(slot)}
+                        >
+                          <span>{formatTimeInTimezone(slot.startsAt, viewerTimezone)}</span>
+                          {shiftedDay && (
+                            <span className="text-[10px] opacity-70">{shiftedDay}</span>
+                          )}
+                        </Button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -360,14 +404,14 @@ export default function ParentAppointmentsPage() {
                 setRescheduleAppt(null);
                 setRescheduleDate(undefined);
                 setRescheduleSlots([]);
-                setRescheduleTime("");
+                setRescheduleSlot(null);
               }}
             >
               {t.common.cancel}
             </Button>
             <Button
               onClick={handleReschedule}
-              disabled={!rescheduleDate || !rescheduleTime || isRescheduling}
+              disabled={!rescheduleSlot || isRescheduling}
               className="gap-2"
             >
               {isRescheduling && <Loader2 className="h-4 w-4 animate-spin" />}

@@ -24,6 +24,7 @@ import {
   listNotes,
   listEmailLogs,
   listDoctors,
+  updateDoctorAdmin,
 } from "../controllers/admin";
 
 const router = Router();
@@ -47,6 +48,7 @@ router.patch("/appointments/:id", updateAppointmentAdmin);
 
 // Doctors list (for dropdowns)
 router.get("/doctors", listDoctors);
+router.patch("/doctors/:doctorId", updateDoctorAdmin);
 
 // Doctor availability
 router.get("/doctors/:doctorId/schedule", getDoctorScheduleAdmin);

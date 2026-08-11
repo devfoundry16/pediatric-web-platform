@@ -23,6 +23,8 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
 
 function RegistrationCard({
   reg,
@@ -31,6 +33,10 @@ function RegistrationCard({
 }) {
   const { dictionary: t } = useI18n();
   const router = useRouter();
+  // scheduled_at is a real instant (TIMESTAMPTZ) — format it with an explicit
+  // zone rather than relying on the runtime default and labelling it GST.
+  const { timezone: viewerTimezone } = useViewerTimezone();
+
   const session = reg.group_sessions;
   if (!session) return null;
 
@@ -72,20 +78,13 @@ function RegistrationCard({
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <CalendarDays className="h-3.5 w-3.5" />
-                {scheduledDate.toLocaleDateString("en-AE", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
+                {formatDateInTimezone(scheduledDate, viewerTimezone)}
               </span>
               <span className="flex items-center gap-x-1 gap-y-0.5 flex-wrap">
                 <Clock className="h-3.5 w-3.5" />
-                {scheduledDate.toLocaleTimeString("en-AE", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}{" "}
+                {formatTimeInTimezone(scheduledDate, viewerTimezone)}{" "}
                 · {session.duration_minutes} {t.common.minutes}
-                <TimezoneNotice variant="compact" />
+                <TimezoneNotice timezone={viewerTimezone} variant="compact" />
               </span>
               <span className="flex items-center gap-1">
                 <Users className="h-3.5 w-3.5" />

@@ -181,7 +181,7 @@ export default function DoctorNotesPage() {
     }
     doctorApi
       .getAppointments()
-      .then((appts) =>
+      .then(({ appointments: appts }) =>
         setChildAppointments(
           appts.filter(
             (a) =>

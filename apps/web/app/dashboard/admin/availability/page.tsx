@@ -13,18 +13,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus, Trash2, Save, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { adminApi, type AdminDoctorRow, type DoctorScheduleSlot } from "@/lib/api/admin";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
+import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+/** Postgres returns TIME as "09:00:00"; <input type="time"> wants "09:00". */
+const toHHMM = (time: string) => (time ?? "").slice(0, 5);
 
 export default function AdminAvailabilityPage() {
   const [doctors, setDoctors] = useState<AdminDoctorRow[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
   const [schedule, setSchedule] = useState<DoctorScheduleSlot[]>([]);
   const [holidays, setHolidays] = useState<{ id: string; holiday_date: string; reason: string | null }[]>([]);
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [loadingDoctors, setLoadingDoctors] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingTimezone, setIsSavingTimezone] = useState(false);
 
   // New holiday form
   const [newHolidayDate, setNewHolidayDate] = useState("");
@@ -33,30 +41,75 @@ export default function AdminAvailabilityPage() {
   useEffect(() => {
     adminApi.listDoctors()
       .then(({ doctors: d }) => { setDoctors(d); if (d.length > 0) setSelectedDoctorId(d[0].id); })
+      .catch(() => toast.error("Could not load doctors"))
       .finally(() => setLoadingDoctors(false));
   }, []);
 
   useEffect(() => {
     if (!selectedDoctorId) return;
+
+    // Clear the previous doctor's data immediately and ignore a response that
+    // arrives after the selection changed — otherwise a slow request can paint
+    // one doctor's hours (and timezone) under another's name, and saving then
+    // writes them to the wrong doctor.
+    let cancelled = false;
+    setSchedule([]);
+    setHolidays([]);
+    setTimezone(DEFAULT_TIMEZONE);
     setLoadingData(true);
+
     Promise.all([
       adminApi.getDoctorSchedule(selectedDoctorId),
       adminApi.getDoctorHolidays(selectedDoctorId),
     ])
-      .then(([{ schedule: s }, { holidays: h }]) => {
-        setSchedule(s);
+      .then(([{ schedule: s, timezone: tz }, { holidays: h }]) => {
+        if (cancelled) return;
+        setSchedule(s.map((slot) => ({
+          ...slot,
+          start_time: toHHMM(slot.start_time),
+          end_time: toHHMM(slot.end_time),
+        })));
         setHolidays(h);
+        if (tz) setTimezone(tz);
       })
-      .finally(() => setLoadingData(false));
+      .catch(() => { if (!cancelled) toast.error("Could not load availability"); })
+      .finally(() => { if (!cancelled) setLoadingData(false); });
+
+    return () => { cancelled = true; };
   }, [selectedDoctorId]);
 
   const handleSaveSchedule = async () => {
     if (!selectedDoctorId) return;
+
+    if (schedule.some((s) => s.start_time >= s.end_time)) {
+      toast.error("End time must be after start time");
+      return;
+    }
+
     setIsSaving(true);
     try {
       await adminApi.updateDoctorSchedule(selectedDoctorId, schedule.map(({ day_of_week, start_time, end_time, is_active }) => ({ day_of_week, start_time, end_time, is_active })));
+      toast.success("Working hours saved");
+    } catch {
+      toast.error("Could not save working hours");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleTimezoneChange = async (next: string) => {
+    if (!selectedDoctorId) return;
+    const previous = timezone;
+    setTimezone(next);
+    setIsSavingTimezone(true);
+    try {
+      await adminApi.updateDoctor(selectedDoctorId, { timezone: next });
+      toast.success("Timezone saved");
+    } catch {
+      setTimezone(previous);
+      toast.error("Could not save timezone");
+    } finally {
+      setIsSavingTimezone(false);
     }
   };
 
@@ -74,16 +127,26 @@ export default function AdminAvailabilityPage() {
 
   const addHoliday = async () => {
     if (!selectedDoctorId || !newHolidayDate) return;
-    await adminApi.addDoctorHoliday(selectedDoctorId, newHolidayDate, newHolidayReason || undefined);
-    const { holidays: h } = await adminApi.getDoctorHolidays(selectedDoctorId);
-    setHolidays(h);
-    setNewHolidayDate("");
-    setNewHolidayReason("");
+    try {
+      await adminApi.addDoctorHoliday(selectedDoctorId, newHolidayDate, newHolidayReason || undefined);
+      const { holidays: h } = await adminApi.getDoctorHolidays(selectedDoctorId);
+      setHolidays(h);
+      setNewHolidayDate("");
+      setNewHolidayReason("");
+      toast.success("Date blocked");
+    } catch {
+      toast.error("Could not block that date");
+    }
   };
 
   const deleteHoliday = async (id: string) => {
-    await adminApi.deleteDoctorHoliday(id);
-    setHolidays((prev) => prev.filter((h) => h.id !== id));
+    try {
+      await adminApi.deleteDoctorHoliday(id);
+      setHolidays((prev) => prev.filter((h) => h.id !== id));
+      toast.success("Date unblocked");
+    } catch {
+      toast.error("Could not unblock that date");
+    }
   };
 
   return (
@@ -120,6 +183,23 @@ export default function AdminAvailabilityPage() {
               </Button>
             </CardHeader>
             <CardContent>
+              {/* Saved on change, separately from the hours below — those are
+                  deleted and reinserted wholesale on save. */}
+              <div className="mb-4 flex flex-col gap-1.5 rounded-lg border border-dashed border-border p-3">
+                <label htmlFor="doctor-timezone" className="text-sm font-medium text-foreground">
+                  Timezone
+                </label>
+                <TimezoneSelect
+                  id="doctor-timezone"
+                  value={timezone}
+                  onChange={handleTimezoneChange}
+                  disabled={loadingData || isSavingTimezone}
+                />
+                <p className="text-xs text-muted-foreground">
+                  The working hours below are in this timezone. Patients see them converted to their own.
+                </p>
+              </div>
+
               {loadingData ? (
                 <div className="flex flex-col gap-2">
                   {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}

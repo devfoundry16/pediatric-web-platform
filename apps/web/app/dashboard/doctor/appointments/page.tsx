@@ -28,7 +28,7 @@ import {
 } from "lucide-react";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { doctorApi, type DoctorAppointment } from "@/lib/api/doctor";
-import { formatDateDisplayDubai } from "@/lib/timezone";
+import { DEFAULT_TIMEZONE, formatDateDisplayDubai } from "@/lib/timezone";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,6 +109,9 @@ export default function DoctorAppointmentsPage() {
   const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  // Times below are the doctor's own wall clock; label them with their zone
+  // rather than asserting GST for everyone.
+  const [doctorTimezone, setDoctorTimezone] = useState(DEFAULT_TIMEZONE);
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [symptomsApt, setSymptomsApt] = useState<DoctorAppointment | null>(
@@ -118,8 +121,9 @@ export default function DoctorAppointmentsPage() {
   const load = useCallback(async () => {
     setError(false);
     try {
-      const data = await doctorApi.getAppointments();
+      const { appointments: data, timezone } = await doctorApi.getAppointments();
       setAppointments(data);
+      if (timezone) setDoctorTimezone(timezone);
     } catch {
       setError(true);
     } finally {
@@ -176,7 +180,7 @@ export default function DoctorAppointmentsPage() {
           <h1 className="text-2xl font-bold text-foreground">
             {t.doctorDashboard.allAppointments}
           </h1>
-          <TimezoneNotice variant="compact" />
+          <TimezoneNotice timezone={doctorTimezone} variant="compact" />
         </div>
 
         {/* Filter tabs */}

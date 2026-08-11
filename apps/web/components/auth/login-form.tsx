@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
-import { useAuthStore } from "@/lib/stores/auth-store";
+import { ACCOUNT_DEACTIVATED, useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -38,6 +38,11 @@ export function LoginForm() {
   // Surface failures from the email-confirmation callback (invalid/expired link).
   const confirmationFailed =
     searchParams.get("error") === "confirmation_failed";
+
+  // Set by the OAuth callback and by middleware when a live session belongs to
+  // an account that has since been deactivated.
+  const deactivated =
+    searchParams.get("deactivated") === "1" || error === ACCOUNT_DEACTIVATED;
 
   const {
     register,
@@ -69,13 +74,19 @@ export function LoginForm() {
       className="mt-8 flex flex-col gap-5"
       onSubmit={handleSubmit(onSubmit)}
     >
-      {error && (
+      {deactivated && (
+        <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {t.auth.accountDeactivated}
+        </p>
+      )}
+
+      {error && !deactivated && (
         <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}
         </p>
       )}
 
-      {!error && confirmationFailed && (
+      {!error && !deactivated && confirmationFailed && (
         <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {t.auth.confirmationFailed}
         </p>

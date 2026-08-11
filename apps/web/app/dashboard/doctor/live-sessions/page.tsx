@@ -10,6 +10,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { liveSessionsApi, type GroupSession } from "@/lib/api/live-sessions";
+import { TimezoneNotice } from "@/components/booking/timezone-notice";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
 import { toast } from "sonner";
 import {
   Video,
@@ -79,6 +82,9 @@ function SessionRow({
     }
   }
 
+  // scheduled_at is a real instant (TIMESTAMPTZ) — format it with an explicit
+  // zone rather than relying on the runtime default.
+  const { timezone: viewerTimezone } = useViewerTimezone();
   const scheduledDate = new Date(session.scheduled_at);
 
   async function handleGoLive() {
@@ -128,19 +134,13 @@ function SessionRow({
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <CalendarDays className="h-3.5 w-3.5" />
-                {scheduledDate.toLocaleDateString("en-AE", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}
+                {formatDateInTimezone(scheduledDate, viewerTimezone)}
               </span>
-              <span className="flex items-center gap-1">
+              <span className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
                 <Clock className="h-3.5 w-3.5" />
-                {scheduledDate.toLocaleTimeString("en-AE", {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}{" "}
+                {formatTimeInTimezone(scheduledDate, viewerTimezone)}{" "}
                 · {session.duration_minutes} {t.common.minutes}
+                <TimezoneNotice timezone={viewerTimezone} variant="compact" />
               </span>
               <span className="flex items-center gap-1">
                 <Users className="h-3.5 w-3.5" />

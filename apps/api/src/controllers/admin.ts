@@ -1,12 +1,20 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
+import {
+  DEFAULT_TIMEZONE,
+  hhmmToMinutes,
+  isValidTimezone,
+  todayInTimezone,
+} from "../lib/timezone";
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
 export async function getAdminStats(req: Request, res: Response): Promise<void> {
   if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
 
-  const today = new Date().toISOString().split("T")[0];
+  // Clinic-local day, not the server's UTC day — otherwise "today's
+  // appointments" lags by the UTC offset for the first hours of each day.
+  const today = todayInTimezone(DEFAULT_TIMEZONE);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
@@ -99,6 +107,10 @@ export async function getUser(req: Request, res: Response): Promise<void> {
 
 const VALID_ROLES = ["parent", "doctor", "admin"] as const;
 
+// Supabase expects a Go duration string; there is no "forever", so use ~100
+// years. Reversed with "none" when the account is reactivated.
+const BAN_DURATION = "876000h";
+
 // Guard: block an operation that would leave the platform with no active admin.
 // Returns true when the operation is safe to proceed.
 async function activeAdminsAboveOne(): Promise<boolean> {
@@ -133,7 +145,7 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
   // Load the target to enforce admin-safety guards.
   const { data: target } = await supabaseAdmin
     .from("profiles")
-    .select("id, role")
+    .select("id, role, is_active")
     .eq("id", id)
     .single();
 
@@ -162,6 +174,28 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
     .single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Mirror the flag onto auth.users. Without this, deactivation only stops the
+  // app's own middleware: the existing refresh token keeps minting new access
+  // tokens and a fresh signInWithPassword still succeeds. Banning makes Supabase
+  // itself reject both, which is what actually ends the session.
+  if (is_active !== undefined && is_active !== target.is_active) {
+    const { error: banErr } = await supabaseAdmin.auth.admin.updateUserById(id as string, {
+      ban_duration: is_active ? "none" : BAN_DURATION,
+    });
+
+    if (banErr) {
+      // Don't leave profiles and auth.users disagreeing — a profile flagged
+      // inactive while the account is still usable is the exact bug this fixes.
+      await supabaseAdmin
+        .from("profiles")
+        .update({ is_active: target.is_active })
+        .eq("id", id);
+      res.status(500).json({ error: `Failed to update account access: ${banErr.message}` });
+      return;
+    }
+  }
+
   res.json({ user: data });
 }
 
@@ -307,13 +341,26 @@ export async function updateAppointmentAdmin(req: Request, res: Response): Promi
     case "no_show":
       updates = { status: "cancelled", cancellation_reason: "No-show" };
       break;
-    case "reschedule":
+    case "reschedule": {
       if (!newDate || !newTime) {
         res.status(400).json({ error: "newDate and newTime are required for reschedule" });
         return;
       }
-      updates = { scheduled_date: newDate, scheduled_time: newTime, status: "confirmed" };
+      // An admin types the new time in the doctor's CURRENT zone, so re-snapshot
+      // it — the row may still carry the zone the doctor used at booking time.
+      const { data: doctor } = await supabaseAdmin
+        .from("doctors")
+        .select("timezone")
+        .eq("id", existing.doctor_id)
+        .maybeSingle();
+      updates = {
+        scheduled_date: newDate,
+        scheduled_time: newTime,
+        timezone: doctor?.timezone || DEFAULT_TIMEZONE,
+        status: "confirmed",
+      };
       break;
+    }
     default:
       res.status(400).json({ error: "Invalid action. Use: cancel, complete, no_show, reschedule" });
       return;
@@ -343,7 +390,16 @@ export async function getDoctorScheduleAdmin(req: Request, res: Response): Promi
     .order("day_of_week");
 
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json({ schedule: data });
+
+  // start_time/end_time are bare TIME — meaningless without the zone they are
+  // wall-clock in, so it ships alongside them.
+  const { data: doctor } = await supabaseAdmin
+    .from("doctors")
+    .select("timezone")
+    .eq("id", doctorId)
+    .maybeSingle();
+
+  res.json({ schedule: data, timezone: doctor?.timezone || DEFAULT_TIMEZONE });
 }
 
 export async function updateDoctorScheduleAdmin(req: Request, res: Response): Promise<void> {
@@ -357,6 +413,16 @@ export async function updateDoctorScheduleAdmin(req: Request, res: Response): Pr
     return;
   }
 
+  const invalid = slots.find(
+    (s) => !(hhmmToMinutes(s.start_time) < hhmmToMinutes(s.end_time))
+  );
+  if (invalid) {
+    // Slot generation walks start→end in one direction, so an overnight or
+    // inverted range silently produces zero slots instead of an error.
+    res.status(400).json({ error: "End time must be after start time" });
+    return;
+  }
+
   // Delete existing and replace
   await supabaseAdmin.from("doctor_schedules").delete().eq("doctor_id", doctorId);
 
@@ -364,6 +430,42 @@ export async function updateDoctorScheduleAdmin(req: Request, res: Response): Pr
   const { error } = await supabaseAdmin.from("doctor_schedules").insert(rows);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ ok: true });
+}
+
+/**
+ * Update doctor attributes that aren't part of the schedule collection.
+ *
+ * `timezone` lives here rather than on the schedule PUT because it belongs to
+ * the doctor: bundling it into a delete-then-insert of all schedule rows makes
+ * it possible to write one doctor's zone onto another when the admin page's
+ * doctor dropdown changes while a load is in flight.
+ */
+export async function updateDoctorAdmin(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
+
+  const { doctorId } = req.params;
+  const { timezone } = req.body as { timezone?: string };
+
+  const updates: Record<string, unknown> = {};
+  if (timezone !== undefined) {
+    if (!isValidTimezone(timezone)) { res.status(400).json({ error: "Invalid timezone" }); return; }
+    updates.timezone = timezone;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No updatable fields provided" });
+    return;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("doctors")
+    .update(updates)
+    .eq("id", doctorId)
+    .select("id, full_name, timezone")
+    .single();
+
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ doctor: data });
 }
 
 export async function getDoctorHolidaysAdmin(req: Request, res: Response): Promise<void> {
@@ -631,7 +733,7 @@ export async function listDoctors(req: Request, res: Response): Promise<void> {
 
   const { data, error } = await supabaseAdmin
     .from("doctors")
-    .select("id, full_name, specialty, is_active, profile_id")
+    .select("id, full_name, specialty, is_active, profile_id, timezone")
     .order("full_name");
 
   if (error) { res.status(500).json({ error: error.message }); return; }

@@ -8,6 +8,8 @@ import Link from "next/link";
 import { CONSULTATION_TYPES } from "@/types/appointment";
 import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatStoredAppointment } from "@/lib/timezone";
 
 interface StepConfirmationProps {
   appointmentId: string;
@@ -15,6 +17,7 @@ interface StepConfirmationProps {
     typeId: string;
     date: string;
     time: string;
+    doctorTimezone: string;
     childName: string;
   };
 }
@@ -26,6 +29,14 @@ export function StepConfirmation({
   const { dictionary: t } = useI18n();
   const type = CONSULTATION_TYPES.find((c) => c.id === bookingData.typeId);
   const typeLabel = getConsultationTypeLabel(t, bookingData.typeId);
+
+  const { timezone: viewerTimezone } = useViewerTimezone(bookingData.doctorTimezone);
+  const shown = formatStoredAppointment(
+    bookingData.date,
+    bookingData.time,
+    bookingData.doctorTimezone,
+    viewerTimezone
+  );
 
   return (
     <div className="flex flex-col items-center gap-6">
@@ -55,9 +66,13 @@ export function StepConfirmation({
             <div>
               <p className="text-xs text-muted-foreground">{t.booking.dateTime}</p>
               <p className="text-sm font-medium text-foreground">
-                {bookingData.date} {t.booking.dateTimeAt} {bookingData.time}
+                {shown.date} {t.booking.dateTimeAt} {shown.time}
               </p>
-              <TimezoneNotice variant="compact" className="mt-1" />
+              <TimezoneNotice
+                timezone={viewerTimezone}
+                variant="compact"
+                className="mt-1"
+              />
             </div>
           </div>
 

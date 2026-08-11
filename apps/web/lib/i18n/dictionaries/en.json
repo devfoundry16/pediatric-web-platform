@@ -138,7 +138,8 @@
     "confirmedTitle": "Email confirmed",
     "confirmedDescription": "Your email address has been confirmed. You're all set.",
     "continue": "Continue",
-    "confirmationFailed": "Your confirmation link was invalid or has expired. Please sign in or request a new link."
+    "confirmationFailed": "Your confirmation link was invalid or has expired. Please sign in or request a new link.",
+    "accountDeactivated": "This account has been deactivated. Please contact the clinic if you think this is a mistake."
   },
   "profile": {
     "title": "Profile",
@@ -265,6 +266,10 @@
     "holidayDuplicate": "This date is already blocked",
     "saveSchedule": "Save Working Hours",
     "scheduleSaved": "Working hours saved",
+    "timezoneLabel": "Timezone",
+    "timezoneDesc": "Your working hours below are in this timezone. Patients see the times converted to their own.",
+    "timezoneSaved": "Timezone saved",
+    "endBeforeStart": "End time must be after start time",
     "sunday": "Sunday",
     "monday": "Monday",
     "tuesday": "Tuesday",
@@ -302,7 +307,9 @@
     "afternoon": "Afternoon",
     "evening": "Evening",
     "timezoneShort": "GST (UTC+4)",
-    "timezoneHint": "All times are in Gulf Standard Time (GST, UTC+4).",
+    "timezoneHint": "All times are shown in {timezone}.",
+    "timezoneSelectLabel": "Show times in",
+    "doctorTimezoneNote": "Dates follow the doctor's calendar ({timezone}).",
     "selectDateForSlots": "Please select a date to see available slots.",
     "slotsLoadError": "Failed to load available slots. Please try again.",
     "noSlotsTryAnother": "No available slots on this date. Please try another day.",

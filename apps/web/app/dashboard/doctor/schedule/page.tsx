@@ -19,7 +19,12 @@ import {
 import { CalendarX2, Trash2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { doctorApi, type ScheduleRow, type DoctorHoliday } from "@/lib/api/doctor";
-import { formatHolidayDateDubai } from "@/lib/timezone";
+import { TimezoneSelect } from "@/components/ui/timezone-select";
+import {
+  DEFAULT_TIMEZONE,
+  formatHolidayDateDubai,
+  todayInTimezone,
+} from "@/lib/timezone";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -69,15 +74,21 @@ function scheduleRowsToDayStates(rows: ScheduleRow[]): DayState[] {
 
 function WorkingHoursCard({
   days,
+  timezone,
   loading,
   saving,
+  savingTimezone,
   onChange,
+  onTimezoneChange,
   onSave,
 }: {
   days: DayState[];
+  timezone: string;
   loading: boolean;
   saving: boolean;
+  savingTimezone: boolean;
   onChange: (updated: DayState[]) => void;
+  onTimezoneChange: (timezone: string) => void;
   onSave: () => void;
 }) {
   const { dictionary: t } = useI18n();
@@ -103,6 +114,19 @@ function WorkingHoursCard({
           ))
         ) : (
           <>
+            {/* Saves on its own — the hours below are replaced wholesale on
+                save, and the zone shouldn't ride along with that. */}
+            <div className="flex flex-col gap-1.5 rounded-lg border border-dashed border-border p-4">
+              <Label htmlFor="schedule-timezone">{d.timezoneLabel}</Label>
+              <TimezoneSelect
+                id="schedule-timezone"
+                value={timezone}
+                onChange={onTimezoneChange}
+                disabled={savingTimezone}
+              />
+              <p className="text-xs text-muted-foreground">{d.timezoneDesc}</p>
+            </div>
+
             {days.map((day, index) => (
               <div
                 key={day.day_of_week}
@@ -185,11 +209,13 @@ function WorkingHoursCard({
 
 function HolidaysCard({
   holidays,
+  timezone,
   loading,
   onAdd,
   onDelete,
 }: {
   holidays: DoctorHoliday[];
+  timezone: string;
   loading: boolean;
   onAdd: (date: string, reason: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
@@ -202,7 +228,9 @@ function HolidaysCard({
   const [adding, setAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const today = new Date().toISOString().split("T")[0];
+  // The doctor's own calendar day, not the browser's and not UTC.
+  // toISOString() here would shift the day for any zone ahead of UTC.
+  const today = todayInTimezone(timezone);
 
   async function handleAdd() {
     if (!date) return;
@@ -316,16 +344,19 @@ export default function DoctorSchedulePage() {
   const d = t.doctorDashboard;
 
   const [days, setDays] = useState<DayState[]>(buildDefaultDays());
+  const [timezone, setTimezone] = useState(DEFAULT_TIMEZONE);
   const [scheduleLoading, setScheduleLoading] = useState(true);
   const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [timezoneSaving, setTimezoneSaving] = useState(false);
 
   const [holidays, setHolidays] = useState<DoctorHoliday[]>([]);
   const [holidaysLoading, setHolidaysLoading] = useState(true);
 
   const loadSchedule = useCallback(async () => {
     try {
-      const rows = await doctorApi.getSchedule();
-      setDays(scheduleRowsToDayStates(rows));
+      const { schedule, timezone: tz } = await doctorApi.getSchedule();
+      setDays(scheduleRowsToDayStates(schedule));
+      if (tz) setTimezone(tz);
     } catch {
       toast.error(d.loadError);
     } finally {
@@ -350,6 +381,12 @@ export default function DoctorSchedulePage() {
   }, [loadSchedule, loadHolidays]);
 
   async function saveSchedule() {
+    const invalid = days.find((day) => day.active && day.start_time >= day.end_time);
+    if (invalid) {
+      toast.error(d.endBeforeStart);
+      return;
+    }
+
     setScheduleSaving(true);
     try {
       const rows: ScheduleRow[] = days
@@ -366,6 +403,21 @@ export default function DoctorSchedulePage() {
       toast.error(d.loadError);
     } finally {
       setScheduleSaving(false);
+    }
+  }
+
+  async function saveTimezone(next: string) {
+    const previous = timezone;
+    setTimezone(next);
+    setTimezoneSaving(true);
+    try {
+      await doctorApi.updateProfile({ timezone: next });
+      toast.success(d.timezoneSaved);
+    } catch {
+      setTimezone(previous);
+      toast.error(d.loadError);
+    } finally {
+      setTimezoneSaving(false);
     }
   }
 
@@ -410,14 +462,18 @@ export default function DoctorSchedulePage() {
 
         <WorkingHoursCard
           days={days}
+          timezone={timezone}
           loading={scheduleLoading}
           saving={scheduleSaving}
+          savingTimezone={timezoneSaving}
           onChange={setDays}
+          onTimezoneChange={saveTimezone}
           onSave={saveSchedule}
         />
 
         <HolidaysCard
           holidays={holidays}
+          timezone={timezone}
           loading={holidaysLoading}
           onAdd={addHoliday}
           onDelete={deleteHoliday}
