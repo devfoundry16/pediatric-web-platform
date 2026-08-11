@@ -82,6 +82,8 @@ export interface DoctorProfile {
   avatar_url: string | null;
   is_active: boolean;
   profile_id: string | null;
+  /** IANA zone the doctor's working hours are expressed in. */
+  timezone?: string;
 }
 
 // ─── API client ───────────────────────────────────────────────────────────────
@@ -148,12 +150,16 @@ export const doctorApi = {
     return data.patients;
   },
 
-  async getSchedule(): Promise<ScheduleRow[]> {
-    const { data } = await axios.get<{ schedule: ScheduleRow[] }>(
+  /**
+   * Working hours plus the timezone they are wall-clock in. The times are bare
+   * TIME values, so the zone is required to interpret them.
+   */
+  async getSchedule(): Promise<{ schedule: ScheduleRow[]; timezone: string }> {
+    const { data } = await axios.get<{ schedule: ScheduleRow[]; timezone: string }>(
       `${getBaseUrl()}/doctor/schedule`,
       { headers: await authHeaders() }
     );
-    return data.schedule;
+    return { schedule: data.schedule, timezone: data.timezone };
   },
 
   async updateSchedule(rows: ScheduleRow[]): Promise<ScheduleRow[]> {
@@ -170,6 +176,9 @@ export const doctorApi = {
     specialty?: string;
     bio?: string;
     avatar_url?: string;
+    // Belongs to the doctor, not the schedule rows — deliberately not part of
+    // updateSchedule, which replaces every row wholesale.
+    timezone?: string;
   }): Promise<DoctorProfile> {
     const { data } = await axios.patch<{ doctor: DoctorProfile }>(
       `${getBaseUrl()}/doctor/profile`,

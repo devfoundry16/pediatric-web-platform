@@ -66,6 +66,8 @@ export interface AdminDoctorRow {
   is_active: boolean;
   profile_id: string | null;
   avatar_url: string | null;
+  /** IANA zone this doctor's working hours are expressed in. */
+  timezone?: string;
 }
 
 export interface AdminAppointment {
@@ -195,7 +197,13 @@ export const adminApi = {
 
   // Doctors
   listDoctors: () => get<{ doctors: AdminDoctorRow[] }>("/doctors"),
-  getDoctorSchedule: (doctorId: string) => get<{ schedule: DoctorScheduleSlot[] }>(`/doctors/${doctorId}/schedule`),
+  // The timezone is a doctor attribute, not part of the schedule collection:
+  // bundling it into the schedule PUT (which deletes and reinserts every row)
+  // would let a mid-load doctor switch write one doctor's zone onto another.
+  updateDoctor: (doctorId: string, data: { timezone?: string }) =>
+    patch<{ doctor: AdminDoctorRow }>(`/doctors/${doctorId}`, data),
+  getDoctorSchedule: (doctorId: string) =>
+    get<{ schedule: DoctorScheduleSlot[]; timezone: string }>(`/doctors/${doctorId}/schedule`),
   updateDoctorSchedule: (doctorId: string, slots: Omit<DoctorScheduleSlot, "id" | "doctor_id">[]) =>
     put<{ ok: boolean }>(`/doctors/${doctorId}/schedule`, { slots }),
   getDoctorHolidays: (doctorId: string) => get<{ holidays: Array<{ id: string; doctor_id: string; holiday_date: string; reason: string | null }> }>(`/doctors/${doctorId}/holidays`),
