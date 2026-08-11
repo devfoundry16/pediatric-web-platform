@@ -25,9 +25,14 @@ import {
   type GroupSession,
   type SessionRegistration,
 } from "@/lib/api/live-sessions";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatTimeInTimezone } from "@/lib/timezone";
 
 export default function SessionDetailPage() {
   const { dictionary: t } = useI18n();
+  // scheduled_at is a real instant (TIMESTAMPTZ) — format it with an explicit
+  // zone rather than relying on the runtime default.
+  const { timezone: viewerTimezone } = useViewerTimezone();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -194,16 +199,14 @@ export default function SessionDetailPage() {
                 day: "numeric",
                 month: "long",
                 year: "numeric",
+                timeZone: viewerTimezone,
               })}
             </span>
             <span className="flex items-center gap-x-1.5 gap-y-1 flex-wrap">
               <Clock className="h-4 w-4" />
-              {scheduledDate.toLocaleTimeString("en-AE", {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}{" "}
+              {formatTimeInTimezone(scheduledDate, viewerTimezone)}{" "}
               ({session.duration_minutes} {t.common.minutes})
-              <TimezoneNotice variant="compact" />
+              <TimezoneNotice timezone={viewerTimezone} variant="compact" />
             </span>
             <span className="flex items-center gap-1.5">
               <Users className="h-4 w-4" />
@@ -274,10 +277,7 @@ export default function SessionDetailPage() {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {t.liveSessions.scheduledFor}{" "}
-                      {scheduledDate.toLocaleTimeString("en-AE", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {formatTimeInTimezone(scheduledDate, viewerTimezone)}
                     </p>
                   </div>
                 ) : isFull ? (

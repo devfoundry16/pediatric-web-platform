@@ -8,9 +8,15 @@ import { SiteFooter } from "@/components/layout/site-footer";
 import { SessionCard } from "@/components/live-sessions/session-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { liveSessionsApi, type GroupSession } from "@/lib/api/live-sessions";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
 
 export default function LiveSessionsPage() {
   const { dictionary: t } = useI18n();
+  // scheduled_at is a real instant (TIMESTAMPTZ); render it in the viewer's
+  // zone explicitly, rather than relying on the runtime default and then
+  // labelling it GST regardless.
+  const { timezone: viewerTimezone } = useViewerTimezone();
   const [upcoming, setUpcoming] = useState<GroupSession[]>([]);
   const [past, setPast] = useState<GroupSession[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,14 +78,9 @@ export default function LiveSessionsPage() {
                         id: session.id,
                         title: session.title,
                         description: session.description ?? "",
-                        date: new Date(session.scheduled_at).toLocaleDateString(
-                          "en-AE",
-                          { day: "numeric", month: "short", year: "numeric" }
-                        ),
-                        time: new Date(session.scheduled_at).toLocaleTimeString(
-                          "en-AE",
-                          { hour: "2-digit", minute: "2-digit" }
-                        ),
+                        date: formatDateInTimezone(session.scheduled_at, viewerTimezone),
+                        time: formatTimeInTimezone(session.scheduled_at, viewerTimezone),
+                        timezone: viewerTimezone,
                         duration: session.duration_minutes,
                         maxUsers: session.max_participants,
                         currentUsers: session.participant_count,
@@ -109,14 +110,9 @@ export default function LiveSessionsPage() {
                         id: session.id,
                         title: session.title,
                         description: session.description ?? "",
-                        date: new Date(session.scheduled_at).toLocaleDateString(
-                          "en-AE",
-                          { day: "numeric", month: "short", year: "numeric" }
-                        ),
-                        time: new Date(session.scheduled_at).toLocaleTimeString(
-                          "en-AE",
-                          { hour: "2-digit", minute: "2-digit" }
-                        ),
+                        date: formatDateInTimezone(session.scheduled_at, viewerTimezone),
+                        time: formatTimeInTimezone(session.scheduled_at, viewerTimezone),
+                        timezone: viewerTimezone,
                         duration: session.duration_minutes,
                         maxUsers: session.max_participants,
                         currentUsers: session.participant_count,

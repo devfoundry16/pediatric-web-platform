@@ -310,6 +310,7 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
         doctorName: doctor?.full_name ?? "Your doctor",
         scheduledDate: date,
         scheduledTime: time,
+        timezone: doctorTimezone,
         consultationType: consultationType,
         durationMinutes: config.duration,
         priceAed: 0,
@@ -533,7 +534,7 @@ export async function cancelAppointment(req: Request, res: Response): Promise<vo
     if (!parent) return;
     const { data: apptFull } = await supabaseAdmin!
       .from("appointments")
-      .select("scheduled_date, scheduled_time, doctors!appointments_doctor_id_fkey(full_name)")
+      .select("scheduled_date, scheduled_time, timezone, doctors!appointments_doctor_id_fkey(full_name)")
       .eq("id", id)
       .single();
     if (!apptFull) return;
@@ -546,6 +547,7 @@ export async function cancelAppointment(req: Request, res: Response): Promise<vo
       doctorName: doc?.full_name ?? "Your doctor",
       scheduledDate: apptFull.scheduled_date,
       scheduledTime: apptFull.scheduled_time,
+      timezone: apptFull.timezone,
       consultationType: "",
       durationMinutes: 0,
     }).catch(() => {});
@@ -709,6 +711,7 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
       doctorName: docRow?.full_name ?? "Your doctor",
       scheduledDate: newDate as string,
       scheduledTime: newTime as string,
+      timezone: doctorTimezone,
       consultationType: existing.consultation_type as string,
       durationMinutes: 0,
     }).catch(() => {});

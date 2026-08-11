@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,14 +60,19 @@ function getStatusDisplay(apt: DoctorAppointment): {
 export function TodaySchedule() {
   const { dictionary: t } = useI18n();
   const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
+  const [doctorTimezone, setDoctorTimezone] = useState(DEFAULT_TIMEZONE);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const today = new Date().toISOString().split("T")[0];
-      const data = await doctorApi.getAppointments(today);
+      // "today" is resolved server-side in the doctor's own timezone. Computing
+      // it here would need the zone before the first response supplies it, and
+      // toISOString() (the previous approach) gives the UTC day, which is
+      // yesterday for the first hours of every Dubai day.
+      const { appointments: data, timezone } = await doctorApi.getAppointments("today");
       setAppointments(data);
+      if (timezone) setDoctorTimezone(timezone);
     } catch {
       // silently fail — error state handled by parent
     } finally {
@@ -151,7 +157,7 @@ export function TodaySchedule() {
                       <Clock className="h-3 w-3" />
                       {formatTime(apt.scheduled_time)}
                     </span>
-                    <TimezoneNotice variant="compact" />
+                    <TimezoneNotice timezone={doctorTimezone} variant="compact" />
                     <span>
                       {apt.duration_minutes} {t.common.minutes}
                     </span>

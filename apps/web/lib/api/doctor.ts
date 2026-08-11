@@ -104,12 +104,18 @@ export const doctorApi = {
     return data;
   },
 
-  async getAppointments(date?: string): Promise<DoctorAppointment[]> {
-    const { data } = await axios.get<{ appointments: DoctorAppointment[] }>(
-      `${getBaseUrl()}/doctor/appointments`,
-      { headers: await authHeaders(), params: date ? { date } : {} }
-    );
-    return data.appointments;
+  /** Appointments plus the doctor's timezone — the zone their times are in. */
+  async getAppointments(
+    date?: string
+  ): Promise<{ appointments: DoctorAppointment[]; timezone: string }> {
+    const { data } = await axios.get<{
+      appointments: DoctorAppointment[];
+      timezone: string;
+    }>(`${getBaseUrl()}/doctor/appointments`, {
+      headers: await authHeaders(),
+      params: date ? { date } : {},
+    });
+    return { appointments: data.appointments, timezone: data.timezone };
   },
 
   async startSession(id: string): Promise<void> {
