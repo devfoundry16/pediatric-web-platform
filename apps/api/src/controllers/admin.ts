@@ -1,12 +1,20 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
+import {
+  DEFAULT_TIMEZONE,
+  hhmmToMinutes,
+  isValidTimezone,
+  todayInTimezone,
+} from "../lib/timezone";
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
 export async function getAdminStats(req: Request, res: Response): Promise<void> {
   if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
 
-  const today = new Date().toISOString().split("T")[0];
+  // Clinic-local day, not the server's UTC day — otherwise "today's
+  // appointments" lags by the UTC offset for the first hours of each day.
+  const today = todayInTimezone(DEFAULT_TIMEZONE);
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
 
   const [
@@ -333,13 +341,26 @@ export async function updateAppointmentAdmin(req: Request, res: Response): Promi
     case "no_show":
       updates = { status: "cancelled", cancellation_reason: "No-show" };
       break;
-    case "reschedule":
+    case "reschedule": {
       if (!newDate || !newTime) {
         res.status(400).json({ error: "newDate and newTime are required for reschedule" });
         return;
       }
-      updates = { scheduled_date: newDate, scheduled_time: newTime, status: "confirmed" };
+      // An admin types the new time in the doctor's CURRENT zone, so re-snapshot
+      // it — the row may still carry the zone the doctor used at booking time.
+      const { data: doctor } = await supabaseAdmin
+        .from("doctors")
+        .select("timezone")
+        .eq("id", existing.doctor_id)
+        .maybeSingle();
+      updates = {
+        scheduled_date: newDate,
+        scheduled_time: newTime,
+        timezone: doctor?.timezone || DEFAULT_TIMEZONE,
+        status: "confirmed",
+      };
       break;
+    }
     default:
       res.status(400).json({ error: "Invalid action. Use: cancel, complete, no_show, reschedule" });
       return;
@@ -369,7 +390,16 @@ export async function getDoctorScheduleAdmin(req: Request, res: Response): Promi
     .order("day_of_week");
 
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json({ schedule: data });
+
+  // start_time/end_time are bare TIME — meaningless without the zone they are
+  // wall-clock in, so it ships alongside them.
+  const { data: doctor } = await supabaseAdmin
+    .from("doctors")
+    .select("timezone")
+    .eq("id", doctorId)
+    .maybeSingle();
+
+  res.json({ schedule: data, timezone: doctor?.timezone || DEFAULT_TIMEZONE });
 }
 
 export async function updateDoctorScheduleAdmin(req: Request, res: Response): Promise<void> {
@@ -383,6 +413,16 @@ export async function updateDoctorScheduleAdmin(req: Request, res: Response): Pr
     return;
   }
 
+  const invalid = slots.find(
+    (s) => !(hhmmToMinutes(s.start_time) < hhmmToMinutes(s.end_time))
+  );
+  if (invalid) {
+    // Slot generation walks start→end in one direction, so an overnight or
+    // inverted range silently produces zero slots instead of an error.
+    res.status(400).json({ error: "End time must be after start time" });
+    return;
+  }
+
   // Delete existing and replace
   await supabaseAdmin.from("doctor_schedules").delete().eq("doctor_id", doctorId);
 
@@ -390,6 +430,42 @@ export async function updateDoctorScheduleAdmin(req: Request, res: Response): Pr
   const { error } = await supabaseAdmin.from("doctor_schedules").insert(rows);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ ok: true });
+}
+
+/**
+ * Update doctor attributes that aren't part of the schedule collection.
+ *
+ * `timezone` lives here rather than on the schedule PUT because it belongs to
+ * the doctor: bundling it into a delete-then-insert of all schedule rows makes
+ * it possible to write one doctor's zone onto another when the admin page's
+ * doctor dropdown changes while a load is in flight.
+ */
+export async function updateDoctorAdmin(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
+
+  const { doctorId } = req.params;
+  const { timezone } = req.body as { timezone?: string };
+
+  const updates: Record<string, unknown> = {};
+  if (timezone !== undefined) {
+    if (!isValidTimezone(timezone)) { res.status(400).json({ error: "Invalid timezone" }); return; }
+    updates.timezone = timezone;
+  }
+
+  if (Object.keys(updates).length === 0) {
+    res.status(400).json({ error: "No updatable fields provided" });
+    return;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("doctors")
+    .update(updates)
+    .eq("id", doctorId)
+    .select("id, full_name, timezone")
+    .single();
+
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ doctor: data });
 }
 
 export async function getDoctorHolidaysAdmin(req: Request, res: Response): Promise<void> {
@@ -657,7 +733,7 @@ export async function listDoctors(req: Request, res: Response): Promise<void> {
 
   const { data, error } = await supabaseAdmin
     .from("doctors")
-    .select("id, full_name, specialty, is_active, profile_id")
+    .select("id, full_name, specialty, is_active, profile_id, timezone")
     .order("full_name");
 
   if (error) { res.status(500).json({ error: error.message }); return; }

@@ -1,10 +1,19 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
 import { createRoom, createMeetingToken } from "../lib/daily";
+import {
+  DEFAULT_TIMEZONE,
+  hhmmToMinutes,
+  isValidTimezone,
+  todayInTimezone,
+  wallClockToInstant,
+} from "../lib/timezone";
 
 // ─── Doctor identity resolution ───────────────────────────────────────────────
 
-async function resolveDoctor(userId: string): Promise<{ id: string } | null> {
+async function resolveDoctor(
+  userId: string
+): Promise<{ id: string; timezone: string } | null> {
   if (!supabaseAdmin) return null;
 
   // Return only the doctors row explicitly linked to this auth user.
@@ -15,11 +24,12 @@ async function resolveDoctor(userId: string): Promise<{ id: string } | null> {
   // profile_id link must be set explicitly at provisioning time instead.
   const { data: linked } = await supabaseAdmin
     .from("doctors")
-    .select("id")
+    .select("id, timezone")
     .eq("profile_id", userId)
     .maybeSingle();
 
-  return linked ?? null;
+  if (!linked) return null;
+  return { id: linked.id, timezone: linked.timezone || DEFAULT_TIMEZONE };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -81,7 +91,10 @@ export async function getDoctorStats(
     return;
   }
 
-  const today = new Date().toISOString().split("T")[0];
+  // The doctor's calendar day, not the server's. toISOString() gives the UTC
+  // day, so on a UTC host the doctor's "Today" list stayed on yesterday for the
+  // first four hours of every Dubai day.
+  const today = todayInTimezone(doctor.timezone);
 
   // Current calendar month bounds (YYYY-MM-01 → YYYY-MM-last)
   const now = new Date();
@@ -170,7 +183,13 @@ export async function getDoctorAppointments(
     .order("scheduled_time", { ascending: false });
 
   if (date && typeof date === "string") {
-    query = query.eq("scheduled_date", date);
+    // "today" is resolved here rather than by the client: only the server knows
+    // the doctor's timezone, and the client would otherwise have to guess the
+    // calendar day before the first response tells it which zone to use.
+    query = query.eq(
+      "scheduled_date",
+      date === "today" ? todayInTimezone(doctor.timezone) : date
+    );
   }
 
   const { data, error } = await query;
@@ -187,7 +206,9 @@ export async function getDoctorAppointments(
     parent_name: nameMap.get(r.parent_id) ?? null,
   }));
 
-  res.json({ appointments });
+  // scheduled_time is a bare TIME in the doctor's own zone; ship the zone so
+  // the dashboard can label it instead of asserting GST.
+  res.json({ appointments, timezone: doctor.timezone });
 }
 
 export async function startSession(
@@ -209,7 +230,7 @@ export async function startSession(
 
   const { data: existing } = await supabaseAdmin
     .from("appointments")
-    .select("id, status, scheduled_date, scheduled_time, duration_minutes, meeting_url")
+    .select("id, status, scheduled_date, scheduled_time, timezone, duration_minutes, meeting_url")
     .eq("id", id)
     .eq("doctor_id", doctor.id)
     .single();
@@ -230,8 +251,14 @@ export async function startSession(
   let meetingUrl = existing.meeting_url as string | null;
 
   if (!meetingUrl) {
-    // Calculate room expiry: scheduled end + 30 min buffer
-    const scheduledStart = new Date(`${existing.scheduled_date}T${existing.scheduled_time}`);
+    // Calculate room expiry: scheduled end + 30 min buffer.
+    // `new Date("YYYY-MM-DDTHH:MM")` parses in the Node PROCESS's zone, which
+    // skews the expiry by the process/appointment offset (4h under TZ=UTC).
+    const scheduledStart = wallClockToInstant(
+      existing.scheduled_date as string,
+      existing.scheduled_time as string,
+      (existing.timezone as string) || DEFAULT_TIMEZONE
+    );
     const durationMs = ((existing.duration_minutes as number) + 30) * 60 * 1000;
     const expiryEpoch = Math.floor((scheduledStart.getTime() + durationMs) / 1000);
 
@@ -420,7 +447,9 @@ export async function getDoctorSchedule(
     return;
   }
 
-  res.json({ schedule: data });
+  // start_time/end_time are bare TIME — meaningless without the zone they are
+  // wall-clock in, so it ships alongside them.
+  res.json({ schedule: data, timezone: doctor.timezone });
 }
 
 export async function updateDoctorSchedule(
@@ -444,6 +473,16 @@ export async function updateDoctorSchedule(
 
   if (!Array.isArray(rows)) {
     res.status(400).json({ error: "rows must be an array" });
+    return;
+  }
+
+  const invalid = rows.find(
+    (r) => !(hhmmToMinutes(r.start_time) < hhmmToMinutes(r.end_time))
+  );
+  if (invalid) {
+    // Slot generation walks start→end in one direction, so an overnight or
+    // inverted range silently produces zero slots instead of an error.
+    res.status(400).json({ error: "End time must be after start time" });
     return;
   }
 
@@ -495,11 +534,12 @@ export async function updateDoctorProfile(
     return;
   }
 
-  const { full_name, specialty, bio, avatar_url } = req.body as {
+  const { full_name, specialty, bio, avatar_url, timezone } = req.body as {
     full_name?: string;
     specialty?: string;
     bio?: string;
     avatar_url?: string;
+    timezone?: string;
   };
 
   const updates: Record<string, string> = {};
@@ -507,6 +547,16 @@ export async function updateDoctorProfile(
   if (specialty !== undefined) updates.specialty = specialty;
   if (bio !== undefined) updates.bio = bio;
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
+  if (timezone !== undefined) {
+    // The zone the doctor's working hours are expressed in — it belongs to the
+    // doctor, not to the schedule rows, so it is set here rather than being
+    // bundled into the delete-then-insert schedule PUT.
+    if (!isValidTimezone(timezone)) {
+      res.status(400).json({ error: "Invalid timezone" });
+      return;
+    }
+    updates.timezone = timezone;
+  }
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No fields to update" });
@@ -517,7 +567,7 @@ export async function updateDoctorProfile(
     .from("doctors")
     .update(updates)
     .eq("id", doctor.id)
-    .select("id, full_name, specialty, bio, avatar_url")
+    .select("id, full_name, specialty, bio, avatar_url, timezone")
     .single();
 
   if (error) {

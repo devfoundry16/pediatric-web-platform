@@ -7,19 +7,9 @@ import {
   sendCancellationEmail,
   sendRescheduleEmail,
 } from "../lib/resend";
-
-const CONSULTATION_CONFIG: Record<string, { duration: number; price: number }> = {
-  quick: { duration: 15, price: 150 },
-  standard: { duration: 30, price: 250 },
-  extended: { duration: 45, price: 350 },
-  // Single bookable consultation (booking redesign; repriced in migration 016).
-  consultation: { duration: 30, price: 350 },
-};
-
-// How long a `pending` (unpaid) appointment may hold its slot while the parent
-// completes Stripe checkout. After this, the reservation is considered stale and
-// no longer blocks the slot.
-const PENDING_HOLD_MINUTES = 15;
+import { CONSULTATION_CONFIG, isBlockingAppointment } from "../lib/consultation";
+import { generateSlots } from "../lib/slots";
+import { hhmmToMinutes } from "../lib/timezone";
 
 async function resolveParentEmail(userId: string): Promise<{ email: string; name: string } | null> {
   if (!supabaseAdmin) return null;
@@ -47,6 +37,7 @@ export async function listAppointments(req: Request, res: Response): Promise<voi
       consultation_type,
       scheduled_date,
       scheduled_time,
+      timezone,
       duration_minutes,
       price_aed,
       symptoms,
@@ -93,6 +84,7 @@ export async function getAppointment(req: Request, res: Response): Promise<void>
       consultation_type,
       scheduled_date,
       scheduled_time,
+      timezone,
       duration_minutes,
       price_aed,
       symptoms,
@@ -175,10 +167,26 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     assignedDoctorId = doctors.id;
   }
 
-  // Verify the slot is still available (prevent double booking). A `pending`
-  // (unpaid) appointment holds the slot only during the checkout window; once it
-  // goes stale it no longer blocks a new booking, so an abandoned Stripe
-  // checkout can't lock a slot forever.
+  // `time` must be a slot this doctor is actually offering, in THEIR timezone.
+  // The client only echoes back a value the server produced, but the booking UI
+  // now renders a converted time beside the canonical one — submitting the wrong
+  // one would create a real, paid appointment hours off, and nothing downstream
+  // would catch it (any "HH:MM" is a legal TIME, and the conflict check below is
+  // exact-equality only). This also pins the zone the row is stored in.
+  const { timezone: doctorTimezone, slots: offered } = await generateSlots(
+    assignedDoctorId,
+    date,
+    consultationType
+  );
+
+  const requestedMinutes = hhmmToMinutes(time);
+  if (!offered.some((s) => hhmmToMinutes(s.time) === requestedMinutes)) {
+    res.status(400).json({ error: "That time is not available for this doctor" });
+    return;
+  }
+
+  // Re-check immediately before insert to close the gap between slot generation
+  // and this write (two parents booking the same slot concurrently).
   const { data: conflicts } = await supabaseAdmin
     .from("appointments")
     .select("id, status, payment_status, created_at")
@@ -187,14 +195,7 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     .eq("scheduled_time", time)
     .not("status", "in", '("cancelled","rescheduled")');
 
-  const staleBefore = Date.now() - PENDING_HOLD_MINUTES * 60 * 1000;
-  const blocking = (conflicts ?? []).filter((c) => {
-    const isStalePending =
-      c.status === "pending" &&
-      c.payment_status === "pending" &&
-      new Date(c.created_at).getTime() < staleBefore;
-    return !isStalePending;
-  });
+  const blocking = (conflicts ?? []).filter((c) => isBlockingAppointment(c));
 
   if (blocking.length > 0) {
     res.status(409).json({ error: "This time slot is no longer available" });
@@ -256,6 +257,9 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
       consultation_type: consultationType,
       scheduled_date: date,
       scheduled_time: time,
+      // Snapshot the zone the wall clock above is expressed in, so a later
+      // change to doctors.timezone doesn't reinterpret this appointment.
+      timezone: doctorTimezone,
       duration_minutes: config.duration,
       price_aed: usedPackageId ? 0 : config.price,
       symptoms: symptoms ?? null,
@@ -263,7 +267,7 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
       payment_status: paymentStatus,
       payment_reference: paymentReference,
     })
-    .select("id, status, payment_status, payment_reference, scheduled_date, scheduled_time, consultation_type, price_aed")
+    .select("id, status, payment_status, payment_reference, scheduled_date, scheduled_time, timezone, consultation_type, price_aed")
     .single();
 
   if (error) {
@@ -640,6 +644,20 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
     return;
   }
 
+  // newTime is fully client-supplied here, so it needs the same check as
+  // booking: it must be a slot the doctor is offering, in the doctor's zone.
+  const { timezone: doctorTimezone, slots: offered } = await generateSlots(
+    existing.doctor_id as string,
+    newDate,
+    existing.consultation_type as string
+  );
+
+  const requestedMinutes = hhmmToMinutes(newTime);
+  if (!offered.some((s) => hhmmToMinutes(s.time) === requestedMinutes)) {
+    res.status(400).json({ error: "That time is not available for this doctor" });
+    return;
+  }
+
   // Check new slot is available
   const { data: conflict } = await supabaseAdmin
     .from("appointments")
@@ -661,11 +679,13 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
     .update({
       scheduled_date: newDate,
       scheduled_time: newTime,
+      // Re-snapshot: the doctor may have changed zones since the original booking.
+      timezone: doctorTimezone,
       status: "confirmed",
     })
     .eq("id", id)
     .eq("parent_id", req.userId)
-    .select("id, scheduled_date, scheduled_time, status")
+    .select("id, scheduled_date, scheduled_time, timezone, status")
     .single();
 
   if (error) {
