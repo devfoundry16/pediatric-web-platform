@@ -33,6 +33,9 @@ const professionalSchema = z.object({
     .url("Enter a valid URL")
     .optional()
     .or(z.literal("")),
+  // Notification address, not a login. A doctor can be bookable without an
+  // account, so this is stored on the doctors row rather than read from auth.
+  email: z.email("Enter a valid email").optional().or(z.literal("")),
 });
 
 type ProfessionalValues = z.infer<typeof professionalSchema>;
@@ -45,7 +48,7 @@ function ProfessionalInfoCard() {
 
   const form = useForm<ProfessionalValues>({
     resolver: zodResolver(professionalSchema),
-    defaultValues: { specialty: "", bio: "", avatar_url: "" },
+    defaultValues: { specialty: "", bio: "", avatar_url: "", email: "" },
   });
 
   useEffect(() => {
@@ -57,6 +60,7 @@ function ProfessionalInfoCard() {
           specialty: doc.specialty ?? "",
           bio: doc.bio ?? "",
           avatar_url: doc.avatar_url ?? "",
+          email: doc.email ?? "",
         });
       })
       .catch(() => {})
@@ -79,6 +83,8 @@ function ProfessionalInfoCard() {
         specialty: values.specialty,
         bio: values.bio || undefined,
         avatar_url: values.avatar_url || undefined,
+        // Sent even when blank, so clearing it turns the notifications off.
+        email: values.email ?? "",
       });
       setProfile(updated);
       toast.success(d.professionalSaved);
@@ -139,6 +145,25 @@ function ProfessionalInfoCard() {
                 </p>
               )}
             </div>
+          </div>
+
+          {/* Notification email */}
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="doctor-email">{d.notificationEmail}</Label>
+            <Input
+              id="doctor-email"
+              type="email"
+              placeholder="doctor@clinic.ae"
+              {...form.register("email")}
+            />
+            <p className="text-xs text-muted-foreground">
+              {d.notificationEmailDesc}
+            </p>
+            {form.formState.errors.email && (
+              <p className="text-xs text-destructive">
+                {form.formState.errors.email.message}
+              </p>
+            )}
           </div>
 
           {/* Specialty */}

@@ -84,6 +84,8 @@ export interface DoctorProfile {
   profile_id: string | null;
   /** IANA zone the doctor's working hours are expressed in. */
   timezone?: string;
+  /** Where booking notifications go. Not a login — see migration 019. */
+  email?: string | null;
 }
 
 // ─── API client ───────────────────────────────────────────────────────────────
@@ -185,6 +187,8 @@ export const doctorApi = {
     // Belongs to the doctor, not the schedule rows — deliberately not part of
     // updateSchedule, which replaces every row wholesale.
     timezone?: string;
+    /** Notification address; empty string clears it. */
+    email?: string;
   }): Promise<DoctorProfile> {
     const { data } = await axios.patch<{ doctor: DoctorProfile }>(
       `${getBaseUrl()}/doctor/profile`,

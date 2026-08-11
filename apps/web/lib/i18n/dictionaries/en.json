@@ -244,6 +244,8 @@
     "noSymptoms": "No symptoms recorded",
     "professionalInfo": "Professional Information",
     "professionalInfoDesc": "This information is visible to patients when booking",
+    "notificationEmail": "Notification email",
+    "notificationEmailDesc": "Where new booking notifications are sent. Leave empty to turn them off.",
     "specialty": "Specialty",
     "specialtyPlaceholder": "e.g. General Pediatrics",
     "bio": "Bio / About",

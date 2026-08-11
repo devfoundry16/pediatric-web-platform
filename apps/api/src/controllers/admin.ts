@@ -444,13 +444,15 @@ export async function updateDoctorAdmin(req: Request, res: Response): Promise<vo
   if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
 
   const { doctorId } = req.params;
-  const { timezone } = req.body as { timezone?: string };
+  const { timezone, email } = req.body as { timezone?: string; email?: string };
 
   const updates: Record<string, unknown> = {};
   if (timezone !== undefined) {
     if (!isValidTimezone(timezone)) { res.status(400).json({ error: "Invalid timezone" }); return; }
     updates.timezone = timezone;
   }
+  // Notification address only — not a login, and independent of profile_id.
+  if (email !== undefined) updates.email = email.trim() || null;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No updatable fields provided" });
@@ -461,7 +463,7 @@ export async function updateDoctorAdmin(req: Request, res: Response): Promise<vo
     .from("doctors")
     .update(updates)
     .eq("id", doctorId)
-    .select("id, full_name, timezone")
+    .select("id, full_name, timezone, email")
     .single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
