@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { supabaseAdmin } from "./supabase";
 import { DEFAULT_TIMEZONE } from "./timezone";
+import type { Recipient } from "./recipients";
 
 let resendClient: Resend | null = null;
 
@@ -14,6 +15,7 @@ function getResend(): Resend | null {
 type EmailType =
   | "booking_confirmation"
   | "booking_notification"
+  | "package_purchase"
   | "appointment_reminder"
   | "cancellation"
   | "reschedule"
@@ -32,6 +34,29 @@ interface EmailLog {
 async function logEmail(entry: EmailLog): Promise<void> {
   if (!supabaseAdmin) return;
   await supabaseAdmin.from("email_logs").insert(entry);
+}
+
+/**
+ * Whether this email already went out for this record.
+ *
+ * Stripe delivers at-least-once and the client-side verify can race the
+ * webhook, so fulfilment runs more than once by design. email_logs is already
+ * the record of what was sent, so it doubles as the dedupe key rather than
+ * needing a column of its own. Only 'sent' counts — a previous failure should
+ * be retried, not suppressed.
+ */
+export async function alreadySent(
+  relatedId: string,
+  emailType: EmailType
+): Promise<boolean> {
+  if (!supabaseAdmin) return false;
+  const { count } = await supabaseAdmin
+    .from("email_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("related_id", relatedId)
+    .eq("email_type", emailType)
+    .eq("status", "sent");
+  return (count ?? 0) > 0;
 }
 
 /**
@@ -292,4 +317,54 @@ export async function sendRescheduleEmail(data: Omit<AppointmentEmailData, "pric
     relatedId: data.appointmentId,
     recipientUserId: data.parentUserId,
   });
+}
+
+/**
+ * Receipt for a package purchase, and the clinic's copy of it.
+ *
+ * The buyer's version tells them what they now hold and when it lapses; the
+ * admin version is a sale notice. Both are the same underlying event, so they
+ * share a template with the audience-specific bits swapped.
+ */
+export async function sendPackagePurchase(data: {
+  userPackageId: string;
+  recipients: Recipient[];
+  audience: "buyer" | "admin";
+  buyerName: string;
+  packageName: string;
+  credits: number;
+  priceAed: number;
+  expiresAt: string;
+  bookingUrl?: string;
+}): Promise<void> {
+  const forBuyer = data.audience === "buyer";
+
+  const html = `
+    <h2>${forBuyer ? "Your package is ready" : "New package purchase"}</h2>
+    ${forBuyer ? `<p>Hello ${data.buyerName},</p><p>Thank you for your purchase.</p>` : `<p><strong>${data.buyerName}</strong> purchased a package.</p>`}
+    <table style="border-collapse:collapse;margin-top:16px">
+      ${forBuyer ? "" : `<tr><td style="padding:4px 12px 4px 0;color:#666">Buyer</td><td><strong>${data.buyerName}</strong></td></tr>`}
+      <tr><td style="padding:4px 12px 4px 0;color:#666">Package</td><td><strong>${data.packageName}</strong></td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#666">Consultations</td><td><strong>${data.credits}</strong></td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#666">Valid until</td><td><strong>${data.expiresAt}</strong></td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#666">Amount</td><td><strong>AED ${data.priceAed}</strong></td></tr>
+    </table>
+    ${forBuyer ? joinButton(data.bookingUrl, "Book a consultation") : ""}
+    ${forBuyer ? `<p style="margin-top:16px">Your credits are applied automatically when you book — those bookings cost nothing further.</p><p>Thank you for choosing ${APP_NAME}.</p>` : ""}
+  `;
+
+  const subject = forBuyer
+    ? `${APP_NAME} – Package confirmed: ${data.packageName}`
+    : `${APP_NAME} – Package purchased by ${data.buyerName}`;
+
+  for (const recipient of data.recipients) {
+    await deliver({
+      to: recipient.email,
+      subject,
+      html,
+      emailType: "package_purchase",
+      relatedId: data.userPackageId,
+      recipientUserId: recipient.userId,
+    });
+  }
 }

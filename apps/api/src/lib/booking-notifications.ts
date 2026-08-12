@@ -1,9 +1,11 @@
 import { supabaseAdmin } from "./supabase";
 import {
+  alreadySent,
   recordEmailFailure,
   sendBookingConfirmation,
   sendBookingNotification,
 } from "./resend";
+import { activeAdminRecipients } from "./recipients";
 import { DEFAULT_TIMEZONE } from "./timezone";
 
 function frontendUrl(): string {
@@ -35,44 +37,6 @@ function appointmentUrlFor(
   return `${frontendUrl()}/dashboard/${audience}/appointments?appointment=${appointmentId}`;
 }
 
-async function activeAdminRecipients(): Promise<{ email: string; userId: string }[]> {
-  if (!supabaseAdmin) return [];
-
-  const { data: admins } = await supabaseAdmin
-    .from("profiles")
-    .select("id")
-    .eq("role", "admin")
-    .eq("is_active", true);
-
-  if (!admins || admins.length === 0) return [];
-
-  const wanted = new Set(admins.map((a) => a.id));
-  const { data } = await supabaseAdmin.auth.admin.listUsers({ perPage: 1000 });
-
-  return (data?.users ?? [])
-    .filter((u) => wanted.has(u.id) && !!u.email)
-    .map((u) => ({ email: u.email as string, userId: u.id }));
-}
-
-/**
- * Whether this appointment has already had its confirmation sent.
- *
- * The paid path can be confirmed twice — once by the Stripe webhook and once by
- * the client-side verify fallback, whichever wins the race — and both call
- * this module. email_logs is the existing record of what went out, so it also
- * serves as the dedupe key rather than adding a column for it.
- */
-async function alreadyNotified(appointmentId: string): Promise<boolean> {
-  if (!supabaseAdmin) return false;
-  const { count } = await supabaseAdmin
-    .from("email_logs")
-    .select("id", { count: "exact", head: true })
-    .eq("related_id", appointmentId)
-    .eq("email_type", "booking_confirmation")
-    .eq("status", "sent");
-  return (count ?? 0) > 0;
-}
-
 /**
  * Tell the parent, the doctor and every active admin that the consultation is
  * confirmed, each with a link straight to it on their own dashboard.
@@ -85,7 +49,7 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
   if (!supabaseAdmin) return;
 
   try {
-    if (await alreadyNotified(appointmentId)) return;
+    if (await alreadySent(appointmentId, "booking_confirmation")) return;
 
     const { data: appt } = await supabaseAdmin
       .from("appointments")

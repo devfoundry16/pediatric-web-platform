@@ -8,6 +8,7 @@ import type {
   StripeEvent,
 } from "../lib/stripe";
 import { notifyBookingConfirmed } from "../lib/booking-notifications";
+import { notifyPackagePurchased } from "../lib/package-notifications";
 
 // GET /api/packages
 export async function listPackages(
@@ -264,7 +265,7 @@ export async function stripeWebhook(
       .maybeSingle();
 
     if (!alreadyProvisioned) {
-      const { error: insertError } = await supabaseAdmin
+      const { data: provisioned, error: insertError } = await supabaseAdmin
         .from("user_packages")
         .insert({
           user_id: userId,
@@ -275,7 +276,9 @@ export async function stripeWebhook(
           stripe_payment_intent: session.payment_intent,
           expires_at: expiresAt.toISOString(),
           status: "active",
-        });
+        })
+        .select("id")
+        .single();
 
       if (insertError && insertError.code !== "23505") {
         console.error(
@@ -285,6 +288,14 @@ export async function stripeWebhook(
         res.status(500).json({ error: insertError.message });
         return;
       }
+
+      // Receipt the buyer and tell the clinic. Deduped on email_logs and never
+      // throws, so a redelivered webhook still returns 200.
+      if (provisioned) void notifyPackagePurchased(provisioned.id);
+    } else {
+      // A redelivery for a purchase already provisioned — retry the mail if the
+      // first attempt failed, otherwise this is a no-op.
+      void notifyPackagePurchased(alreadyProvisioned.id);
     }
   }
 

@@ -397,8 +397,12 @@ export async function verifyAppointmentPayment(req: Request, res: Response): Pro
     return;
   }
 
-  // Already settled (e.g. the webhook won the race) — nothing to do.
+  // Already settled (e.g. the webhook won the race) — nothing to update, but
+  // still hand off to the notifier. If the webhook's send failed (Resend down,
+  // migration not yet applied), this is the only other chance to deliver it;
+  // it dedupes on email_logs, so a successful send is not repeated.
   if (appt.payment_status === "paid") {
+    void notifyBookingConfirmed(id as string);
     res.json({ paymentStatus: "paid", status: appt.status });
     return;
   }
