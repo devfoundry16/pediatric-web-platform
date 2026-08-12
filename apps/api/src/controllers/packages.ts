@@ -219,9 +219,8 @@ export async function stripeWebhook(
       }
 
       // The booking is confirmed only now for a paid consult, so this is where
-      // the room is provisioned and parent/doctor/admins are told. Deduped
-      // against the verify fallback, and never throws, so a redelivered webhook
-      // still returns 200.
+      // parent/doctor/admins are told. Deduped against the verify fallback, and
+      // never throws, so a redelivered webhook still returns 200.
       void notifyBookingConfirmed(appointmentId);
 
       res.json({ received: true });

@@ -292,10 +292,10 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
       });
   }
 
-  // Provision the video room and notify parent, doctor and admins — but only
-  // once the booking is actually confirmed, which on the credit path is now.
-  // A one-time paid consult is still pending here; it is notified when Stripe
-  // settles (webhook, or the verify fallback).
+  // Notify parent, doctor and admins — but only once the booking is actually
+  // confirmed, which on the credit path is now. A one-time paid consult is
+  // still pending here; it is notified when Stripe settles (webhook, or the
+  // verify fallback).
   if (appointment && usedPackageId) {
     void notifyBookingConfirmed(appointment.id);
   }
@@ -441,8 +441,8 @@ export async function verifyAppointmentPayment(req: Request, res: Response): Pro
   }
 
   // Fallback for a delayed or unreachable webhook: whichever path confirms the
-  // booking first provisions the room and sends the notifications. Deduped
-  // against the webhook via email_logs.
+  // booking first sends the notifications. Deduped against the webhook via
+  // email_logs.
   void notifyBookingConfirmed(id as string);
 
   res.json({ paymentStatus: "paid", status: "confirmed" });
