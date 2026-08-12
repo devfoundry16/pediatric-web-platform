@@ -216,15 +216,18 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
 }
 
 /**
- * Create or retire the doctors row behind a role change.
+ * Create or remove the doctors row behind a role change.
  *
  * Promotion creates the record INACTIVE: it has no specialty, no working hours
  * and no notification address yet, and making someone bookable the instant
  * their role changes is not what an admin is asking for. The returned notice
  * points them at Doctors to finish.
  *
- * Demotion deactivates rather than deletes or unlinks — appointments reference
- * the row, and keeping the link makes re-promotion reversible.
+ * Demotion deletes it, taking their working hours and blocked dates with it
+ * (both ON DELETE CASCADE). A doctor who has ever been booked cannot be
+ * deleted — appointments.doctor_id is ON DELETE RESTRICT precisely so that
+ * history cannot be destroyed — so those are retired instead, and the notice
+ * says which happened.
  */
 async function syncDoctorRecordWithRole(
   userId: string,
@@ -239,7 +242,14 @@ async function syncDoctorRecordWithRole(
     .maybeSingle();
 
   if (nextRole === "doctor") {
-    if (existing) return null;
+    // Re-promoting someone whose record was retired rather than deleted: the
+    // row is still there but not bookable, and re-enabling that is a decision
+    // for the admin, not a side effect of the role change.
+    if (existing) {
+      return existing.is_active
+        ? null
+        : "They already have a doctor record, which is not bookable. Enable it under Doctors.";
+    }
     const { error } = await supabaseAdmin!
       .from("doctors")
       .insert({
@@ -255,16 +265,35 @@ async function syncDoctorRecordWithRole(
     return "Doctor record created. Set their specialty, hours and timezone under Doctors, then mark them bookable.";
   }
 
-  if (previousRole === "doctor" && existing?.is_active) {
-    const { error } = await supabaseAdmin!
-      .from("doctors")
-      .update({ is_active: false })
-      .eq("id", existing.id);
-    if (error) {
-      console.error(`[admin] Could not retire doctor record for ${userId}:`, error.message);
-      return null;
+  if (previousRole === "doctor" && existing) {
+    const { error } = await supabaseAdmin!.from("doctors").delete().eq("id", existing.id);
+
+    if (!error) {
+      // doctor_schedules and doctor_holidays cascade away with it, which is
+      // what removing a doctor should mean. Anything they authored --
+      // medical_records, courses, group_sessions -- is ON DELETE SET NULL, so
+      // the content survives but loses its attribution.
+      return "Their doctor record and working hours have been deleted.";
     }
-    return "They are no longer a doctor, so their profile has been removed from booking.";
+
+    // 23503 = foreign key violation. appointments.doctor_id is ON DELETE
+    // RESTRICT, so a doctor with any booking -- including cancelled or
+    // completed history -- cannot be deleted without destroying that history.
+    // Retire the record instead of failing the role change.
+    if (error.code === "23503") {
+      const { error: retireErr } = await supabaseAdmin!
+        .from("doctors")
+        .update({ is_active: false })
+        .eq("id", existing.id);
+      if (retireErr) {
+        console.error(`[admin] Could not retire doctor record for ${userId}:`, retireErr.message);
+        return null;
+      }
+      return "They have appointment history, so their doctor record was retired rather than deleted. It is no longer bookable.";
+    }
+
+    console.error(`[admin] Could not delete doctor record for ${userId}:`, error.message);
+    return "Role updated, but their doctor record could not be removed. Check it under Doctors.";
   }
 
   return null;
