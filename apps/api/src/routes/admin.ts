@@ -25,6 +25,8 @@ import {
   listEmailLogs,
   listDoctors,
   updateDoctorAdmin,
+  createDoctorAdmin,
+  linkDoctorAccountAdmin,
 } from "../controllers/admin";
 
 const router = Router();
@@ -48,7 +50,9 @@ router.patch("/appointments/:id", updateAppointmentAdmin);
 
 // Doctors list (for dropdowns)
 router.get("/doctors", listDoctors);
+router.post("/doctors", createDoctorAdmin);
 router.patch("/doctors/:doctorId", updateDoctorAdmin);
+router.post("/doctors/:doctorId/account", linkDoctorAccountAdmin);
 
 // Doctor availability
 router.get("/doctors/:doctorId/schedule", getDoctorScheduleAdmin);
