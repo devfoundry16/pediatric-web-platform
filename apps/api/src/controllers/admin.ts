@@ -536,7 +536,9 @@ export async function updateDoctorAdmin(req: Request, res: Response): Promise<vo
     if (!full_name.trim()) { res.status(400).json({ error: "Name is required" }); return; }
     updates.full_name = full_name.trim();
   }
-  if (specialty !== undefined) updates.specialty = specialty.trim() || null;
+  // specialty is NOT NULL with a default, so a blank field means "leave it"
+  // rather than "clear it" — writing null would just error.
+  if (specialty !== undefined && specialty.trim()) updates.specialty = specialty.trim();
   if (bio !== undefined) updates.bio = bio.trim() || null;
   if (avatar_url !== undefined) updates.avatar_url = avatar_url.trim() || null;
   // Controls bookability, not login — a deactivated doctor disappears from the
@@ -620,7 +622,8 @@ export async function createDoctorAdmin(req: Request, res: Response): Promise<vo
     .from("doctors")
     .insert({
       full_name: full_name.trim(),
-      specialty: specialty?.trim() || null,
+      // Omitted when blank so the column default applies — it is NOT NULL.
+      ...(specialty?.trim() ? { specialty: specialty.trim() } : {}),
       bio: bio?.trim() || null,
       avatar_url: avatar_url?.trim() || null,
       email: email?.trim() || null,
