@@ -116,12 +116,15 @@ export default function AdminUsersPage() {
     if (!editing) return;
     setIsSaving(true);
     try {
-      await adminApi.updateUser(editing.id, {
+      const { notice } = await adminApi.updateUser(editing.id, {
         full_name: editName,
         phone: editPhone,
         role: editRole,
       });
       toast.success("User updated.");
+      // A role change can create or retire their doctor record; say so rather
+      // than leaving the admin to discover it under Doctors.
+      if (notice) toast.info(notice, { duration: 8000 });
       setEditing(null);
       load();
     } catch (e) {
@@ -143,7 +146,7 @@ export default function AdminUsersPage() {
   const handleCreate = async () => {
     setIsCreating(true);
     try {
-      await adminApi.createUser({
+      const { notice } = await adminApi.createUser({
         email: createEmail.trim(),
         password: createPassword,
         full_name: createName.trim() || undefined,
@@ -151,6 +154,7 @@ export default function AdminUsersPage() {
         role: createRole,
       });
       toast.success("User created.");
+      if (notice) toast.info(notice, { duration: 8000 });
       setCreating(false);
       load();
     } catch (e) {
@@ -335,6 +339,8 @@ export default function AdminUsersPage() {
               </Select>
               <p className="text-xs text-muted-foreground">
                 Set to <span className="font-medium">admin</span> to grant admin access, or change away to remove it.
+                Choosing <span className="font-medium">doctor</span> also creates their doctor
+                record — finish it under Doctors to make them bookable.
               </p>
             </div>
           </div>

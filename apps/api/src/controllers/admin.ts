@@ -145,7 +145,7 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
   // Load the target to enforce admin-safety guards.
   const { data: target } = await supabaseAdmin
     .from("profiles")
-    .select("id, role, is_active")
+    .select("id, role, is_active, full_name")
     .eq("id", id)
     .single();
 
@@ -196,7 +196,78 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
     }
   }
 
-  res.json({ user: data });
+  // Keep the doctors table in step with the role.
+  //
+  // role='doctor' on its own only makes a login: the doctor dashboard resolves
+  // through doctors.profile_id and booking lists from `doctors`, so without a
+  // row the promoted user hits "No doctor profile found" everywhere. Demoting
+  // has the mirror problem — they lose the dashboard but stay bookable.
+  let doctorNotice: string | null = null;
+  if (role !== undefined && role !== target.role) {
+    doctorNotice = await syncDoctorRecordWithRole(
+      id as string,
+      role,
+      target.role,
+      (data?.full_name as string) || target.full_name || "Doctor"
+    );
+  }
+
+  res.json({ user: data, notice: doctorNotice });
+}
+
+/**
+ * Create or retire the doctors row behind a role change.
+ *
+ * Promotion creates the record INACTIVE: it has no specialty, no working hours
+ * and no notification address yet, and making someone bookable the instant
+ * their role changes is not what an admin is asking for. The returned notice
+ * points them at Doctors to finish.
+ *
+ * Demotion deactivates rather than deletes or unlinks — appointments reference
+ * the row, and keeping the link makes re-promotion reversible.
+ */
+async function syncDoctorRecordWithRole(
+  userId: string,
+  nextRole: string,
+  previousRole: string,
+  fullName: string
+): Promise<string | null> {
+  const { data: existing } = await supabaseAdmin!
+    .from("doctors")
+    .select("id, is_active")
+    .eq("profile_id", userId)
+    .maybeSingle();
+
+  if (nextRole === "doctor") {
+    if (existing) return null;
+    const { error } = await supabaseAdmin!
+      .from("doctors")
+      .insert({
+        profile_id: userId,
+        full_name: fullName,
+        timezone: DEFAULT_TIMEZONE,
+        is_active: false,
+      });
+    if (error) {
+      console.error(`[admin] Could not create doctor record for ${userId}:`, error.message);
+      return "Role updated, but the doctor record could not be created. Add it under Doctors.";
+    }
+    return "Doctor record created. Set their specialty, hours and timezone under Doctors, then mark them bookable.";
+  }
+
+  if (previousRole === "doctor" && existing?.is_active) {
+    const { error } = await supabaseAdmin!
+      .from("doctors")
+      .update({ is_active: false })
+      .eq("id", existing.id);
+    if (error) {
+      console.error(`[admin] Could not retire doctor record for ${userId}:`, error.message);
+      return null;
+    }
+    return "They are no longer a doctor, so their profile has been removed from booking.";
+  }
+
+  return null;
 }
 
 export async function createUser(req: Request, res: Response): Promise<void> {
@@ -238,7 +309,14 @@ export async function createUser(req: Request, res: Response): Promise<void> {
 
   if (upsertErr) { res.status(500).json({ error: upsertErr.message }); return; }
 
+  // Same reason as the role-change path: role='doctor' alone is only a login.
+  const notice =
+    role === "doctor"
+      ? await syncDoctorRecordWithRole(created.user.id, role, "parent", full_name ?? "Doctor")
+      : null;
+
   res.status(201).json({
+    notice,
     user: {
       id: created.user.id,
       email,
