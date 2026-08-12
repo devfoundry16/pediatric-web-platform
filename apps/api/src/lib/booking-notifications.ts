@@ -1,5 +1,9 @@
 import { supabaseAdmin } from "./supabase";
-import { sendBookingConfirmation, sendBookingNotification } from "./resend";
+import {
+  recordEmailFailure,
+  sendBookingConfirmation,
+  sendBookingNotification,
+} from "./resend";
 import { DEFAULT_TIMEZONE } from "./timezone";
 
 function frontendUrl(): string {
@@ -100,7 +104,25 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
     const child = appt.child_profiles as unknown as { first_name: string; last_name: string } | null;
     const childName = child ? `${child.first_name} ${child.last_name}` : "the patient";
 
-    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(appt.parent_id);
+    // The address comes from the auth admin API, which needs a genuine service
+    // role key — a key that is fine for table reads can still be refused here.
+    // The error used to be discarded, so a refusal looked identical to "no
+    // booking happened": no email, no log line, nothing to search for.
+    const { data: authUser, error: authError } =
+      await supabaseAdmin.auth.admin.getUserById(appt.parent_id);
+
+    if (authError || !authUser?.user?.email) {
+      const reason = authError
+        ? `Could not resolve parent address: ${authError.message}`
+        : "Parent auth user has no email address";
+      console.error(`[booking] ${reason} (appointment ${appointmentId})`);
+      await recordEmailFailure({
+        emailType: "booking_confirmation",
+        relatedId: appointmentId,
+        recipientUserId: appt.parent_id,
+        reason,
+      });
+    }
     const { data: parentProfile } = await supabaseAdmin
       .from("profiles")
       .select("full_name")
@@ -129,8 +151,17 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
       });
     }
 
-    // Skipped silently when the doctor has no address on file — doctors.email
-    // is optional because a doctor can be bookable without an auth account.
+    // Skipped when the doctor has no address on file — doctors.email is
+    // optional because a doctor can be bookable without an auth account. Logged
+    // so "the doctor got nothing" is answerable without reading the code.
+    if (!doctor?.email) {
+      await recordEmailFailure({
+        emailType: "booking_notification",
+        relatedId: appointmentId,
+        reason: "Doctor has no notification address (doctors.email is empty)",
+      });
+    }
+
     if (doctor?.email) {
       await sendBookingNotification({
         ...shared,

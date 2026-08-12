@@ -35,6 +35,32 @@ async function logEmail(entry: EmailLog): Promise<void> {
 }
 
 /**
+ * Record that an email could not even be attempted.
+ *
+ * For failures that happen before there is an address to send to — resolving
+ * the recipient failed — so they leave a trace instead of vanishing. Without
+ * this, "no row in email_logs" is ambiguous between "the code never ran" and
+ * "the recipient could not be resolved", which is exactly the ambiguity that
+ * made a production outage untraceable.
+ */
+export async function recordEmailFailure(params: {
+  emailType: EmailType;
+  relatedId: string;
+  reason: string;
+  recipientEmail?: string;
+  recipientUserId?: string | null;
+}): Promise<void> {
+  await logEmail({
+    recipient_email: params.recipientEmail ?? "(unresolved)",
+    recipient_user_id: params.recipientUserId ?? null,
+    email_type: params.emailType,
+    related_id: params.relatedId,
+    status: "failed",
+    error_message: params.reason,
+  });
+}
+
+/**
  * Send one email and record the outcome, including when Resend is not
  * configured at all. Every send goes through here so email_logs stays a
  * complete record — a missing row means the code path never ran, not that
