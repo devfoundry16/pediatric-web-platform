@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
+import { cn } from "@/lib/utils";
+import { useHighlightedAppointment } from "@/hooks/use-highlighted-appointment";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -48,10 +50,22 @@ const STATUS_COLORS: Record<string, string> = {
 const STATUSES = ["", "pending", "confirmed", "completed", "cancelled", "rescheduled"] as const;
 
 export default function AdminAppointmentsPage() {
+  // useSearchParams (via useHighlightedAppointment) needs a boundary, or the
+  // route drops out of static prerendering — same pattern as the login page.
+  return (
+    <Suspense fallback={null}>
+      <AdminAppointmentsContent />
+    </Suspense>
+  );
+}
+
+function AdminAppointmentsContent() {
   const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
   const [doctors, setDoctors] = useState<AdminDoctorRow[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const { highlightedId, highlightRef: highlightRowRef } =
+    useHighlightedAppointment<HTMLTableRowElement>(!loading);
   const [page, setPage] = useState(1);
   const LIMIT = 50;
 
@@ -186,7 +200,14 @@ export default function AdminAppointmentsPage() {
                 </thead>
                 <tbody>
                   {appointments.map((a) => (
-                    <tr key={a.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                    <tr
+                      key={a.id}
+                      ref={a.id === highlightedId ? highlightRowRef : undefined}
+                      className={cn(
+                        "border-b border-border last:border-0 hover:bg-muted/30",
+                        a.id === highlightedId && "bg-primary/5 ring-1 ring-inset ring-primary"
+                      )}
+                    >
                       <td className="px-4 py-3">
                         <div className="font-medium text-foreground">{a.scheduled_date}</div>
                         <div className="text-xs text-muted-foreground">{a.scheduled_time}</div>

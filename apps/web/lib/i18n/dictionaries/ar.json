@@ -244,6 +244,8 @@
     "noSymptoms": "لا أعراض مسجلة",
     "professionalInfo": "المعلومات المهنية",
     "professionalInfoDesc": "هذه المعلومات مرئية للمرضى عند الحجز",
+    "notificationEmail": "البريد الإلكتروني للإشعارات",
+    "notificationEmailDesc": "العنوان الذي تُرسل إليه إشعارات الحجوزات الجديدة. اتركه فارغاً لإيقافها.",
     "specialty": "التخصص",
     "specialtyPlaceholder": "مثال: طب الأطفال العام",
     "bio": "نبذة عن الطبيب",

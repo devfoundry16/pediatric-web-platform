@@ -63,11 +63,38 @@ export interface AdminDoctorRow {
   id: string;
   full_name: string;
   specialty: string | null;
+  bio?: string | null;
   is_active: boolean;
+  /** Linked auth user. Null means the doctor is bookable but cannot sign in. */
   profile_id: string | null;
   avatar_url: string | null;
   /** IANA zone this doctor's working hours are expressed in. */
   timezone?: string;
+  /** Where booking notifications go. Not a login. */
+  email?: string | null;
+}
+
+/**
+ * Result of syncing the doctors table with a role change. `ok: false` means the
+ * role changed but the record did not follow — the user can sign in but their
+ * doctor dashboard will not work, so it must not be reported as a success.
+ */
+export interface DoctorSyncNotice {
+  ok: boolean;
+  text: string;
+}
+
+export interface CreateDoctorPayload {
+  full_name: string;
+  specialty?: string;
+  bio?: string;
+  avatar_url?: string;
+  /** Notification address. */
+  email?: string;
+  timezone?: string;
+  /** Supply to give the doctor a login; omit for a bookable-only record. */
+  account_email?: string;
+  account_password?: string;
 }
 
 export interface AdminAppointment {
@@ -178,15 +205,17 @@ export const adminApi = {
   listUsers: (params?: { role?: string; search?: string; page?: number; limit?: number }) =>
     get<{ users: AdminUser[]; total: number; page: number; limit: number }>("/users", params as Record<string, string | number | undefined>),
   getUser: (id: string) => get<{ user: AdminUser }>(`/users/${id}`),
+  // `notice` explains any side effect of a role change — promoting to doctor
+  // creates their (inactive) doctor record, demoting retires it.
   updateUser: (id: string, data: Partial<Pick<AdminUser, "full_name" | "phone" | "is_active" | "role">>) =>
-    patch<{ user: AdminUser }>(`/users/${id}`, data),
+    patch<{ user: AdminUser; notice?: DoctorSyncNotice | null }>(`/users/${id}`, data),
   createUser: (data: {
     email: string;
     password: string;
     full_name?: string;
     phone?: string;
     role: AdminUser["role"];
-  }) => post<{ user: AdminUser }>("/users", data),
+  }) => post<{ user: AdminUser; notice?: DoctorSyncNotice | null }>("/users", data),
   deleteUser: (id: string) => del(`/users/${id}`),
 
   // Appointments
@@ -200,8 +229,22 @@ export const adminApi = {
   // The timezone is a doctor attribute, not part of the schedule collection:
   // bundling it into the schedule PUT (which deletes and reinserts every row)
   // would let a mid-load doctor switch write one doctor's zone onto another.
-  updateDoctor: (doctorId: string, data: { timezone?: string }) =>
-    patch<{ doctor: AdminDoctorRow }>(`/doctors/${doctorId}`, data),
+  createDoctor: (data: CreateDoctorPayload) =>
+    post<{ doctor: AdminDoctorRow }>("/doctors", data),
+  updateDoctor: (
+    doctorId: string,
+    data: Partial<
+      Pick<
+        AdminDoctorRow,
+        "full_name" | "specialty" | "bio" | "avatar_url" | "email" | "timezone" | "is_active"
+      >
+    >
+  ) => patch<{ doctor: AdminDoctorRow }>(`/doctors/${doctorId}`, data),
+  /** Create or link the login for an existing doctor record. */
+  linkDoctorAccount: (
+    doctorId: string,
+    data: { account_email: string; account_password?: string }
+  ) => post<{ doctor: AdminDoctorRow; created: boolean }>(`/doctors/${doctorId}/account`, data),
   getDoctorSchedule: (doctorId: string) =>
     get<{ schedule: DoctorScheduleSlot[]; timezone: string }>(`/doctors/${doctorId}/schedule`),
   updateDoctorSchedule: (doctorId: string, slots: Omit<DoctorScheduleSlot, "id" | "doctor_id">[]) =>

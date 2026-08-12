@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
+import { cn } from "@/lib/utils";
+import { useHighlightedAppointment } from "@/hooks/use-highlighted-appointment";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
@@ -105,6 +107,16 @@ function filterAppointments(
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DoctorAppointmentsPage() {
+  // useSearchParams (via useHighlightedAppointment) needs a boundary, or the
+  // route drops out of static prerendering — same pattern as the login page.
+  return (
+    <Suspense fallback={null}>
+      <DoctorAppointmentsContent />
+    </Suspense>
+  );
+}
+
+function DoctorAppointmentsContent() {
   const { dictionary: t } = useI18n();
   const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,6 +124,7 @@ export default function DoctorAppointmentsPage() {
   // Times below are the doctor's own wall clock; label them with their zone
   // rather than asserting GST for everyone.
   const [doctorTimezone, setDoctorTimezone] = useState(DEFAULT_TIMEZONE);
+  const { highlightedId, highlightRef } = useHighlightedAppointment(!loading);
   const [activeTab, setActiveTab] = useState<FilterTab>("all");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [symptomsApt, setSymptomsApt] = useState<DoctorAppointment | null>(
@@ -235,8 +248,14 @@ export default function DoctorAppointmentsPage() {
               const showJoin = apt.status === "confirmed" && !!apt.meeting_url;
               const showComplete = apt.status === "confirmed";
 
+              const isHighlighted = apt.id === highlightedId;
+
               return (
-                <Card key={apt.id}>
+                <Card
+                  key={apt.id}
+                  ref={isHighlighted ? highlightRef : undefined}
+                  className={cn(isHighlighted && "ring-2 ring-primary shadow-md")}
+                >
                   <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex flex-col gap-1.5">
                       <div className="flex items-center gap-2">

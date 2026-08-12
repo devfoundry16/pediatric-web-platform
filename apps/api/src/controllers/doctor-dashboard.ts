@@ -534,12 +534,13 @@ export async function updateDoctorProfile(
     return;
   }
 
-  const { full_name, specialty, bio, avatar_url, timezone } = req.body as {
+  const { full_name, specialty, bio, avatar_url, timezone, email } = req.body as {
     full_name?: string;
     specialty?: string;
     bio?: string;
     avatar_url?: string;
     timezone?: string;
+    email?: string;
   };
 
   const updates: Record<string, string> = {};
@@ -547,6 +548,9 @@ export async function updateDoctorProfile(
   if (specialty !== undefined) updates.specialty = specialty;
   if (bio !== undefined) updates.bio = bio;
   if (avatar_url !== undefined) updates.avatar_url = avatar_url;
+  // Notification address only — this is not a login, and does not touch
+  // auth.users. Empty clears it, which disables the doctor's booking emails.
+  if (email !== undefined) updates.email = email.trim();
   if (timezone !== undefined) {
     // The zone the doctor's working hours are expressed in — it belongs to the
     // doctor, not to the schedule rows, so it is set here rather than being
@@ -567,7 +571,7 @@ export async function updateDoctorProfile(
     .from("doctors")
     .update(updates)
     .eq("id", doctor.id)
-    .select("id, full_name, specialty, bio, avatar_url, timezone")
+    .select("id, full_name, specialty, bio, avatar_url, timezone, email")
     .single();
 
   if (error) {

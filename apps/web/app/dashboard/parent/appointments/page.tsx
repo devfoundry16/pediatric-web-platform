@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { Button } from "@/components/ui/button";
@@ -33,6 +33,8 @@ import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 import { getAppointmentStatusLabel } from "@/lib/i18n/appointment-status";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { useHighlightedAppointment } from "@/hooks/use-highlighted-appointment";
+import { cn } from "@/lib/utils";
 import {
   DEFAULT_TIMEZONE,
   calendarDayInTimezone,
@@ -61,6 +63,16 @@ const getJoinUrl = (appointmentId: string): Promise<string | null> =>
   appointmentsApi.join(appointmentId);
 
 export default function ParentAppointmentsPage() {
+  // useSearchParams (via useHighlightedAppointment) needs a boundary, or the
+  // route drops out of static prerendering — same pattern as the login page.
+  return (
+    <Suspense fallback={null}>
+      <ParentAppointmentsContent />
+    </Suspense>
+  );
+}
+
+function ParentAppointmentsContent() {
   const { dictionary: t } = useI18n();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -78,6 +90,7 @@ export default function ParentAppointmentsPage() {
 
   const { timezone: viewerTimezone } = useViewerTimezone(DEFAULT_TIMEZONE);
   const rescheduleToday = parseLocalYMD(todayInTimezone(rescheduleTimezone));
+  const { highlightedId, highlightRef } = useHighlightedAppointment(!isLoading);
 
   const loadAppointments = () => {
     setIsLoading(true);
@@ -162,8 +175,17 @@ export default function ParentAppointmentsPage() {
       viewerTimezone
     );
 
+    const isHighlighted = appt.id === highlightedId;
+
     return (
-      <Card key={appt.id} className="transition-shadow hover:shadow-sm">
+      <Card
+        key={appt.id}
+        ref={isHighlighted ? highlightRef : undefined}
+        className={cn(
+          "transition-shadow hover:shadow-sm",
+          isHighlighted && "ring-2 ring-primary shadow-md"
+        )}
+      >
         <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2">

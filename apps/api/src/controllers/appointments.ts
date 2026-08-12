@@ -3,10 +3,10 @@ import { supabaseAdmin } from "../lib/supabase";
 import { createMeetingToken } from "../lib/daily";
 import { getStripe } from "../lib/stripe";
 import {
-  sendBookingConfirmation,
   sendCancellationEmail,
   sendRescheduleEmail,
 } from "../lib/resend";
+import { notifyBookingConfirmed } from "../lib/booking-notifications";
 import { CONSULTATION_CONFIG, isBlockingAppointment } from "../lib/consultation";
 import { generateSlots } from "../lib/slots";
 import { hhmmToMinutes } from "../lib/timezone";
@@ -292,30 +292,12 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
       });
   }
 
-  // Confirmation email only once the booking is actually confirmed (credit
-  // path). One-time paid consults are emailed after Stripe payment settles.
+  // Notify parent, doctor and admins — but only once the booking is actually
+  // confirmed, which on the credit path is now. A one-time paid consult is
+  // still pending here; it is notified when Stripe settles (webhook, or the
+  // verify fallback).
   if (appointment && usedPackageId) {
-    resolveParentEmail(req.userId!).then(async (parent) => {
-      if (!parent) return;
-      const { data: doctor } = await supabaseAdmin!
-        .from("doctors")
-        .select("full_name")
-        .eq("id", assignedDoctorId)
-        .single();
-      sendBookingConfirmation({
-        appointmentId: appointment.id,
-        parentEmail: parent.email,
-        parentName: parent.name,
-        parentUserId: req.userId,
-        doctorName: doctor?.full_name ?? "Your doctor",
-        scheduledDate: date,
-        scheduledTime: time,
-        timezone: doctorTimezone,
-        consultationType: consultationType,
-        durationMinutes: config.duration,
-        priceAed: 0,
-      }).catch(() => {});
-    }).catch(() => {});
+    void notifyBookingConfirmed(appointment.id);
   }
 
   res.status(201).json({
@@ -415,8 +397,12 @@ export async function verifyAppointmentPayment(req: Request, res: Response): Pro
     return;
   }
 
-  // Already settled (e.g. the webhook won the race) — nothing to do.
+  // Already settled (e.g. the webhook won the race) — nothing to update, but
+  // still hand off to the notifier. If the webhook's send failed (Resend down,
+  // migration not yet applied), this is the only other chance to deliver it;
+  // it dedupes on email_logs, so a successful send is not repeated.
   if (appt.payment_status === "paid") {
+    void notifyBookingConfirmed(id as string);
     res.json({ paymentStatus: "paid", status: appt.status });
     return;
   }
@@ -457,6 +443,11 @@ export async function verifyAppointmentPayment(req: Request, res: Response): Pro
     res.status(500).json({ error: updateError.message });
     return;
   }
+
+  // Fallback for a delayed or unreachable webhook: whichever path confirms the
+  // booking first sends the notifications. Deduped against the webhook via
+  // email_logs.
+  void notifyBookingConfirmed(id as string);
 
   res.json({ paymentStatus: "paid", status: "confirmed" });
 }
@@ -708,6 +699,7 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
       parentEmail: parent.email,
       parentName: parent.name,
       parentUserId: req.userId,
+      appointmentUrl: `${process.env.FRONTEND_URL ?? "http://localhost:3333"}/dashboard/parent/appointments?appointment=${id}`,
       doctorName: docRow?.full_name ?? "Your doctor",
       scheduledDate: newDate as string,
       scheduledTime: newTime as string,

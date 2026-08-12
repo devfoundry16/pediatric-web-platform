@@ -145,7 +145,7 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
   // Load the target to enforce admin-safety guards.
   const { data: target } = await supabaseAdmin
     .from("profiles")
-    .select("id, role, is_active")
+    .select("id, role, is_active, full_name")
     .eq("id", id)
     .single();
 
@@ -196,7 +196,131 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
     }
   }
 
-  res.json({ user: data });
+  // Keep the doctors table in step with the role.
+  //
+  // role='doctor' on its own only makes a login: the doctor dashboard resolves
+  // through doctors.profile_id and booking lists from `doctors`, so without a
+  // row the promoted user hits "No doctor profile found" everywhere. Demoting
+  // has the mirror problem — they lose the dashboard but stay bookable.
+  let doctorNotice: DoctorSyncNotice | null = null;
+  if (role !== undefined && role !== target.role) {
+    doctorNotice = await syncDoctorRecordWithRole(
+      id as string,
+      role,
+      target.role,
+      (data?.full_name as string) || target.full_name || "Doctor"
+    );
+  }
+
+  res.json({ user: data, notice: doctorNotice });
+}
+
+/**
+ * Outcome of keeping the doctors table in step with a role change.
+ *
+ * `ok: false` means the role changed but the doctor record did not follow, so
+ * the UI can show it as a warning instead of losing it next to a success
+ * toast — that state leaves a user who can sign in but has no working doctor
+ * dashboard, which is not something to report quietly.
+ */
+interface DoctorSyncNotice {
+  ok: boolean;
+  text: string;
+}
+
+/**
+ * Create or remove the doctors row behind a role change.
+ *
+ * Promotion creates the record INACTIVE: it has no specialty, no working hours
+ * and no notification address yet, and making someone bookable the instant
+ * their role changes is not what an admin is asking for. The returned notice
+ * points them at Doctors to finish.
+ *
+ * Demotion deletes it, taking their working hours and blocked dates with it
+ * (both ON DELETE CASCADE). A doctor who has ever been booked cannot be
+ * deleted — appointments.doctor_id is ON DELETE RESTRICT precisely so that
+ * history cannot be destroyed — so those are retired instead, and the notice
+ * says which happened.
+ */
+async function syncDoctorRecordWithRole(
+  userId: string,
+  nextRole: string,
+  previousRole: string,
+  fullName: string
+): Promise<DoctorSyncNotice | null> {
+  const { data: existing } = await supabaseAdmin!
+    .from("doctors")
+    .select("id, is_active")
+    .eq("profile_id", userId)
+    .maybeSingle();
+
+  if (nextRole === "doctor") {
+    // Re-promoting someone whose record was retired rather than deleted: the
+    // row is still there but not bookable, and re-enabling that is a decision
+    // for the admin, not a side effect of the role change.
+    if (existing) {
+      return existing.is_active
+        ? null
+        : { ok: true, text: "They already have a doctor record, which is not bookable. Enable it under Doctors." };
+    }
+    const { error } = await supabaseAdmin!
+      .from("doctors")
+      .insert({
+        profile_id: userId,
+        full_name: fullName,
+        // timezone and specialty are left to their column defaults rather than
+        // restated here: naming a column that a pending migration has not added
+        // yet fails the whole insert, and the default is the value we'd send.
+        is_active: false,
+      });
+    if (error) {
+      console.error(
+        `[admin] Could not create doctor record for ${userId}: ${error.message}` +
+          (error.code ? ` (${error.code})` : "")
+      );
+      return {
+        ok: false,
+        text: `The doctor record could not be created: ${error.message}. They can sign in but the doctor dashboard will not work until it exists.`,
+      };
+    }
+    return { ok: true, text: "Doctor record created. Set their specialty, hours and timezone under Doctors, then mark them bookable." };
+  }
+
+  if (previousRole === "doctor" && existing) {
+    const { error } = await supabaseAdmin!.from("doctors").delete().eq("id", existing.id);
+
+    if (!error) {
+      // doctor_schedules and doctor_holidays cascade away with it, which is
+      // what removing a doctor should mean. Anything they authored --
+      // medical_records, courses, group_sessions -- is ON DELETE SET NULL, so
+      // the content survives but loses its attribution.
+      return { ok: true, text: "Their doctor record and working hours have been deleted." };
+    }
+
+    // 23503 = foreign key violation. appointments.doctor_id is ON DELETE
+    // RESTRICT, so a doctor with any booking -- including cancelled or
+    // completed history -- cannot be deleted without destroying that history.
+    // Retire the record instead of failing the role change.
+    if (error.code === "23503") {
+      const { error: retireErr } = await supabaseAdmin!
+        .from("doctors")
+        .update({ is_active: false })
+        .eq("id", existing.id);
+      if (retireErr) {
+        console.error(`[admin] Could not retire doctor record for ${userId}:`, retireErr.message);
+        return { ok: false, text: `Their doctor record could not be removed: ${retireErr.message}` };
+      }
+      return {
+        ok: true,
+        text: "They have appointment history, so their doctor record was retired rather than deleted. It is no longer bookable.",
+      };
+    }
+
+    console.error(`[admin] Could not delete doctor record for ${userId}:`, error.message);
+    return { ok: false, text: `Their doctor record could not be removed: ${error.message}` };
+  }
+
+  return null;
 }
 
 export async function createUser(req: Request, res: Response): Promise<void> {
@@ -238,7 +362,14 @@ export async function createUser(req: Request, res: Response): Promise<void> {
 
   if (upsertErr) { res.status(500).json({ error: upsertErr.message }); return; }
 
+  // Same reason as the role-change path: role='doctor' alone is only a login.
+  const notice =
+    role === "doctor"
+      ? await syncDoctorRecordWithRole(created.user.id, role, "parent", full_name ?? "Doctor")
+      : null;
+
   res.status(201).json({
+    notice,
     user: {
       id: created.user.id,
       email,
@@ -444,13 +575,29 @@ export async function updateDoctorAdmin(req: Request, res: Response): Promise<vo
   if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
 
   const { doctorId } = req.params;
-  const { timezone } = req.body as { timezone?: string };
+  const { timezone, email, full_name, specialty, bio, avatar_url, is_active } =
+    req.body as Partial<DoctorInput> & { is_active?: boolean };
 
   const updates: Record<string, unknown> = {};
   if (timezone !== undefined) {
     if (!isValidTimezone(timezone)) { res.status(400).json({ error: "Invalid timezone" }); return; }
     updates.timezone = timezone;
   }
+  // Notification address only — not a login, and independent of profile_id.
+  if (email !== undefined) updates.email = email.trim() || null;
+  if (full_name !== undefined) {
+    if (!full_name.trim()) { res.status(400).json({ error: "Name is required" }); return; }
+    updates.full_name = full_name.trim();
+  }
+  // specialty is NOT NULL with a default, so a blank field means "leave it"
+  // rather than "clear it" — writing null would just error.
+  if (specialty !== undefined && specialty.trim()) updates.specialty = specialty.trim();
+  if (bio !== undefined) updates.bio = bio.trim() || null;
+  if (avatar_url !== undefined) updates.avatar_url = avatar_url.trim() || null;
+  // Controls bookability, not login — a deactivated doctor disappears from the
+  // booking flow but any account they hold still works (see profiles.is_active
+  // for that).
+  if (is_active !== undefined) updates.is_active = !!is_active;
 
   if (Object.keys(updates).length === 0) {
     res.status(400).json({ error: "No updatable fields provided" });
@@ -461,11 +608,203 @@ export async function updateDoctorAdmin(req: Request, res: Response): Promise<vo
     .from("doctors")
     .update(updates)
     .eq("id", doctorId)
-    .select("id, full_name, timezone")
+    .select(DOCTOR_FIELDS)
     .single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ doctor: data });
+}
+
+const DOCTOR_FIELDS =
+  "id, full_name, specialty, bio, avatar_url, email, timezone, is_active, profile_id";
+
+interface DoctorInput {
+  full_name: string;
+  specialty?: string;
+  bio?: string;
+  avatar_url?: string;
+  email?: string;
+  timezone?: string;
+}
+
+/**
+ * Create a bookable doctor.
+ *
+ * Creating a user with role='doctor' is NOT enough on its own: the doctor
+ * dashboard resolves through doctors.profile_id, and the booking flow lists
+ * from `doctors`. Migration 012 stopped auto-creating this row at signup and
+ * left provisioning to "an admin step" that was never built — this is it.
+ *
+ * A login is optional. Doctors can be bookable without an account (that is why
+ * doctors.profile_id is nullable, and how Dr Sahar is seeded), so the account
+ * is provisioned only when credentials are supplied.
+ */
+export async function createDoctorAdmin(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
+
+  const { full_name, specialty, bio, avatar_url, email, timezone } = req.body as DoctorInput;
+  const { account_email, account_password } = req.body as {
+    account_email?: string;
+    account_password?: string;
+  };
+
+  if (!full_name?.trim()) {
+    res.status(400).json({ error: "Name is required" });
+    return;
+  }
+  if (timezone !== undefined && !isValidTimezone(timezone)) {
+    res.status(400).json({ error: "Invalid timezone" });
+    return;
+  }
+
+  let profileId: string | null = null;
+  if (account_email?.trim()) {
+    const account = await provisionDoctorAccount(
+      account_email.trim(),
+      account_password,
+      full_name.trim()
+    );
+    if ("error" in account) {
+      res.status(account.status).json({ error: account.error });
+      return;
+    }
+    profileId = account.userId;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("doctors")
+    .insert({
+      full_name: full_name.trim(),
+      // Omitted when blank so the column default applies — it is NOT NULL.
+      ...(specialty?.trim() ? { specialty: specialty.trim() } : {}),
+      bio: bio?.trim() || null,
+      avatar_url: avatar_url?.trim() || null,
+      email: email?.trim() || null,
+      timezone: timezone || DEFAULT_TIMEZONE,
+      profile_id: profileId,
+      is_active: true,
+    })
+    .select(DOCTOR_FIELDS)
+    .single();
+
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.status(201).json({ doctor: data });
+}
+
+/**
+ * Give an existing doctors row a login, creating the account if needed.
+ *
+ * Seeded doctors have profile_id NULL and so cannot sign in at all; this is the
+ * only way to attach an account to them without SQL. An address that already
+ * has an account is linked rather than rejected, which is the common case when
+ * the admin created the user first via Users.
+ */
+export async function linkDoctorAccountAdmin(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
+
+  const { doctorId } = req.params;
+  const { account_email, account_password } = req.body as {
+    account_email?: string;
+    account_password?: string;
+  };
+
+  if (!account_email?.trim()) {
+    res.status(400).json({ error: "account_email is required" });
+    return;
+  }
+
+  const { data: doctor } = await supabaseAdmin
+    .from("doctors")
+    .select("id, full_name, profile_id")
+    .eq("id", doctorId)
+    .single();
+
+  if (!doctor) { res.status(404).json({ error: "Doctor not found" }); return; }
+
+  const account = await provisionDoctorAccount(
+    account_email.trim(),
+    account_password,
+    doctor.full_name
+  );
+  if ("error" in account) {
+    res.status(account.status).json({ error: account.error });
+    return;
+  }
+
+  // One account, one doctor: linking a user already attached elsewhere would
+  // hand them that doctor's patients and PHI.
+  const { data: clash } = await supabaseAdmin
+    .from("doctors")
+    .select("id")
+    .eq("profile_id", account.userId)
+    .neq("id", doctorId)
+    .maybeSingle();
+
+  if (clash) {
+    res.status(409).json({ error: "That account is already linked to another doctor." });
+    return;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("doctors")
+    .update({ profile_id: account.userId })
+    .eq("id", doctorId)
+    .select(DOCTOR_FIELDS)
+    .single();
+
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ doctor: data, created: account.created });
+}
+
+/**
+ * Find or create the auth user behind a doctor login, and make sure their
+ * profile carries role='doctor' so middleware routes them to the doctor
+ * dashboard.
+ */
+async function provisionDoctorAccount(
+  email: string,
+  password: string | undefined,
+  fullName: string
+): Promise<{ userId: string; created: boolean } | { error: string; status: number }> {
+  const { data: existing } = await supabaseAdmin!.auth.admin.listUsers({ perPage: 1000 });
+  const match = (existing?.users ?? []).find(
+    (u) => u.email?.toLowerCase() === email.toLowerCase()
+  );
+
+  let userId: string;
+  let created = false;
+
+  if (match) {
+    userId = match.id;
+  } else {
+    if (!password || String(password).length < 6) {
+      return {
+        error: "A password of at least 6 characters is required to create a new account.",
+        status: 400,
+      };
+    }
+    const { data: createdUser, error: createErr } = await supabaseAdmin!.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName, role: "doctor" },
+    });
+    if (createErr || !createdUser?.user) {
+      return { error: createErr?.message ?? "Failed to create account", status: 400 };
+    }
+    userId = createdUser.user.id;
+    created = true;
+  }
+
+  // handle_new_user inserts the profile as 'parent' (migration 012); promote it
+  // here, which is permitted because the API runs as service_role.
+  const { error: profileErr } = await supabaseAdmin!
+    .from("profiles")
+    .upsert({ id: userId, full_name: fullName, role: "doctor", is_active: true }, { onConflict: "id" });
+
+  if (profileErr) return { error: profileErr.message, status: 500 };
+
+  return { userId, created };
 }
 
 export async function getDoctorHolidaysAdmin(req: Request, res: Response): Promise<void> {
@@ -733,7 +1072,7 @@ export async function listDoctors(req: Request, res: Response): Promise<void> {
 
   const { data, error } = await supabaseAdmin
     .from("doctors")
-    .select("id, full_name, specialty, is_active, profile_id, timezone")
+    .select(DOCTOR_FIELDS)
     .order("full_name");
 
   if (error) { res.status(500).json({ error: error.message }); return; }
