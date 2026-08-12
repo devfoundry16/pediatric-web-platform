@@ -202,7 +202,7 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
   // through doctors.profile_id and booking lists from `doctors`, so without a
   // row the promoted user hits "No doctor profile found" everywhere. Demoting
   // has the mirror problem — they lose the dashboard but stay bookable.
-  let doctorNotice: string | null = null;
+  let doctorNotice: DoctorSyncNotice | null = null;
   if (role !== undefined && role !== target.role) {
     doctorNotice = await syncDoctorRecordWithRole(
       id as string,
@@ -213,6 +213,19 @@ export async function updateUser(req: Request, res: Response): Promise<void> {
   }
 
   res.json({ user: data, notice: doctorNotice });
+}
+
+/**
+ * Outcome of keeping the doctors table in step with a role change.
+ *
+ * `ok: false` means the role changed but the doctor record did not follow, so
+ * the UI can show it as a warning instead of losing it next to a success
+ * toast — that state leaves a user who can sign in but has no working doctor
+ * dashboard, which is not something to report quietly.
+ */
+interface DoctorSyncNotice {
+  ok: boolean;
+  text: string;
 }
 
 /**
@@ -234,7 +247,7 @@ async function syncDoctorRecordWithRole(
   nextRole: string,
   previousRole: string,
   fullName: string
-): Promise<string | null> {
+): Promise<DoctorSyncNotice | null> {
   const { data: existing } = await supabaseAdmin!
     .from("doctors")
     .select("id, is_active")
@@ -248,21 +261,29 @@ async function syncDoctorRecordWithRole(
     if (existing) {
       return existing.is_active
         ? null
-        : "They already have a doctor record, which is not bookable. Enable it under Doctors.";
+        : { ok: true, text: "They already have a doctor record, which is not bookable. Enable it under Doctors." };
     }
     const { error } = await supabaseAdmin!
       .from("doctors")
       .insert({
         profile_id: userId,
         full_name: fullName,
-        timezone: DEFAULT_TIMEZONE,
+        // timezone and specialty are left to their column defaults rather than
+        // restated here: naming a column that a pending migration has not added
+        // yet fails the whole insert, and the default is the value we'd send.
         is_active: false,
       });
     if (error) {
-      console.error(`[admin] Could not create doctor record for ${userId}:`, error.message);
-      return "Role updated, but the doctor record could not be created. Add it under Doctors.";
+      console.error(
+        `[admin] Could not create doctor record for ${userId}: ${error.message}` +
+          (error.code ? ` (${error.code})` : "")
+      );
+      return {
+        ok: false,
+        text: `The doctor record could not be created: ${error.message}. They can sign in but the doctor dashboard will not work until it exists.`,
+      };
     }
-    return "Doctor record created. Set their specialty, hours and timezone under Doctors, then mark them bookable.";
+    return { ok: true, text: "Doctor record created. Set their specialty, hours and timezone under Doctors, then mark them bookable." };
   }
 
   if (previousRole === "doctor" && existing) {
@@ -273,7 +294,7 @@ async function syncDoctorRecordWithRole(
       // what removing a doctor should mean. Anything they authored --
       // medical_records, courses, group_sessions -- is ON DELETE SET NULL, so
       // the content survives but loses its attribution.
-      return "Their doctor record and working hours have been deleted.";
+      return { ok: true, text: "Their doctor record and working hours have been deleted." };
     }
 
     // 23503 = foreign key violation. appointments.doctor_id is ON DELETE
@@ -287,13 +308,16 @@ async function syncDoctorRecordWithRole(
         .eq("id", existing.id);
       if (retireErr) {
         console.error(`[admin] Could not retire doctor record for ${userId}:`, retireErr.message);
-        return null;
+        return { ok: false, text: `Their doctor record could not be removed: ${retireErr.message}` };
       }
-      return "They have appointment history, so their doctor record was retired rather than deleted. It is no longer bookable.";
+      return {
+        ok: true,
+        text: "They have appointment history, so their doctor record was retired rather than deleted. It is no longer bookable.",
+      };
     }
 
     console.error(`[admin] Could not delete doctor record for ${userId}:`, error.message);
-    return "Role updated, but their doctor record could not be removed. Check it under Doctors.";
+    return { ok: false, text: `Their doctor record could not be removed: ${error.message}` };
   }
 
   return null;

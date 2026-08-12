@@ -124,7 +124,9 @@ export default function AdminUsersPage() {
       toast.success("User updated.");
       // A role change can create or retire their doctor record; say so rather
       // than leaving the admin to discover it under Doctors.
-      if (notice) toast.info(notice, { duration: 8000 });
+      if (notice) {
+        toast[notice.ok ? "info" : "warning"](notice.text, { duration: 10000 });
+      }
       setEditing(null);
       load();
     } catch (e) {
@@ -154,7 +156,9 @@ export default function AdminUsersPage() {
         role: createRole,
       });
       toast.success("User created.");
-      if (notice) toast.info(notice, { duration: 8000 });
+      if (notice) {
+        toast[notice.ok ? "info" : "warning"](notice.text, { duration: 10000 });
+      }
       setCreating(false);
       load();
     } catch (e) {

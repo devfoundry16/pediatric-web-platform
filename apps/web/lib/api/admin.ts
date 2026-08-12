@@ -74,6 +74,16 @@ export interface AdminDoctorRow {
   email?: string | null;
 }
 
+/**
+ * Result of syncing the doctors table with a role change. `ok: false` means the
+ * role changed but the record did not follow — the user can sign in but their
+ * doctor dashboard will not work, so it must not be reported as a success.
+ */
+export interface DoctorSyncNotice {
+  ok: boolean;
+  text: string;
+}
+
 export interface CreateDoctorPayload {
   full_name: string;
   specialty?: string;
@@ -198,14 +208,14 @@ export const adminApi = {
   // `notice` explains any side effect of a role change — promoting to doctor
   // creates their (inactive) doctor record, demoting retires it.
   updateUser: (id: string, data: Partial<Pick<AdminUser, "full_name" | "phone" | "is_active" | "role">>) =>
-    patch<{ user: AdminUser; notice?: string | null }>(`/users/${id}`, data),
+    patch<{ user: AdminUser; notice?: DoctorSyncNotice | null }>(`/users/${id}`, data),
   createUser: (data: {
     email: string;
     password: string;
     full_name?: string;
     phone?: string;
     role: AdminUser["role"];
-  }) => post<{ user: AdminUser; notice?: string | null }>("/users", data),
+  }) => post<{ user: AdminUser; notice?: DoctorSyncNotice | null }>("/users", data),
   deleteUser: (id: string) => del(`/users/${id}`),
 
   // Appointments
