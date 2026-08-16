@@ -267,6 +267,27 @@ export function calendarDayInTimezone(iso: string | Date, tz: string): string {
 }
 
 /**
+ * Wall-clock time (HH:MM, 24-hour) an instant falls on in `tz`.
+ *
+ * The counterpart to calendarDayInTimezone: together they fill the date and
+ * time inputs of a form whose value is submitted back through
+ * wallClockToInstant. formatTimeInTimezone is for display and returns a
+ * localized "9:00 AM", which `<input type="time">` will not accept.
+ */
+export function clockTimeInTimezone(iso: string | Date, tz: string): string {
+  const d = iso instanceof Date ? iso : new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hourCycle: "h23",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(d);
+  const at = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${at("hour")}:${at("minute")}`;
+}
+
+/**
  * Date + time for a stored appointment, rendered in `viewerTz`.
  *
  * `date`/`time` are the stored wall clock and `apptTz` the zone they belong to
