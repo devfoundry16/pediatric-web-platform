@@ -24,6 +24,8 @@ interface StripeSessionCreate {
 interface StripeCheckoutSessionResponse {
   id: string;
   payment_status: string;
+  /** Persisted at fulfilment — refunds and disputes are matched on it, not on the session id. */
+  payment_intent: string | null;
   metadata: Record<string, string> | null;
 }
 interface StripeClient {
@@ -895,9 +897,17 @@ export async function verifySessionPayment(
     return;
   }
 
+  // stripe_payment_intent matters as much as the status: charge.refunded and
+  // charge.dispute.* carry a payment_intent, never a checkout-session id, so a
+  // registration confirmed down this path without it could be refunded or
+  // charged back and keep its access. verifyAppointmentPayment does the same.
   const { error } = await supabaseAdmin
     .from("session_registrations")
-    .update({ payment_status: "paid", stripe_session_id: stripeSessionId })
+    .update({
+      payment_status: "paid",
+      stripe_session_id: stripeSessionId,
+      stripe_payment_intent: checkoutSession.payment_intent,
+    })
     .eq("session_id", sessionId)
     .eq("user_id", userId);
 
