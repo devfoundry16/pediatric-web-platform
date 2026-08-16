@@ -26,6 +26,7 @@ import {
   listDoctors,
   updateDoctorAdmin,
 } from "../controllers/admin";
+import { updateFeatureFlag } from "../controllers/feature-flags";
 
 const router = Router();
 
@@ -74,5 +75,9 @@ router.get("/notes", listNotes);
 
 // Email logs
 router.get("/email-logs", listEmailLogs);
+
+// Feature flags ("coming soon" switches). Reading them is public — see
+// GET /api/feature-flags — so only the write lives here.
+router.patch("/feature-flags/:key", updateFeatureFlag);
 
 export default router;
