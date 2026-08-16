@@ -2,10 +2,12 @@
 
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { useFeatureFlag } from "@/lib/feature-flags/feature-flags-context";
 import { Heart } from "lucide-react";
 
 export function SiteFooter() {
   const { dictionary: t } = useI18n();
+  const coursesEnabled = useFeatureFlag("courses");
 
   return (
     <footer className="border-t border-border bg-card">
@@ -54,14 +56,16 @@ export function SiteFooter() {
                   {t.common.packages}
                 </Link>
               </li>
-              <li>
-                <Link
-                  href="/courses"
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
-                  {t.common.courses}
-                </Link>
-              </li>
+              {coursesEnabled && (
+                <li>
+                  <Link
+                    href="/courses"
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    {t.common.courses}
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
 
@@ -86,14 +90,16 @@ export function SiteFooter() {
                   {t.common.liveSessions}
                 </Link>
               </li>
-              <li>
-                <Link
-                  href="/courses"
-                  className="text-sm text-muted-foreground hover:text-foreground"
-                >
-                  {t.landing.service5Title}
-                </Link>
-              </li>
+              {coursesEnabled && (
+                <li>
+                  <Link
+                    href="/courses"
+                    className="text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    {t.landing.service5Title}
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
 

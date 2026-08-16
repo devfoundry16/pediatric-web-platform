@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { useFeatureFlag } from "@/lib/feature-flags/feature-flags-context";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -22,12 +23,15 @@ export function SiteHeader() {
   const { dictionary: t, isRtl } = useI18n();
   const [open, setOpen] = useState(false);
   const user = useAuthStore((s) => s.user);
+  const coursesEnabled = useFeatureFlag("courses");
 
   const navLinks = [
     { href: "/", label: t.common.home },
     { href: "/#services", label: t.common.services },
     { href: "/#packages", label: t.common.packages },
-    { href: "/courses", label: t.common.courses },
+    // Courses stay out of the nav while the section is marked coming soon;
+    // the landing page still advertises it with a "coming soon" badge.
+    ...(coursesEnabled ? [{ href: "/courses", label: t.common.courses }] : []),
     { href: "/live-sessions", label: t.common.liveSessions },
   ];
 

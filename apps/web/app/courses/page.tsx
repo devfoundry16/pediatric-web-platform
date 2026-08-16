@@ -4,6 +4,9 @@ import { useI18n } from "@/lib/i18n/i18n-context";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { CourseCard } from "@/components/courses/course-card";
+import { ComingSoon } from "@/components/coming-soon";
+import { useFeatureFlag } from "@/lib/feature-flags/feature-flags-context";
+import { GraduationCap } from "lucide-react";
 
 const mockCourses = [
   {
@@ -60,6 +63,7 @@ const mockCourses = [
 
 export default function CoursesPage() {
   const { dictionary: t } = useI18n();
+  const coursesEnabled = useFeatureFlag("courses");
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -75,11 +79,21 @@ export default function CoursesPage() {
             </p>
           </div>
 
-          <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {mockCourses.map((course) => (
-              <CourseCard key={course.id} course={course} />
-            ))}
-          </div>
+          {coursesEnabled ? (
+            <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {mockCourses.map((course) => (
+                <CourseCard key={course.id} course={course} />
+              ))}
+            </div>
+          ) : (
+            <div className="mx-auto mt-12 max-w-2xl">
+              <ComingSoon
+                title={t.courses.comingSoonTitle}
+                description={t.courses.comingSoonDesc}
+                icon={GraduationCap}
+              />
+            </div>
+          )}
         </div>
       </main>
       <SiteFooter />
