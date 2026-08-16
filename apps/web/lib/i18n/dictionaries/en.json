@@ -40,7 +40,8 @@
     "faq": "FAQ",
     "privacyPolicy": "Privacy Policy",
     "termsOfService": "Terms of Service",
-    "accountMenu": "Account menu"
+    "accountMenu": "Account menu",
+    "comingSoon": "Coming Soon"
   },
   "landing": {
     "heroTitle": "Expert Pediatric Care for Your Child",
@@ -484,6 +485,8 @@
   "courses": {
     "title": "Educational Courses",
     "subtitle": "Learn from expert-led pediatric courses at your own pace",
+    "comingSoonTitle": "Our courses are coming soon",
+    "comingSoonDesc": "We are still putting the finishing touches on our expert-led pediatric courses. They will be available here as soon as they are ready.",
     "enrolled": "Enrolled",
     "progress": "Progress",
     "lessons": "lessons",
