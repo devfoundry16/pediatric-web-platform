@@ -42,9 +42,19 @@ export interface GroupSession {
   doctors: SessionDoctor | null;
 }
 
+/** 'refunded' was added by migration 012 when refund/chargeback revocation landed. */
+export type RegistrationPaymentStatus = "free" | "pending" | "paid" | "refunded";
+
+/** A registration only grants access in these states — the join endpoint agrees. */
+export function isConfirmedRegistration(
+  status: RegistrationPaymentStatus | undefined
+): boolean {
+  return status === "free" || status === "paid";
+}
+
 export interface SessionRegistration {
   id: string;
-  payment_status: "free" | "pending" | "paid";
+  payment_status: RegistrationPaymentStatus;
   registered_at: string;
   group_sessions: GroupSession | null;
 }
@@ -59,7 +69,7 @@ export interface CreateSessionPayload {
   is_published?: boolean;
 }
 
-export interface UpdateSessionPayload extends Partial<CreateSessionPayload> {}
+export type UpdateSessionPayload = Partial<CreateSessionPayload>;
 
 // ─── API client ───────────────────────────────────────────────────────────────
 

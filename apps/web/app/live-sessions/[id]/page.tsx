@@ -22,6 +22,7 @@ import {
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import {
   liveSessionsApi,
+  isConfirmedRegistration,
   type GroupSession,
   type SessionRegistration,
 } from "@/lib/api/live-sessions";
@@ -86,9 +87,32 @@ export default function SessionDetailPage() {
     void load();
   }, [params.id, user]);
 
-  const isRegistered =
-    registration?.payment_status === "free" ||
-    registration?.payment_status === "paid";
+  const isRegistered = isConfirmedRegistration(registration?.payment_status);
+  const paymentPending = registration?.payment_status === "pending";
+
+  // The doctor can start the room at any moment. Without this the page keeps
+  // showing "Scheduled" and withholds the Join button until a manual reload.
+  const isPollable =
+    session?.status === "scheduled" || session?.status === "live";
+
+  useEffect(() => {
+    if (!isPollable) return;
+    let cancelled = false;
+
+    const interval = setInterval(() => {
+      liveSessionsApi
+        .getSession(params.id)
+        .then((s) => { if (!cancelled) setSession(s); })
+        .catch(() => {
+          // Transient failure — keep showing the last good state.
+        });
+    }, 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isPollable, params.id]);
 
   async function handleRegister() {
     if (!user) {
@@ -141,6 +165,15 @@ export default function SessionDetailPage() {
   const spotsLeft = session.max_participants - session.participant_count;
   const isFull = spotsLeft <= 0;
   const scheduledDate = new Date(session.scheduled_at);
+
+  // A session the doctor never started stays 'scheduled' forever, so the status
+  // alone would keep offering registration long after the slot passed. The API
+  // rejects it either way; this stops the page promising otherwise. Safe to
+  // read the clock during render — this branch is only reached once the session
+  // has loaded client-side.
+  const hasFinished =
+    Date.now() > scheduledDate.getTime() + session.duration_minutes * 60_000;
+  const registrationClosed = hasFinished || session.status === "cancelled";
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -280,6 +313,14 @@ export default function SessionDetailPage() {
                       {formatTimeInTimezone(scheduledDate, viewerTimezone)}
                     </p>
                   </div>
+                ) : session.status === "cancelled" ? (
+                  <p className="text-sm text-center text-destructive font-medium">
+                    {t.liveSessions.statusCancelled}
+                  </p>
+                ) : registrationClosed ? (
+                  <p className="text-sm text-center text-muted-foreground font-medium">
+                    {t.liveSessions.registrationClosed}
+                  </p>
                 ) : isFull ? (
                   <p className="text-sm text-center text-destructive font-medium">
                     {t.liveSessions.sessionFull}
@@ -299,11 +340,23 @@ export default function SessionDetailPage() {
                   </Button>
                 )}
 
-                {!isFull && !isRegistered && session.status === "scheduled" && (
-                  <p className="text-xs text-center text-muted-foreground">
-                    {spotsLeft} {t.liveSessions.spotsLeft}
+                {/* Checkout was started but never paid, so no place is held —
+                    say so rather than letting the Register button imply the
+                    first attempt simply vanished. */}
+                {paymentPending && !isRegistered && !registrationClosed && (
+                  <p className="text-xs text-center text-amber-600">
+                    {t.liveSessions.paymentPending}
                   </p>
                 )}
+
+                {!isFull &&
+                  !isRegistered &&
+                  !registrationClosed &&
+                  session.status === "scheduled" && (
+                    <p className="text-xs text-center text-muted-foreground">
+                      {spotsLeft} {t.liveSessions.spotsLeft}
+                    </p>
+                  )}
               </CardContent>
             </Card>
           </div>

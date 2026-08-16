@@ -7,9 +7,18 @@ import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { SessionCard } from "@/components/live-sessions/session-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { liveSessionsApi, type GroupSession } from "@/lib/api/live-sessions";
+import {
+  liveSessionsApi,
+  isConfirmedRegistration,
+  type GroupSession,
+  type RegistrationPaymentStatus,
+} from "@/lib/api/live-sessions";
+import { useAuthStore } from "@/lib/stores/auth-store";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
+
+/** The list is public, so a doctor going live has to be picked up by polling. */
+const REFRESH_MS = 30_000;
 
 export default function LiveSessionsPage() {
   const { dictionary: t } = useI18n();
@@ -17,27 +26,56 @@ export default function LiveSessionsPage() {
   // zone explicitly, rather than relying on the runtime default and then
   // labelling it GST regardless.
   const { timezone: viewerTimezone } = useViewerTimezone();
+  const user = useAuthStore((s) => s.user);
   const [upcoming, setUpcoming] = useState<GroupSession[]>([]);
   const [past, setPast] = useState<GroupSession[]>([]);
+  const [registrations, setRegistrations] = useState<
+    Map<string, RegistrationPaymentStatus>
+  >(new Map());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function load() {
       try {
-        const [up, pa] = await Promise.all([
+        // The list endpoint is unauthenticated and cannot know who is asking,
+        // so the viewer's own registrations are fetched alongside and joined
+        // here — otherwise every card offers "Register" to someone who already
+        // holds a place.
+        const [up, pa, regs] = await Promise.all([
           liveSessionsApi.listSessions("upcoming"),
           liveSessionsApi.listSessions("past"),
+          user
+            ? liveSessionsApi.getMyRegistrations().catch(() => [])
+            : Promise.resolve([]),
         ]);
+        if (cancelled) return;
         setUpcoming(up);
         setPast(pa);
+        setRegistrations(
+          new Map(
+            regs.flatMap((r) =>
+              r.group_sessions
+                ? [[r.group_sessions.id, r.payment_status] as const]
+                : []
+            )
+          )
+        );
       } catch {
-        // leave empty arrays on error
+        // Keep whatever is already on screen rather than blanking the page.
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
+
     void load();
-  }, []);
+    const interval = setInterval(() => void load(), REFRESH_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [user]);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -86,6 +124,11 @@ export default function LiveSessionsPage() {
                         currentUsers: session.participant_count,
                         price: Number(session.price_aed),
                         isLive: session.status === "live",
+                        isRegistered: isConfirmedRegistration(
+                          registrations.get(session.id)
+                        ),
+                        paymentPending:
+                          registrations.get(session.id) === "pending",
                       }}
                     />
                   </Link>
