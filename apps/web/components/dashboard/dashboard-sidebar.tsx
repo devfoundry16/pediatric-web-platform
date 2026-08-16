@@ -5,7 +5,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { LanguageSwitcher } from "@/components/language-switcher";
-import { useFeatureFlag } from "@/lib/feature-flags/feature-flags-context";
 import { cn } from "@/lib/utils";
 import {
   Heart,
@@ -42,7 +41,6 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   const router = useRouter();
   const signOut = useAuthStore((s) => s.signOut);
   const isSigningOut = useAuthStore((s) => s.isLoading);
-  const coursesEnabled = useFeatureFlag("courses");
 
   const handleSignOut = async () => {
     await signOut();
@@ -148,11 +146,7 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
     },
   ];
 
-  // Courses stay out of the nav while an admin has the section marked as
-  // coming soon.
-  const navItems = (role === "parent" ? parentNav : doctorNav).filter(
-    (item) => coursesEnabled || !item.href.endsWith("/courses"),
-  );
+  const navItems = role === "parent" ? parentNav : doctorNav;
 
   return (
     <aside className="flex h-screen w-64 flex-col border-e border-border bg-card">
