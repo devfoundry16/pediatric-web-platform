@@ -63,6 +63,23 @@ function participantCount(
   ).length;
 }
 
+/**
+ * Whether a session's slot has passed.
+ *
+ * Status alone does not say this: a session the doctor never started stays
+ * 'scheduled' forever, so without the clock it would keep advertising itself as
+ * upcoming and keep taking registrations long after the fact. The cutoff is the
+ * scheduled END, so joining late while it is still running stays possible.
+ */
+function hasFinished(
+  session: { scheduled_at: string; duration_minutes: number },
+  now: number = Date.now()
+): boolean {
+  const endsAt =
+    new Date(session.scheduled_at).getTime() + session.duration_minutes * 60_000;
+  return Number.isFinite(endsAt) && now > endsAt;
+}
+
 // ─── Public ───────────────────────────────────────────────────────────────────
 
 // GET /api/live-sessions
@@ -89,8 +106,12 @@ export async function listSessions(
     .eq("is_published", true)
     .neq("status", "cancelled");
 
+  // A 'scheduled' session whose slot has already passed belongs in "past" even
+  // though the doctor never ended it, so the split cannot be made in SQL —
+  // scheduled_at + duration_minutes is not a column. Narrow by status here and
+  // apply the clock below.
   if (filter === "past") {
-    query = query.in("status", ["ended"]);
+    query = query.in("status", ["ended", "scheduled"]);
   } else if (filter === "upcoming") {
     query = query.in("status", ["scheduled", "live"]);
   }
@@ -102,7 +123,13 @@ export async function listSessions(
     return;
   }
 
-  const sessions = (data ?? []).map((s) => {
+  const inWindow = (data ?? []).filter((s) => {
+    if (filter === "past") return s.status === "ended" || hasFinished(s);
+    if (filter === "upcoming") return s.status === "live" || !hasFinished(s);
+    return true;
+  });
+
+  const sessions = inWindow.map((s) => {
     const regs = Array.isArray(s.session_registrations)
       ? (s.session_registrations as Array<{ payment_status: string }>)
       : [];
@@ -315,6 +342,42 @@ export async function updateSession(
     is_published?: boolean;
   };
 
+  // Fetch first so a session belonging to another doctor answers 404 rather
+  // than PostgREST's "0 rows" 500, and so a terminal session cannot be edited
+  // by calling the API directly — the UI only offers editing while scheduled.
+  const { data: existing } = await supabaseAdmin
+    .from("group_sessions")
+    .select("id, status")
+    .eq("id", id)
+    .eq("doctor_id", doctor.id)
+    .maybeSingle();
+
+  if (!existing) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  if (existing.status === "ended" || existing.status === "cancelled") {
+    res
+      .status(400)
+      .json({ error: `Cannot edit a session that is ${existing.status}` });
+    return;
+  }
+
+  // goLive derives the Daily room's token expiry from the schedule it finds at
+  // that moment, so moving the clock underneath a running session leaves the
+  // room and the record disagreeing about when it ends. Everything else about
+  // a live session stays editable.
+  if (
+    existing.status === "live" &&
+    (scheduled_at !== undefined || duration_minutes !== undefined)
+  ) {
+    res
+      .status(400)
+      .json({ error: "Cannot reschedule a session that is already live" });
+    return;
+  }
+
   const updates: Record<string, unknown> = {};
   if (title !== undefined) updates.title = title;
   if (description !== undefined) updates.description = description;
@@ -366,20 +429,38 @@ export async function cancelSession(
 
   const { id } = req.params;
 
-  const { data, error } = await supabaseAdmin
+  const { data: existing } = await supabaseAdmin
+    .from("group_sessions")
+    .select("id, status")
+    .eq("id", id)
+    .eq("doctor_id", doctor.id)
+    .maybeSingle();
+
+  if (!existing) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+
+  // Ending a session is a separate action with its own endpoint; cancelling one
+  // that already ran would rewrite history for everyone who attended.
+  if (existing.status === "ended") {
+    res.status(400).json({ error: "This session has already ended" });
+    return;
+  }
+
+  if (existing.status === "cancelled") {
+    res.json({ success: true });
+    return;
+  }
+
+  const { error } = await supabaseAdmin
     .from("group_sessions")
     .update({ status: "cancelled" })
     .eq("id", id)
-    .eq("doctor_id", doctor.id)
-    .select("id")
-    .single();
+    .eq("doctor_id", doctor.id);
 
   if (error) {
     res.status(500).json({ error: error.message });
-    return;
-  }
-  if (!data) {
-    res.status(404).json({ error: "Session not found" });
     return;
   }
 
@@ -525,7 +606,7 @@ export async function registerForSession(
   const { data: session, error: sessionError } = await supabaseAdmin
     .from("group_sessions")
     .select(
-      "id, title, price_aed, is_free, status, is_published, max_participants, session_registrations (payment_status)"
+      "id, title, price_aed, is_free, status, is_published, max_participants, scheduled_at, duration_minutes, session_registrations (payment_status)"
     )
     .eq("id", id)
     .eq("is_published", true)
@@ -538,6 +619,13 @@ export async function registerForSession(
 
   if (session.status === "cancelled" || session.status === "ended") {
     res.status(400).json({ error: "This session is no longer available" });
+    return;
+  }
+
+  if (hasFinished(session)) {
+    res
+      .status(400)
+      .json({ error: "Registration for this session has closed" });
     return;
   }
 
