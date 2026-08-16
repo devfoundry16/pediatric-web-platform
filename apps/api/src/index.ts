@@ -11,6 +11,7 @@ import medicalFilesRouter from "./routes/medical-files";
 import packagesRouter from "./routes/packages";
 import coursesRouter from "./routes/courses";
 import groupSessionsRouter from "./routes/group-sessions";
+import featureFlagsRouter from "./routes/feature-flags";
 import adminRouter from "./routes/admin";
 import { stripeWebhook } from "./controllers/packages";
 
@@ -64,6 +65,7 @@ app.use("/api/medical-files", medicalFilesRouter);
 app.use("/api/packages", packagesRouter);
 app.use("/api/courses", coursesRouter);
 app.use("/api/live-sessions", groupSessionsRouter);
+app.use("/api/feature-flags", featureFlagsRouter);
 app.use("/api/admin", adminRouter);
 
 // 404 for unknown API routes

@@ -6,6 +6,8 @@ import { getDictionary } from "@/lib/i18n/get-dictionary";
 import { defaultLocale } from "@/lib/i18n/config";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/components/auth/auth-provider";
+import { FeatureFlagsProvider } from "@/lib/feature-flags/feature-flags-context";
+import { getFeatureFlags } from "@/lib/feature-flags/get-feature-flags";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -37,7 +39,10 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const dictionary = await getDictionary(defaultLocale);
+  const [dictionary, featureFlags] = await Promise.all([
+    getDictionary(defaultLocale),
+    getFeatureFlags(),
+  ]);
 
   return (
     <html lang="en" dir="ltr" suppressHydrationWarning>
@@ -56,8 +61,10 @@ export default async function RootLayout({
             initialDictionary={dictionary}
           >
             <AuthProvider>
-              {children}
-              <Toaster richColors position="top-center" />
+              <FeatureFlagsProvider initialFlags={featureFlags}>
+                {children}
+                <Toaster richColors position="top-center" />
+              </FeatureFlagsProvider>
             </AuthProvider>
           </I18nProvider>
         </ThemeProvider>

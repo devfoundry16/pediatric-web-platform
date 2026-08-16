@@ -16,6 +16,7 @@ import {
   Baby,
   ClipboardList,
   Bell,
+  Settings,
   LogOut,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -37,6 +38,7 @@ const adminNav: NavItem[] = [
   { href: "/dashboard/admin/patients", label: "Patients", icon: Baby },
   { href: "/dashboard/admin/notes", label: "Medical Notes", icon: ClipboardList },
   { href: "/dashboard/admin/notifications", label: "Notifications", icon: Bell },
+  { href: "/dashboard/admin/settings", label: "Settings", icon: Settings },
 ];
 
 export function AdminSidebar() {

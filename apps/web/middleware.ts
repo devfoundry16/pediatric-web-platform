@@ -39,9 +39,13 @@ export async function middleware(request: NextRequest) {
     // bounce the user to the dashboard before they set a new password.
     pathname.startsWith("/auth/reset-password");
 
+  // /courses is deliberately absent: it is a marketing page (the catalog, or
+  // the coming-soon panel while the section is off) linked from the public
+  // header and footer, so bouncing signed-out visitors to the login form would
+  // hide the very thing the link promises. Enrolling and watching lessons are
+  // authenticated at the API.
   const protectedPaths = [
     "/dashboard",
-    "/courses",
     "/booking",
     "/live-sessions",
     "/packages",

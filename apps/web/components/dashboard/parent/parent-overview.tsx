@@ -10,11 +10,14 @@ import { childrenApi } from "@/lib/api/children";
 import { appointmentsApi } from "@/lib/api/appointments";
 import { packagesApi } from "@/lib/api/packages";
 import { coursesApi } from "@/lib/api/courses";
+import { useFeatureFlag } from "@/lib/feature-flags/feature-flags-context";
+import { cn } from "@/lib/utils";
 import { Baby, CalendarDays, Package, GraduationCap } from "lucide-react";
 
 export function ParentOverview() {
   const { dictionary: t } = useI18n();
   const user = useAuthStore((s) => s.user);
+  const coursesEnabled = useFeatureFlag("courses");
   const displayName =
     (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
     "Parent";
@@ -48,6 +51,15 @@ export function ParentOverview() {
       })
       .catch(() => { if (!cancelled) setActivePackagesCount(0); });
 
+    return () => { cancelled = true; };
+  }, []);
+
+  // Only ask for enrollments once we know the section is live — while courses
+  // are coming soon there is no card to fill.
+  useEffect(() => {
+    if (!coursesEnabled) return;
+    let cancelled = false;
+
     coursesApi
       .getMyEnrollments()
       .then((enrollments) => {
@@ -56,7 +68,7 @@ export function ParentOverview() {
       .catch(() => { if (!cancelled) setEnrolledCoursesCount(0); });
 
     return () => { cancelled = true; };
-  }, []);
+  }, [coursesEnabled]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -67,7 +79,12 @@ export function ParentOverview() {
         <p className="text-muted-foreground">{t.parentDashboard.overview}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        className={cn(
+          "grid grid-cols-1 gap-4 sm:grid-cols-2",
+          coursesEnabled ? "lg:grid-cols-4" : "lg:grid-cols-3",
+        )}
+      >
         <StatCard
           title={t.parentDashboard.totalChildren}
           value={childrenCount ?? "—"}
@@ -83,11 +100,13 @@ export function ParentOverview() {
           value={activePackagesCount ?? "—"}
           icon={Package}
         />
-        <StatCard
-          title={t.parentDashboard.enrolledCourses}
-          value={enrolledCoursesCount ?? "—"}
-          icon={GraduationCap}
-        />
+        {coursesEnabled && (
+          <StatCard
+            title={t.parentDashboard.enrolledCourses}
+            value={enrolledCoursesCount ?? "—"}
+            icon={GraduationCap}
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
