@@ -14,6 +14,7 @@ import groupSessionsRouter from "./routes/group-sessions";
 import featureFlagsRouter from "./routes/feature-flags";
 import adminRouter from "./routes/admin";
 import { stripeWebhook } from "./controllers/packages";
+import { startReminderScheduler } from "./lib/reminder-scheduler";
 
 dotenv.config();
 
@@ -104,10 +105,12 @@ if (process.env.NODE_ENV === "DEVELOPMENT") {
     console.log(`🚀 Server running on http://localhost:${PORT}`);
     console.log(`📝 API endpoints: http://localhost:${PORT}/api`);
     console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
+    startReminderScheduler();
   });
 } else {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
+    startReminderScheduler();
   });
 }
 
