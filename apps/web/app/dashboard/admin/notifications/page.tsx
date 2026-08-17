@@ -15,12 +15,19 @@ import {
 import { CheckCircle, XCircle, Mail } from "lucide-react";
 import { adminApi, type EmailLog } from "@/lib/api/admin";
 
+// Every type the API can write to email_logs — keep in step with the EmailType
+// union in apps/api/src/lib/resend.ts. A type missing here is not filterable,
+// though its rows still show under "All types".
 const EMAIL_TYPES = [
   { value: "", label: "All types" },
   { value: "booking_confirmation", label: "Booking confirmation" },
+  { value: "booking_notification", label: "Booking notification" },
+  { value: "package_purchase", label: "Package purchase" },
   { value: "appointment_reminder", label: "Appointment reminder" },
+  { value: "session_reminder", label: "Session reminder" },
   { value: "cancellation", label: "Cancellation" },
   { value: "reschedule", label: "Reschedule" },
+  { value: "other", label: "Other" },
 ];
 
 export default function AdminNotificationsPage() {
