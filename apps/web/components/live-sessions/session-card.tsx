@@ -1,10 +1,18 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CalendarDays, Clock, Users, Video, Radio } from "lucide-react";
+import {
+  CalendarDays,
+  Clock,
+  Users,
+  Video,
+  Radio,
+  CheckCircle,
+} from "lucide-react";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 
 interface SessionCardProps {
@@ -24,11 +32,16 @@ interface SessionCardProps {
     isLive?: boolean;
     hasRecording?: boolean;
     recordingUrl?: string;
+    /** Viewer holds a confirmed (free or paid) place. */
+    isRegistered?: boolean;
+    /** Viewer started checkout but never paid, so they hold nothing yet. */
+    paymentPending?: boolean;
   };
 }
 
 export function SessionCard({ session }: SessionCardProps) {
   const { dictionary: t } = useI18n();
+  const router = useRouter();
   const spotsLeft = session.maxUsers - session.currentUsers;
   const isFull = spotsLeft <= 0;
 
@@ -94,16 +107,40 @@ export function SessionCard({ session }: SessionCardProps) {
                   {t.liveSessions.full}
                 </span>
               )}
-              <Button
-                disabled={isFull && !session.isLive}
-                className="gap-2"
-                variant={session.isLive ? "default" : "default"}
-              >
-                <Video className="h-4 w-4" />
-                {session.isLive
-                  ? t.liveSessions.joinSession
-                  : t.liveSessions.registerSession}
-              </Button>
+              {session.isLive && session.isRegistered ? (
+                // The caller wraps this card in a link to the detail page, so
+                // this cannot be an anchor of its own — nested anchors are
+                // invalid and React will complain on hydration. Cancel the
+                // outer link's navigation and route to the room instead.
+                <Button
+                  className="gap-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    router.push(`/live-sessions/${session.id}/room`);
+                  }}
+                >
+                  <Radio className="h-4 w-4" />
+                  {t.liveSessions.joinNow}
+                </Button>
+              ) : session.isRegistered ? (
+                <Button variant="secondary" className="gap-2" disabled>
+                  <CheckCircle className="h-4 w-4" />
+                  {t.liveSessions.registered}
+                </Button>
+              ) : session.paymentPending ? (
+                <Button variant="outline" className="gap-2">
+                  <Clock className="h-4 w-4" />
+                  {t.liveSessions.paymentPending}
+                </Button>
+              ) : (
+                <Button disabled={isFull && !session.isLive} className="gap-2">
+                  <Video className="h-4 w-4" />
+                  {session.isLive
+                    ? t.liveSessions.joinSession
+                    : t.liveSessions.registerSession}
+                </Button>
+              )}
             </>
           )}
           {session.isPast && (

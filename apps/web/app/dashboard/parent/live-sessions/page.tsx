@@ -11,6 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import {
   liveSessionsApi,
+  isConfirmedRegistration,
   type SessionRegistration,
 } from "@/lib/api/live-sessions";
 import { toast } from "sonner";
@@ -43,6 +44,9 @@ function RegistrationCard({
   const scheduledDate = new Date(session.scheduled_at);
   const isLive = session.status === "live";
   const isEnded = session.status === "ended";
+  // Only a confirmed place gets into the room — the join endpoint rejects
+  // anything else with a 403, so offering the button would be a dead end.
+  const isConfirmed = isConfirmedRegistration(reg.payment_status);
 
   return (
     <Card className="transition-all hover:shadow-md">
@@ -65,6 +69,19 @@ function RegistrationCard({
               {session.status === "scheduled" && (
                 <Badge variant="outline">
                   {t.liveSessions.statusScheduled}
+                </Badge>
+              )}
+              {reg.payment_status === "pending" && (
+                <Badge
+                  variant="outline"
+                  className="border-amber-400 bg-amber-50 text-amber-600 dark:bg-amber-950/30"
+                >
+                  {t.liveSessions.paymentPending}
+                </Badge>
+              )}
+              {reg.payment_status === "refunded" && (
+                <Badge variant="secondary">
+                  {t.liveSessions.paymentRefunded}
                 </Badge>
               )}
             </div>
@@ -94,7 +111,7 @@ function RegistrationCard({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {isLive && (
+            {isLive && isConfirmed && (
               <Button
                 size="sm"
                 className="gap-1.5"
@@ -104,6 +121,14 @@ function RegistrationCard({
               >
                 <Radio className="h-3.5 w-3.5" />
                 {t.liveSessions.joinRoom}
+              </Button>
+            )}
+
+            {reg.payment_status === "pending" && !isEnded && (
+              <Button size="sm" variant="outline" className="gap-1.5" asChild>
+                <Link href={`/live-sessions/${session.id}`}>
+                  {t.liveSessions.completePayment}
+                </Link>
               </Button>
             )}
 
@@ -138,17 +163,34 @@ export default function ParentLiveSessionsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
+    let notified = false;
+
     async function load() {
       try {
         const data = await liveSessionsApi.getMyRegistrations();
-        setRegistrations(data);
+        if (!cancelled) setRegistrations(data);
       } catch {
-        toast.error(t.doctorDashboard.loadError);
+        // Only complain once — a failing poll should not stack up toasts.
+        if (!cancelled && !notified) {
+          notified = true;
+          toast.error(t.doctorDashboard.loadError);
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }
+
     void load();
+    // Picks up the doctor starting the room, so the Join button appears here
+    // without the parent reloading, and a payment confirmed by the webhook
+    // after the fact.
+    const interval = setInterval(() => void load(), 30_000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const upcoming = registrations.filter(
