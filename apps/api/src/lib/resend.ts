@@ -17,6 +17,7 @@ type EmailType =
   | "booking_notification"
   | "package_purchase"
   | "appointment_reminder"
+  | "session_reminder"
   | "cancellation"
   | "reschedule"
   | "other";
@@ -31,9 +32,21 @@ interface EmailLog {
   error_message?: string | null;
 }
 
+/**
+ * A failed insert here used to pass silently, which is worse than it sounds:
+ * email_logs is also the dedupe key, so a row that never lands means the same
+ * email is considered unsent and goes out again on the next attempt. The usual
+ * cause is a new email_type reaching a database whose CHECK constraint has not
+ * been migrated yet, so say so loudly rather than mailing someone ten times.
+ */
 async function logEmail(entry: EmailLog): Promise<void> {
   if (!supabaseAdmin) return;
-  await supabaseAdmin.from("email_logs").insert(entry);
+  const { error } = await supabaseAdmin.from("email_logs").insert(entry);
+  if (error) {
+    console.error(
+      `[email] Could not record ${entry.email_type} for ${entry.related_id}: ${error.message}`
+    );
+  }
 }
 
 /**
@@ -44,18 +57,27 @@ async function logEmail(entry: EmailLog): Promise<void> {
  * the record of what was sent, so it doubles as the dedupe key rather than
  * needing a column of its own. Only 'sent' counts — a previous failure should
  * be retried, not suppressed.
+ *
+ * `recipientEmail` narrows the question to one address. Reminders concern a
+ * single record but go to several people and are re-evaluated every minute,
+ * so "has this already gone out" is only answerable per recipient there.
  */
 export async function alreadySent(
   relatedId: string,
-  emailType: EmailType
+  emailType: EmailType,
+  recipientEmail?: string
 ): Promise<boolean> {
   if (!supabaseAdmin) return false;
-  const { count } = await supabaseAdmin
+  let query = supabaseAdmin
     .from("email_logs")
     .select("id", { count: "exact", head: true })
     .eq("related_id", relatedId)
     .eq("email_type", emailType)
     .eq("status", "sent");
+
+  if (recipientEmail) query = query.eq("recipient_email", recipientEmail);
+
+  const { count } = await query;
   return (count ?? 0) > 0;
 }
 
@@ -316,6 +338,65 @@ export async function sendRescheduleEmail(data: Omit<AppointmentEmailData, "pric
     emailType: "reschedule",
     relatedId: data.appointmentId,
     recipientUserId: data.parentUserId,
+  });
+}
+
+/**
+ * The nudge that goes out shortly before something starts.
+ *
+ * One template for both kinds of session and both audiences: a consultation and
+ * a group session differ only in what the row above the time says, and the
+ * doctor's copy differs from the parent's only in whose name it leads with and
+ * that it asks them to open the room rather than join it.
+ *
+ * `startsIn` is rendered rather than computed here so the caller — which
+ * already knows the exact instant and the window it matched — decides how it
+ * reads ("in 10 minutes").
+ */
+export async function sendSessionReminder(data: {
+  /** Registration id, or appointment id — whatever the dedupe is keyed on. */
+  relatedId: string;
+  recipient: Recipient;
+  audience: "parent" | "doctor";
+  emailType: "session_reminder" | "appointment_reminder";
+  recipientName: string;
+  /** "Live session" title, or the consultation type and patient. */
+  sessionTitle: string;
+  counterpartName: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  timezone?: string;
+  durationMinutes: number;
+  startsIn: string;
+  sessionUrl?: string;
+}): Promise<void> {
+  const forDoctor = data.audience === "doctor";
+
+  const html = `
+    <h2>Starting ${data.startsIn}</h2>
+    <p>Hello ${data.recipientName},</p>
+    <p>
+      <strong>${data.sessionTitle}</strong> starts ${data.startsIn}${
+        forDoctor ? "" : ` with <strong>${data.counterpartName}</strong>`
+      }.
+    </p>
+    <table style="border-collapse:collapse;margin-top:16px">
+      ${forDoctor ? `<tr><td style="padding:4px 12px 4px 0;color:#666">With</td><td><strong>${data.counterpartName}</strong></td></tr>` : ""}
+      <tr><td style="padding:4px 12px 4px 0;color:#666">Date</td><td><strong>${data.scheduledDate}</strong></td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#666">Time</td><td><strong>${data.scheduledTime}</strong> (${zoneLabel(data.timezone)})</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;color:#666">Duration</td><td><strong>${data.durationMinutes} min</strong></td></tr>
+    </table>
+    ${joinButton(data.sessionUrl, forDoctor ? "Open the session" : "Go to the session")}
+    <p style="margin-top:16px">Sign in with this email address to join.</p>
+  `;
+
+  await deliver({
+    to: data.recipient.email,
+    subject: `${APP_NAME} – ${data.sessionTitle} starts ${data.startsIn}`,
+    html,
+    emailType: data.emailType,
+    relatedId: data.relatedId,
+    recipientUserId: data.recipient.userId,
   });
 }
 

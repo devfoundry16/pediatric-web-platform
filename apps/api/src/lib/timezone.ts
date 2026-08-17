@@ -94,6 +94,33 @@ export function wallClockToInstant(date: string, time: string, tz: string): Date
   return new Date(early);
 }
 
+/**
+ * Calendar date of an instant in `tz`, e.g. "19 Aug 2026".
+ *
+ * Emails are rendered server-side with no idea where the recipient is, so
+ * anything formatted with these must be labelled with the zone it is in — see
+ * zoneLabel() in resend.ts.
+ */
+export function formatDateInTimezone(instant: Date, tz: string, locale = "en-AE"): string {
+  if (isNaN(instant.getTime())) return "";
+  return instant.toLocaleDateString(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: tz,
+  });
+}
+
+/** Time of day of an instant in `tz`, e.g. "9:00 AM". */
+export function formatTimeInTimezone(instant: Date, tz: string, locale = "en-AE"): string {
+  if (isNaN(instant.getTime())) return "";
+  return instant.toLocaleTimeString(locale, {
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: tz,
+  });
+}
+
 /** Calendar date (YYYY-MM-DD) currently in effect in `tz`. */
 export function todayInTimezone(tz: string, now: Date = new Date()): string {
   const parts = new Intl.DateTimeFormat("en-US", {
