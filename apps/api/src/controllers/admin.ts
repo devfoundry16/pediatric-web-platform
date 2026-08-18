@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
+import { fetchParentNames } from "../lib/parents";
 import {
   DEFAULT_TIMEZONE,
   hhmmToMinutes,
@@ -443,7 +444,16 @@ export async function listAllAppointments(req: Request, res: Response): Promise<
 
   const { data, error, count } = await query;
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json({ appointments: data, total: count ?? 0, page: pageNum, limit: limitNum });
+
+  // Who booked the appointment, not just who it is for: the child is the
+  // patient, but every call, cancellation and refund goes through the parent.
+  const names = await fetchParentNames([...new Set((data ?? []).map((a) => a.parent_id))]);
+  const appointments = (data ?? []).map((a) => ({
+    ...a,
+    parent_name: names.get(a.parent_id) ?? null,
+  }));
+
+  res.json({ appointments, total: count ?? 0, page: pageNum, limit: limitNum });
 }
 
 export async function updateAppointmentAdmin(req: Request, res: Response): Promise<void> {

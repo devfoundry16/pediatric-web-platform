@@ -190,7 +190,7 @@ function AdminAppointmentsContent() {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date & Time</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Patient</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Patient / Parent</th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">Doctor</th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">Type</th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
@@ -212,8 +212,11 @@ function AdminAppointmentsContent() {
                         <div className="font-medium text-foreground">{a.scheduled_date}</div>
                         <div className="text-xs text-muted-foreground">{a.scheduled_time}</div>
                       </td>
-                      <td className="px-4 py-3 text-foreground">
-                        {a.child_profiles ? `${a.child_profiles.first_name} ${a.child_profiles.last_name}` : "—"}
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-foreground">
+                          {a.child_profiles ? `${a.child_profiles.first_name} ${a.child_profiles.last_name}` : "—"}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{a.parent_name ?? "—"}</div>
                       </td>
                       <td className="px-4 py-3 text-foreground">{a.doctors?.full_name ?? "—"}</td>
                       <td className="px-4 py-3 capitalize text-muted-foreground">{a.consultation_type}</td>
