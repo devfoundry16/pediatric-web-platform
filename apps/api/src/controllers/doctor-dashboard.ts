@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
 import { createRoom, createMeetingToken } from "../lib/daily";
+import { fetchParentNames } from "../lib/parents";
 import {
   DEFAULT_TIMEZONE,
   hhmmToMinutes,
@@ -30,19 +31,6 @@ async function resolveDoctor(
 
   if (!linked) return null;
   return { id: linked.id, timezone: linked.timezone || DEFAULT_TIMEZONE };
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-async function fetchParentNames(
-  parentIds: string[]
-): Promise<Map<string, string>> {
-  if (!supabaseAdmin || parentIds.length === 0) return new Map();
-  const { data } = await supabaseAdmin
-    .from("profiles")
-    .select("id, full_name")
-    .in("id", parentIds);
-  return new Map((data ?? []).map((p) => [p.id, p.full_name ?? ""]));
 }
 
 // ─── Controllers ──────────────────────────────────────────────────────────────
