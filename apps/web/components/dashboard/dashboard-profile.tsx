@@ -19,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { GoogleCalendarCard } from "@/components/dashboard/google-calendar-card";
 
 const personalSchema = z.object({
   fullName: z.string().min(2, "Enter your full name"),
@@ -253,6 +254,8 @@ export function DashboardProfile({ role }: DashboardProfileProps) {
           </form>
         </CardContent>
       </Card>
+
+      <GoogleCalendarCard />
     </div>
   );
 }

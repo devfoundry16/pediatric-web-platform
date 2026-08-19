@@ -181,6 +181,37 @@ export interface EmailLog {
   created_at: string;
 }
 
+export interface CalendarIntegrationStatus {
+  /** False when the server is missing the GOOGLE_* env vars entirely. */
+  configured: boolean;
+  connected: boolean;
+  email?: string;
+  status?: "connected" | "error";
+  lastError?: string | null;
+  connectedAt?: string;
+}
+
+export interface CalendarAccount {
+  id: string;
+  googleEmail: string;
+  status: "connected" | "error";
+  lastError: string | null;
+  connectedAt: string;
+  /** userId is null for the clinic-wide account. */
+  owner: { userId: string | null; fullName: string | null; role: string };
+}
+
+export interface CalendarEventLog {
+  id: string;
+  action: "create" | "update" | "delete";
+  related_type: "appointment" | "group_session";
+  related_id: string | null;
+  google_event_id: string | null;
+  status: "sent" | "failed";
+  error_message: string | null;
+  created_at: string;
+}
+
 export interface AdminStats {
   totalBookings: number | null;
   todayAppointments: number | null;
@@ -281,4 +312,12 @@ export const adminApi = {
   // Email logs
   listEmailLogs: (params?: { status?: string; email_type?: string; page?: number; limit?: number }) =>
     get<{ emailLogs: EmailLog[]; total: number; page: number; limit: number }>("/email-logs", params as Record<string, string | number | undefined>),
+
+  // Google Calendar integration
+  getGoogleCalendarStatus: () => get<CalendarIntegrationStatus>("/google-calendar/status"),
+  connectGoogleCalendar: () => post<{ url: string }>("/google-calendar/connect", {}),
+  disconnectGoogleCalendar: () => del("/google-calendar"),
+  listCalendarAccounts: () => get<{ accounts: CalendarAccount[] }>("/google-calendar/accounts"),
+  listCalendarLogs: (params?: { status?: string; related_type?: string; page?: number; limit?: number }) =>
+    get<{ calendarLogs: CalendarEventLog[]; total: number; page: number; limit: number }>("/calendar-logs", params as Record<string, string | number | undefined>),
 };

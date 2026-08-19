@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
 import { createRoom, createMeetingToken } from "../lib/daily";
+import { syncGroupSessionCalendarEvent } from "../lib/google-calendar";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const StripeLib: new (key: string) => StripeClient = require("stripe");
@@ -306,6 +307,10 @@ export async function createSession(
     return;
   }
 
+  // Mirror onto the clinic Google Calendar (non-blocking). Drafts are skipped
+  // by the reconciler until is_published flips true.
+  if (data) void syncGroupSessionCalendarEvent(data.id as string);
+
   res.status(201).json({ session: data });
 }
 
@@ -410,6 +415,11 @@ export async function updateSession(
     return;
   }
 
+  // Converge the mirrored calendar event onto the new row state: time/title
+  // edits patch it, publishing creates it, unpublishing removes it, and a
+  // cancelled session stays deleted no matter what was patched.
+  void syncGroupSessionCalendarEvent(id as string);
+
   res.json({ session: data });
 }
 
@@ -465,6 +475,10 @@ export async function cancelSession(
     res.status(500).json({ error: error.message });
     return;
   }
+
+  // Remove the mirrored calendar event; Google emails the cancellation to
+  // every registered attendee (sendUpdates=all).
+  void syncGroupSessionCalendarEvent(id as string);
 
   res.json({ success: true });
 }
@@ -669,6 +683,9 @@ export async function registerForSession(
       res.status(500).json({ error: regError.message });
       return;
     }
+
+    // Add the new registrant to the session's Google Calendar event.
+    void syncGroupSessionCalendarEvent(id as string);
 
     res.json({ registration: reg });
     return;
@@ -915,6 +932,11 @@ export async function verifySessionPayment(
     res.status(500).json({ error: error.message });
     return;
   }
+
+  // Webhook fallback path: make sure the paid registrant reaches the
+  // session's calendar event even if the webhook never arrives. The
+  // reconciler diffs before patching, so the double-fire is harmless.
+  void syncGroupSessionCalendarEvent(sessionId);
 
   res.json({ success: true, sessionId });
 }

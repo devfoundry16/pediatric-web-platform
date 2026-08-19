@@ -28,7 +28,7 @@ function frontendUrl(): string {
  * Provisioning it at booking time would quietly remove that guarantee. The
  * dashboard is the right destination: it shows Start or Join as appropriate.
  */
-function appointmentUrlFor(
+export function appointmentUrlFor(
   audience: "parent" | "doctor" | "admin",
   appointmentId: string
 ): string {

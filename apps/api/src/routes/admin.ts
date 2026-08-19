@@ -29,6 +29,13 @@ import {
   linkDoctorAccountAdmin,
 } from "../controllers/admin";
 import { updateFeatureFlag } from "../controllers/feature-flags";
+import {
+  getCalendarStatus,
+  startCalendarConnect,
+  disconnectCalendar,
+  listCalendarAccounts,
+  listCalendarLogs,
+} from "../controllers/google-calendar";
 
 const router = Router();
 
@@ -79,6 +86,13 @@ router.get("/notes", listNotes);
 
 // Email logs
 router.get("/email-logs", listEmailLogs);
+
+// Google Calendar integration (clinic-wide account + oversight)
+router.get("/google-calendar/status", getCalendarStatus);
+router.post("/google-calendar/connect", startCalendarConnect);
+router.delete("/google-calendar", disconnectCalendar);
+router.get("/google-calendar/accounts", listCalendarAccounts);
+router.get("/calendar-logs", listCalendarLogs);
 
 // Feature flags ("coming soon" switches). Reading them is public — see
 // GET /api/feature-flags — so only the write lives here.

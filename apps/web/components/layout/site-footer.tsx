@@ -120,7 +120,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <Link
-                  href="#"
+                  href="/privacy"
                   className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   {t.common.privacyPolicy}
@@ -128,7 +128,7 @@ export function SiteFooter() {
               </li>
               <li>
                 <Link
-                  href="#"
+                  href="/terms"
                   className="text-sm text-muted-foreground hover:text-foreground"
                 >
                   {t.common.termsOfService}

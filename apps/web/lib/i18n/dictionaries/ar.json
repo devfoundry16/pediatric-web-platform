@@ -164,7 +164,22 @@
     "passwordUpdated": "تم تحديث كلمة المرور",
     "accountType": "نوع الحساب",
     "parentRole": "ولي أمر / وصي",
-    "doctorRole": "طبيب"
+    "doctorRole": "طبيب",
+    "googleCalendar": {
+      "title": "تقويم Google",
+      "description": "أضف حجوزاتك إلى تقويم Google الخاص بك تلقائيًا.",
+      "notConnected": "غير متصل. اربط حساب Google الخاص بك لتظهر مواعيدك في تقويمك، مع تحديثها تلقائيًا عند أي تغيير.",
+      "connect": "ربط تقويم Google",
+      "connected": "متصل — تتم إضافة حجوزاتك تلقائيًا.",
+      "disconnect": "إلغاء الربط",
+      "reconnect": "إعادة الربط",
+      "needsReconnect": "انتهت صلاحية الإذن — أعد الربط لاستئناف المزامنة.",
+      "needsReconnectHint": "لم يعد Google يقبل الإذن المحفوظ لهذا الحساب. أعد الربط لاستئناف المزامنة.",
+      "connectedToast": "تم ربط تقويم Google.",
+      "disconnectedToast": "تم إلغاء ربط تقويم Google. ستستمر في تلقي دعوات التقويم عبر البريد الإلكتروني.",
+      "errorGeneric": "تعذر ربط تقويم Google. يرجى المحاولة مرة أخرى.",
+      "errorNoRefreshToken": "لم يمنح Google وصولاً دائمًا. أزل هذا التطبيق من myaccount.google.com/permissions ثم أعد الربط."
+    }
   },
   "parentDashboard": {
     "welcome": "مرحباً بعودتك",
