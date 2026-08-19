@@ -367,6 +367,54 @@ describe("syncAppointmentCalendarEvent", () => {
     expect(createdIn(fetchMock, "at-clinic").attendees).toEqual([]);
   });
 
+  it("shows each personal calendar only the link its owner can use", async () => {
+    setup({
+      accounts: [PARENT_ACCOUNT, DOCTOR_ACCOUNT],
+      appointment: appointmentRow(),
+    });
+    const fetchMock = createFetchMock([
+      tokenRefreshRoute(ACCESS_TOKENS),
+      { match: (m) => m === "GET", respond: () => json(404, {}) },
+      { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
+    ]);
+    vi.stubGlobal("fetch", fetchMock.fn);
+
+    const lib = await loadLib();
+    await lib.syncAppointmentCalendarEvent(APPT_ID);
+
+    // The parent sees the parent dashboard link and nothing about starting.
+    const parentDesc = createdIn(fetchMock, "at-parent").description;
+    expect(parentDesc).toContain("/dashboard/parent/appointments?appointment=");
+    expect(parentDesc).not.toContain("/dashboard/doctor/");
+
+    // The doctor sees the doctor link only.
+    const doctorDesc = createdIn(fetchMock, "at-doctor").description;
+    expect(doctorDesc).toContain("/dashboard/doctor/appointments?appointment=");
+    expect(doctorDesc).not.toContain("/dashboard/parent/");
+  });
+
+  it("gives the clinic event only the link of the role it is inviting", async () => {
+    // The doctor has connected, so only the parent is invited to the clinic event.
+    setup({
+      accounts: [CLINIC_ACCOUNT, DOCTOR_ACCOUNT],
+      appointment: appointmentRow(),
+    });
+    const fetchMock = createFetchMock([
+      tokenRefreshRoute(ACCESS_TOKENS),
+      { match: (m) => m === "GET", respond: () => json(404, {}) },
+      { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
+    ]);
+    vi.stubGlobal("fetch", fetchMock.fn);
+
+    const lib = await loadLib();
+    await lib.syncAppointmentCalendarEvent(APPT_ID);
+
+    const clinicEvent = createdIn(fetchMock, "at-clinic");
+    expect(clinicEvent.attendees.map((a: any) => a.email)).toEqual(["parent@example.com"]);
+    expect(clinicEvent.description).toContain("/dashboard/parent/");
+    expect(clinicEvent.description).not.toContain("/dashboard/doctor/");
+  });
+
   it("keeps per-account access tokens separate", async () => {
     setup({
       accounts: [CLINIC_ACCOUNT, PARENT_ACCOUNT],

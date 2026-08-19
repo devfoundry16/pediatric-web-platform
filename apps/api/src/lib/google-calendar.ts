@@ -709,31 +709,37 @@ async function deleteEvent(target: SyncTarget): Promise<void> {
 
 // ─── Participant / account resolution ─────────────────────────────────────────
 
+/** Which side of the consultation someone is on — decides which link they see. */
+type ParticipantRole = "parent" | "doctor";
+
 interface Participant {
   userId: string | null;
   email: string | null;
+  role: ParticipantRole;
 }
 
 /**
  * Split participants into those with their own connected calendar (each gets a
  * personal event) and those without (invited to the clinic event by email).
+ * Roles are carried through so each event can show only the join link that
+ * belongs to its audience.
  */
 async function resolveParticipants(participants: Participant[]): Promise<{
-  connected: Array<{ account: AccountRow; email: string | null }>;
-  inviteEmails: string[];
+  connected: Array<{ account: AccountRow; role: ParticipantRole }>;
+  invites: Array<{ email: string; role: ParticipantRole }>;
 }> {
-  const connected: Array<{ account: AccountRow; email: string | null }> = [];
-  const inviteEmails: string[] = [];
+  const connected: Array<{ account: AccountRow; role: ParticipantRole }> = [];
+  const invites: Array<{ email: string; role: ParticipantRole }> = [];
 
   for (const participant of participants) {
     const account = participant.userId ? await fetchUserAccount(participant.userId) : null;
     if (account && account.status === "connected") {
-      connected.push({ account, email: participant.email });
+      connected.push({ account, role: participant.role });
     } else if (participant.email) {
-      inviteEmails.push(participant.email);
+      invites.push({ email: participant.email, role: participant.role });
     }
   }
-  return { connected, inviteEmails };
+  return { connected, invites };
 }
 
 /** Accounts that hold a mirror for this booking but are no longer a target. */
@@ -842,24 +848,41 @@ export async function syncAppointmentCalendarEvent(appointmentId: string): Promi
     }
     const end = new Date(start.getTime() + appt.duration_minutes * 60_000);
 
-    const { connected, inviteEmails } = await resolveParticipants([
-      { userId: appt.parent_id, email: await resolveUserEmail(appt.parent_id) },
+    const { connected, invites } = await resolveParticipants([
+      { userId: appt.parent_id, email: await resolveUserEmail(appt.parent_id), role: "parent" },
       {
         userId: appt.doctors?.profile_id ?? null,
         email: appt.doctors?.email ?? null,
+        role: "doctor",
       },
     ]);
 
     const doctorName = appt.doctors?.full_name ?? "Your doctor";
+
+    /**
+     * Show a calendar only the link its audience can actually use — a parent
+     * has no access to the doctor dashboard, and vice versa. A personal
+     * calendar has exactly one audience; the clinic event serves whoever is
+     * invited to it, so it lists a link per role present (both only when the
+     * invitees genuinely span both sides, since one event body reaches all
+     * attendees).
+     */
+    const describeFor = (roles: Set<ParticipantRole>): string => {
+      const lines = [`Pediatric video consultation (${appt.duration_minutes} min).`];
+      if (roles.has("parent")) {
+        lines.push(`Join from your dashboard:\n${appointmentUrlFor("parent", appt.id)}`);
+      }
+      if (roles.has("doctor")) {
+        lines.push(`Start the consultation from your dashboard:\n${appointmentUrlFor("doctor", appt.id)}`);
+      }
+      lines.push("The video link becomes active when the doctor starts the session.");
+      return lines.join("\n\n");
+    };
+
     // PHI-minimal on purpose: no child name, no symptoms — calendars are shared
     // and synced surfaces. Details stay behind the dashboard links.
-    const baseEvent: CalendarEvent = {
+    const baseEvent: Omit<CalendarEvent, "description"> = {
       summary: `LittleCare – Consultation with ${doctorName}`,
-      description:
-        `Pediatric video consultation (${appt.duration_minutes} min).\n\n` +
-        `Parents — join from your dashboard:\n${appointmentUrlFor("parent", appt.id)}\n\n` +
-        `Doctors — start from your dashboard:\n${appointmentUrlFor("doctor", appt.id)}\n\n` +
-        `The video link becomes active when the doctor starts the session.`,
       start: instantToEventTime(start, timezone),
       end: instantToEventTime(end, timezone),
       guestsCanInviteOthers: false,
@@ -876,20 +899,30 @@ export async function syncAppointmentCalendarEvent(appointmentId: string): Promi
     const clinic = await fetchClinicAccount();
     if (clinic && clinic.status === "connected") {
       keep.add(clinic.id);
+      // With nobody left to invite the clinic event is just the clinic's own
+      // record, so it carries both links.
+      const clinicRoles: Set<ParticipantRole> =
+        invites.length > 0
+          ? new Set(invites.map((i) => i.role))
+          : new Set<ParticipantRole>(["parent", "doctor"]);
       await upsertEvent(
         { account: clinic, relatedType: "appointment", relatedId: appt.id, eventId },
-        { ...baseEvent, attendees: inviteEmails.map((email) => ({ email })) }
+        {
+          ...baseEvent,
+          description: describeFor(clinicRoles),
+          attendees: invites.map(({ email }) => ({ email })),
+        }
       );
     }
 
     // Personal copies carry no attendees: the event is already in the owner's
     // calendar, and inviting from a personal account would mail people on
     // their behalf.
-    for (const { account } of connected) {
+    for (const { account, role } of connected) {
       keep.add(account.id);
       await upsertEvent(
         { account, relatedType: "appointment", relatedId: appt.id, eventId },
-        { ...baseEvent, attendees: [] }
+        { ...baseEvent, description: describeFor(new Set([role])), attendees: [] }
       );
     }
 
@@ -971,14 +1004,19 @@ export async function syncGroupSessionCalendarEvent(sessionId: string): Promise<
       ["free", "paid"].includes(r.payment_status)
     );
     const participants: Participant[] = await Promise.all(
-      confirmed.map(async (r) => ({ userId: r.user_id, email: await resolveUserEmail(r.user_id) }))
+      confirmed.map(async (r) => ({
+        userId: r.user_id,
+        email: await resolveUserEmail(r.user_id),
+        role: "parent" as const,
+      }))
     );
     participants.push({
       userId: session.doctors?.profile_id ?? null,
       email: session.doctors?.email ?? null,
+      role: "doctor",
     });
 
-    const { connected, inviteEmails } = await resolveParticipants(participants);
+    const { connected, invites } = await resolveParticipants(participants);
 
     const baseEvent: CalendarEvent = {
       summary: session.title,
@@ -1000,7 +1038,7 @@ export async function syncGroupSessionCalendarEvent(sessionId: string): Promise<
       keep.add(clinic.id);
       await upsertEvent(
         { account: clinic, relatedType: "group_session", relatedId: session.id, eventId },
-        { ...baseEvent, attendees: inviteEmails.map((email) => ({ email })) }
+        { ...baseEvent, attendees: invites.map(({ email }) => ({ email })) }
       );
     }
 
