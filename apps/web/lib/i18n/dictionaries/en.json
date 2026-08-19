@@ -164,7 +164,22 @@
     "passwordUpdated": "Password updated",
     "accountType": "Account type",
     "parentRole": "Parent / Guardian",
-    "doctorRole": "Doctor"
+    "doctorRole": "Doctor",
+    "googleCalendar": {
+      "title": "Google Calendar",
+      "description": "Add your bookings to your own Google Calendar automatically.",
+      "notConnected": "Not connected. Connect your Google account and your appointments will appear in your calendar, kept up to date when anything changes.",
+      "connect": "Connect Google Calendar",
+      "connected": "Connected — your bookings are added automatically.",
+      "disconnect": "Disconnect",
+      "reconnect": "Reconnect",
+      "needsReconnect": "Access expired — reconnect to resume syncing.",
+      "needsReconnectHint": "Google no longer accepts the saved permission for this account. Reconnect to start syncing again.",
+      "connectedToast": "Google Calendar connected.",
+      "disconnectedToast": "Google Calendar disconnected. You will keep receiving calendar invitations by email.",
+      "errorGeneric": "Could not connect Google Calendar. Please try again.",
+      "errorNoRefreshToken": "Google did not grant lasting access. Remove this app at myaccount.google.com/permissions, then connect again."
+    }
   },
   "parentDashboard": {
     "welcome": "Welcome back",
