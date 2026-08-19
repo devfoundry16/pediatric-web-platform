@@ -6,6 +6,7 @@ import {
   isValidTimezone,
   todayInTimezone,
 } from "../lib/timezone";
+import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
@@ -505,6 +506,11 @@ export async function updateAppointmentAdmin(req: Request, res: Response): Promi
     .single();
 
   if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Converge the mirrored Google Calendar event: cancel/no_show delete it,
+  // reschedule moves it, complete leaves it as history (non-blocking).
+  void syncAppointmentCalendarEvent(id as string);
+
   res.json({ appointment: data });
 }
 

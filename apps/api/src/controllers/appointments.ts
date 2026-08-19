@@ -7,6 +7,7 @@ import {
   sendRescheduleEmail,
 } from "../lib/resend";
 import { notifyBookingConfirmed } from "../lib/booking-notifications";
+import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
 import { CONSULTATION_CONFIG, isBlockingAppointment } from "../lib/consultation";
 import { generateSlots } from "../lib/slots";
 import { hhmmToMinutes } from "../lib/timezone";
@@ -298,6 +299,7 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
   // verify fallback).
   if (appointment && usedPackageId) {
     void notifyBookingConfirmed(appointment.id);
+    void syncAppointmentCalendarEvent(appointment.id);
   }
 
   res.status(201).json({
@@ -403,6 +405,7 @@ export async function verifyAppointmentPayment(req: Request, res: Response): Pro
   // it dedupes on email_logs, so a successful send is not repeated.
   if (appt.payment_status === "paid") {
     void notifyBookingConfirmed(id as string);
+    void syncAppointmentCalendarEvent(id as string);
     res.json({ paymentStatus: "paid", status: appt.status });
     return;
   }
@@ -448,6 +451,7 @@ export async function verifyAppointmentPayment(req: Request, res: Response): Pro
   // booking first sends the notifications. Deduped against the webhook via
   // email_logs.
   void notifyBookingConfirmed(id as string);
+  void syncAppointmentCalendarEvent(id as string);
 
   res.json({ paymentStatus: "paid", status: "confirmed" });
 }
@@ -519,6 +523,9 @@ export async function cancelAppointment(req: Request, res: Response): Promise<vo
     res.status(500).json({ error: error.message });
     return;
   }
+
+  // Remove the mirrored Google Calendar event (non-blocking)
+  void syncAppointmentCalendarEvent(id as string);
 
   // Fire cancellation email (non-blocking)
   resolveParentEmail(req.userId!).then(async (parent) => {
@@ -685,6 +692,11 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
     res.status(500).json({ error: error.message });
     return;
   }
+
+  // Move the mirrored Google Calendar event (non-blocking). The reconciler
+  // only creates an event for settled bookings, so rescheduling an unpaid
+  // pending row (whose status is force-set to confirmed above) stays event-less.
+  void syncAppointmentCalendarEvent(id as string);
 
   // Fire reschedule email (non-blocking)
   resolveParentEmail(req.userId!).then(async (parent) => {

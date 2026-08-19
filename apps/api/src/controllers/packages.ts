@@ -9,6 +9,10 @@ import type {
 } from "../lib/stripe";
 import { notifyBookingConfirmed } from "../lib/booking-notifications";
 import { notifyPackagePurchased } from "../lib/package-notifications";
+import {
+  syncAppointmentCalendarEvent,
+  syncGroupSessionCalendarEvent,
+} from "../lib/google-calendar";
 
 // GET /api/packages
 export async function listPackages(
@@ -184,6 +188,9 @@ export async function stripeWebhook(
         return;
       }
 
+      // Add the newly paid registrant to the session's Google Calendar event.
+      void syncGroupSessionCalendarEvent(sessionId);
+
       res.json({ received: true });
       return;
     }
@@ -223,6 +230,7 @@ export async function stripeWebhook(
       // parent/doctor/admins are told. Deduped against the verify fallback, and
       // never throws, so a redelivered webhook still returns 200.
       void notifyBookingConfirmed(appointmentId);
+      void syncAppointmentCalendarEvent(appointmentId);
 
       res.json({ received: true });
       return;
@@ -323,27 +331,39 @@ export async function stripeWebhook(
         );
       }
 
-      const { error: regRevokeError } = await supabaseAdmin
+      // .select() so the affected rows are known — these updates match on the
+      // payment intent, and the calendar events to fix hang off the row ids.
+      const { data: revokedRegs, error: regRevokeError } = await supabaseAdmin
         .from("session_registrations")
         .update({ payment_status: "refunded" })
-        .eq("stripe_payment_intent", paymentIntent);
+        .eq("stripe_payment_intent", paymentIntent)
+        .select("session_id");
       if (regRevokeError) {
         console.error(
           "[webhook] Failed to revoke session registration:",
           regRevokeError.message,
         );
       }
+      for (const sessionId of new Set((revokedRegs ?? []).map((r) => r.session_id as string))) {
+        // Drops the refunded registrant from the session's attendee list.
+        void syncGroupSessionCalendarEvent(sessionId);
+      }
 
       // One-time consultation appointments: refunding cancels the booking.
-      const { error: apptRevokeError } = await supabaseAdmin
+      const { data: revokedAppts, error: apptRevokeError } = await supabaseAdmin
         .from("appointments")
         .update({ payment_status: "refunded", status: "cancelled" })
-        .eq("stripe_payment_intent", paymentIntent);
+        .eq("stripe_payment_intent", paymentIntent)
+        .select("id");
       if (apptRevokeError) {
         console.error(
           "[webhook] Failed to revoke appointment:",
           apptRevokeError.message,
         );
+      }
+      for (const appt of revokedAppts ?? []) {
+        // Removes the mirrored calendar event for the cancelled booking.
+        void syncAppointmentCalendarEvent(appt.id as string);
       }
     }
   }
