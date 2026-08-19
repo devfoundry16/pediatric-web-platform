@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS public.calendar_event_logs (
 ALTER TABLE public.calendar_event_logs ENABLE ROW LEVEL SECURITY;
 
 -- Only admins can read calendar logs (same shape as email_logs_admin_read).
+-- Dropped first because CREATE POLICY has no IF NOT EXISTS, and this migration
+-- must stay safe to re-run.
+DROP POLICY IF EXISTS "calendar_event_logs_admin_read" ON public.calendar_event_logs;
+
 CREATE POLICY "calendar_event_logs_admin_read"
   ON public.calendar_event_logs FOR SELECT
   USING (
