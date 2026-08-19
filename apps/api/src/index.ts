@@ -13,8 +13,10 @@ import coursesRouter from "./routes/courses";
 import groupSessionsRouter from "./routes/group-sessions";
 import featureFlagsRouter from "./routes/feature-flags";
 import adminRouter from "./routes/admin";
+import googleCalendarRouter from "./routes/google-calendar";
 import { stripeWebhook } from "./controllers/packages";
 import { startReminderScheduler } from "./lib/reminder-scheduler";
+import { startCalendarSweep } from "./lib/calendar-sweep";
 
 dotenv.config();
 
@@ -68,6 +70,7 @@ app.use("/api/courses", coursesRouter);
 app.use("/api/live-sessions", groupSessionsRouter);
 app.use("/api/feature-flags", featureFlagsRouter);
 app.use("/api/admin", adminRouter);
+app.use("/api/google-calendar", googleCalendarRouter);
 
 // 404 for unknown API routes
 app.use("/api", (_req, res) => {
@@ -106,11 +109,13 @@ if (process.env.NODE_ENV === "DEVELOPMENT") {
     console.log(`📝 API endpoints: http://localhost:${PORT}/api`);
     console.log(`🏥 Health check: http://localhost:${PORT}/api/health`);
     startReminderScheduler();
+    startCalendarSweep();
   });
 } else {
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     startReminderScheduler();
+    startCalendarSweep();
   });
 }
 
