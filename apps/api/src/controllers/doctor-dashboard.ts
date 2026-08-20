@@ -1,6 +1,6 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
-import { createRoom, createMeetingToken } from "../lib/daily";
+import { ensureAppointmentRoom } from "../lib/appointment-room";
 import { fetchParentNames } from "../lib/parents";
 import {
   DEFAULT_TIMEZONE,
@@ -235,28 +235,16 @@ export async function startSession(
     return;
   }
 
-  // If the room was already created (idempotent restart), reuse existing URL
-  let meetingUrl = existing.meeting_url as string | null;
+  // The room is provisioned when the booking is confirmed, so the link can go
+  // out with the confirmation email. Starting a session is now a status change,
+  // not a provisioning step — this only makes sure the room exists and its
+  // joinable window matches the schedule.
+  const meetingUrl =
+    (existing.meeting_url as string | null) ?? (await ensureAppointmentRoom(id as string));
 
   if (!meetingUrl) {
-    // Calculate room expiry: scheduled end + 30 min buffer.
-    // `new Date("YYYY-MM-DDTHH:MM")` parses in the Node PROCESS's zone, which
-    // skews the expiry by the process/appointment offset (4h under TZ=UTC).
-    const scheduledStart = wallClockToInstant(
-      existing.scheduled_date as string,
-      existing.scheduled_time as string,
-      (existing.timezone as string) || DEFAULT_TIMEZONE
-    );
-    const durationMs = ((existing.duration_minutes as number) + 30) * 60 * 1000;
-    const expiryEpoch = Math.floor((scheduledStart.getTime() + durationMs) / 1000);
-
-    try {
-      const room = await createRoom(`appt-${id}`, expiryEpoch);
-      meetingUrl = room.url;
-    } catch (dailyErr) {
-      res.status(502).json({ error: "Failed to create video room", detail: String(dailyErr) });
-      return;
-    }
+    res.status(502).json({ error: "Failed to prepare the video room" });
+    return;
   }
 
   const { data: updated, error } = await supabaseAdmin
@@ -272,20 +260,9 @@ export async function startSession(
     return;
   }
 
-  // Generate a host token for the doctor so they can join immediately
-  const expiryEpoch = Math.floor(Date.now() / 1000) + 4 * 60 * 60; // 4h from now
-  let doctorToken: string | null = null;
-  try {
-    const roomName = `appt-${id}`;
-    doctorToken = await createMeetingToken(roomName, req.userId!, true, expiryEpoch);
-  } catch {
-    // Non-fatal: doctor can still use the base URL
-  }
-
-  res.json({
-    appointment: updated,
-    tokenUrl: doctorToken ? `${meetingUrl}?t=${doctorToken}` : meetingUrl,
-  });
+  // No token here: the doctor opens the call at /appointments/<id>/room, which
+  // mints one scoped to the join window and passes it to daily-js join().
+  res.json({ appointment: updated });
 }
 
 export async function completeAppointment(

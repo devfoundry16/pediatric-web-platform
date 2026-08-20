@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { alreadySent, recordEmailFailure, sendSessionReminder } from "./resend";
+import { meetingUrlFor } from "./booking-notifications";
 import type { Recipient } from "./recipients";
 import {
   DEFAULT_TIMEZONE,
@@ -34,10 +35,6 @@ function frontendUrl(): string {
  */
 function sessionUrl(sessionId: string): string {
   return `${frontendUrl()}/live-sessions/${sessionId}`;
-}
-
-function appointmentUrl(audience: "parent" | "doctor", appointmentId: string): string {
-  return `${frontendUrl()}/dashboard/${audience}/appointments?appointment=${appointmentId}`;
 }
 
 /** The parent's address lives in auth.users, which needs the admin API. */
@@ -251,7 +248,7 @@ async function remindAppointments(now: Date, windowEnd: Date): Promise<ReminderR
         audience: "parent",
         recipientName: name,
         counterpartName: doctor?.full_name ?? "your doctor",
-        sessionUrl: appointmentUrl("parent", appointment.id),
+        sessionUrl: meetingUrlFor(appointment.id),
       });
       if (sent) run.sent += 1;
     }
@@ -264,7 +261,7 @@ async function remindAppointments(now: Date, windowEnd: Date): Promise<ReminderR
         audience: "doctor",
         recipientName: doctor.full_name,
         counterpartName: childName,
-        sessionUrl: appointmentUrl("doctor", appointment.id),
+        sessionUrl: meetingUrlFor(appointment.id),
       });
       if (sent) run.sent += 1;
     }

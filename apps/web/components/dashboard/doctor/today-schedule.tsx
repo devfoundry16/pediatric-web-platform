@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { useEffect, useState, useCallback } from "react";
 import { DEFAULT_TIMEZONE } from "@/lib/timezone";
 import { useI18n } from "@/lib/i18n/i18n-context";
@@ -58,6 +60,7 @@ function getStatusDisplay(apt: DoctorAppointment): {
 }
 
 export function TodaySchedule() {
+  const router = useRouter();
   const { dictionary: t } = useI18n();
   const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
   const [doctorTimezone, setDoctorTimezone] = useState(DEFAULT_TIMEZONE);
@@ -89,6 +92,7 @@ export function TodaySchedule() {
     try {
       await doctorApi.startSession(id);
       await load();
+      router.push(`/appointments/${id}/room`);
     } finally {
       setActionLoading(null);
     }
@@ -104,11 +108,10 @@ export function TodaySchedule() {
     }
   }
 
-  async function handleJoin(id: string) {
-    setActionLoading(id);
-    const url = await doctorApi.joinAppointment(id);
-    setActionLoading(null);
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  // The call runs inside the app, which is what lets Leave return here
+  // instead of stranding the doctor on daily.co.
+  function handleJoin(id: string) {
+    router.push(`/appointments/${id}/room`);
   }
 
   return (

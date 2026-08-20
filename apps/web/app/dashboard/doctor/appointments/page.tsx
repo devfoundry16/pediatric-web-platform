@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHighlightedAppointment } from "@/hooks/use-highlighted-appointment";
@@ -117,6 +119,7 @@ export default function DoctorAppointmentsPage() {
 }
 
 function DoctorAppointmentsContent() {
+  const router = useRouter();
   const { dictionary: t } = useI18n();
   const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -153,6 +156,7 @@ function DoctorAppointmentsContent() {
     try {
       await doctorApi.startSession(id);
       await load();
+      router.push(`/appointments/${id}/room`);
     } finally {
       setActionLoading(null);
     }
@@ -168,11 +172,10 @@ function DoctorAppointmentsContent() {
     }
   }
 
-  async function handleJoin(id: string) {
-    setActionLoading(id);
-    const url = await doctorApi.joinAppointment(id);
-    setActionLoading(null);
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  // The call runs inside the app, which is what lets Leave return here
+  // instead of stranding the doctor on daily.co.
+  function handleJoin(id: string) {
+    router.push(`/appointments/${id}/room`);
   }
 
   const tabs: { key: FilterTab; label: string }[] = [

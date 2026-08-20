@@ -66,6 +66,10 @@ export const doctorsApi = {
   },
 };
 
+export type JoinResult =
+  | { ok: true; roomUrl: string; token: string }
+  | { ok: false; error: string; opensAt?: string };
+
 export const appointmentsApi = {
   async list(): Promise<Appointment[]> {
     const { data } = await axios.get<{ appointments: Appointment[] }>(
@@ -153,17 +157,26 @@ export const appointmentsApi = {
   },
 
   // Video rooms are private; joining requires a server-minted meeting token.
-  // This returns the room URL with the token appended (?t=...). Never link to
-  // the bare meeting_url — a private room rejects entry without a token.
-  async join(id: string): Promise<string | null> {
+  // The token is returned separately from the room URL because daily-js takes
+  // it in join() — putting it in the URL is what breaks Daily's leave flow.
+  // Outside the appointment's join window the API refuses and says when it
+  // opens, which the room page shows instead of a connection error.
+  async join(id: string): Promise<JoinResult> {
     try {
-      const { data } = await axios.get<{ tokenUrl: string }>(
+      const { data } = await axios.get<{ roomUrl: string; token: string }>(
         `${getBaseUrl()}/appointments/${id}/join`,
         { headers: await authHeaders() }
       );
-      return data.tokenUrl ?? null;
-    } catch {
-      return null;
+      return { ok: true, roomUrl: data.roomUrl, token: data.token };
+    } catch (err) {
+      const body = axios.isAxiosError(err)
+        ? (err.response?.data as { error?: string; opensAt?: string } | undefined)
+        : undefined;
+      return {
+        ok: false,
+        error: body?.error ?? "Could not join the consultation",
+        opensAt: body?.opensAt,
+      };
     }
   },
 };

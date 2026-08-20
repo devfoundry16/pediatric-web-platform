@@ -136,20 +136,6 @@ export const doctorApi = {
     );
   },
 
-  // Video rooms are private; the doctor joins via a server-minted owner token
-  // returned as tokenUrl. Never link to the bare meeting_url.
-  async joinAppointment(id: string): Promise<string | null> {
-    try {
-      const { data } = await axios.get<{ tokenUrl: string }>(
-        `${getBaseUrl()}/appointments/${id}/join`,
-        { headers: await authHeaders() }
-      );
-      return data.tokenUrl ?? null;
-    } catch {
-      return null;
-    }
-  },
-
   async getPatients(): Promise<DoctorPatient[]> {
     const { data } = await axios.get<{ patients: DoctorPatient[] }>(
       `${getBaseUrl()}/doctor/patients`,
