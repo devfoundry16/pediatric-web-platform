@@ -374,19 +374,22 @@ function SessionRow({
               </AlertDialog>
             )}
 
-            {(session.status === "scheduled" || session.status === "live") && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="gap-1.5"
-                onClick={() =>
-                  router.push(`/live-sessions/${session.id}/room`)
-                }
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                {t.liveSessions.joinRoom}
-              </Button>
-            )}
+            {/* Rooms are created on publish — joining a draft would mint a
+                Daily room for a session parents cannot see. */}
+            {session.is_published &&
+              (session.status === "scheduled" || session.status === "live") && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() =>
+                    router.push(`/live-sessions/${session.id}/room`)
+                  }
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  {t.liveSessions.joinRoom}
+                </Button>
+              )}
 
             {session.status === "live" && (
               <AlertDialog>

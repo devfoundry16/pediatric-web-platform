@@ -12,6 +12,7 @@ import { useI18n } from "@/lib/i18n/i18n-context";
 import {
   liveSessionsApi,
   isConfirmedRegistration,
+  type GroupSession,
   type SessionRegistration,
 } from "@/lib/api/live-sessions";
 import { toast } from "sonner";
@@ -26,6 +27,19 @@ import {
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
+
+// A session the doctor never started stays 'scheduled' forever, so the status
+// alone would keep offering Join long after the slot passed — the join
+// endpoint rejects it anyway. Same end-of-slot semantics as the session detail
+// page; the server still owns the join window, this only stops advertising
+// dead sessions.
+function sessionHasFinished(session: GroupSession): boolean {
+  return (
+    Date.now() >
+    new Date(session.scheduled_at).getTime() +
+      session.duration_minutes * 60_000
+  );
+}
 
 function RegistrationCard({
   reg,
@@ -47,6 +61,7 @@ function RegistrationCard({
   // Only a confirmed place gets into the room — the join endpoint rejects
   // anything else with a 403, so offering the button would be a dead end.
   const isConfirmed = isConfirmedRegistration(reg.payment_status);
+  const hasFinished = sessionHasFinished(session);
 
   return (
     <Card className="transition-all hover:shadow-md">
@@ -111,18 +126,20 @@ function RegistrationCard({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {(isLive || session.status === "scheduled") && isConfirmed && (
-              <Button
-                size="sm"
-                className="gap-1.5"
-                onClick={() =>
-                  router.push(`/live-sessions/${session.id}/room`)
-                }
-              >
-                <Radio className="h-3.5 w-3.5" />
-                {t.liveSessions.joinRoom}
-              </Button>
-            )}
+            {/* Live keeps Join regardless of the clock (overrun grace). */}
+            {(isLive || (session.status === "scheduled" && !hasFinished)) &&
+              isConfirmed && (
+                <Button
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() =>
+                    router.push(`/live-sessions/${session.id}/room`)
+                  }
+                >
+                  <Radio className="h-3.5 w-3.5" />
+                  {t.liveSessions.joinRoom}
+                </Button>
+              )}
 
             {reg.payment_status === "pending" && !isEnded && (
               <Button size="sm" variant="outline" className="gap-1.5" asChild>
