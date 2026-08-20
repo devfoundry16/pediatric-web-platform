@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -23,16 +24,15 @@ import { DEFAULT_TIMEZONE, formatStoredAppointment } from "@/lib/timezone";
 
 export function UpcomingAppointments() {
   const { dictionary: t } = useI18n();
+  const router = useRouter();
   const { timezone: viewerTimezone } = useViewerTimezone(DEFAULT_TIMEZONE);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [joiningId, setJoiningId] = useState<string | null>(null);
 
-  async function handleJoin(id: string) {
-    setJoiningId(id);
-    const url = await appointmentsApi.join(id);
-    setJoiningId(null);
-    if (url) window.open(url, "_blank", "noopener,noreferrer");
+  // The call runs inside the app, which is what lets Leave return here
+  // instead of stranding the parent on daily.co.
+  function handleJoin(id: string) {
+    router.push(`/appointments/${id}/room`);
   }
 
   useEffect(() => {
@@ -139,7 +139,6 @@ export function UpcomingAppointments() {
                       size="sm"
                       variant="outline"
                       className="gap-1.5 bg-transparent"
-                      disabled={joiningId === appt.id}
                       onClick={() => handleJoin(appt.id)}
                     >
                       <Video className="h-3.5 w-3.5" />
