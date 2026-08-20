@@ -1,3 +1,4 @@
+import dotenv from "dotenv";
 import { supabaseAdmin } from "./supabase";
 import { alreadySent, recordEmailFailure, sendSessionReminder } from "./resend";
 import { meetingUrlFor } from "./booking-notifications";
@@ -9,6 +10,7 @@ import {
   wallClockToInstant,
 } from "./timezone";
 
+dotenv.config();
 /** How far ahead of the start a reminder goes out. */
 export const LEAD_MINUTES = 10;
 
@@ -172,6 +174,15 @@ async function remindGroupSessions(now: Date, windowEnd: Date): Promise<Reminder
   return run;
 }
 
+/**
+ * Human-readable phrase for an appointment's type. Historical slugs read as
+ * "quick consultation"; the current generic `consultation` slug (migration 013)
+ * already is the whole word, so appending "consultation" would double it.
+ */
+export function consultationLabel(type: string): string {
+  return type === "consultation" ? type : `${type} consultation`;
+}
+
 async function remindAppointments(now: Date, windowEnd: Date): Promise<ReminderRun> {
   const run: ReminderRun = { considered: 0, sent: 0, failed: 0 };
   if (!supabaseAdmin) return run;
@@ -217,11 +228,12 @@ async function remindAppointments(now: Date, windowEnd: Date): Promise<ReminderR
       | { first_name: string; last_name: string }
       | null;
     const childName = child ? `${child.first_name} ${child.last_name}` : "the patient";
+    const typeLabel = consultationLabel(appointment.consultation_type);
 
     const shared = {
       emailType: "appointment_reminder" as const,
       relatedId: appointment.id,
-      sessionTitle: `Your ${appointment.consultation_type} consultation`,
+      sessionTitle: `Your ${typeLabel}`,
       // Echoed as stored, the way the confirmation email does, with the zone
       // they are wall-clock in stated beside them.
       scheduledDate: appointment.scheduled_date,
@@ -256,7 +268,8 @@ async function remindAppointments(now: Date, windowEnd: Date): Promise<ReminderR
     if (doctor?.email) {
       const sent = await sendOnce({
         ...shared,
-        sessionTitle: `${appointment.consultation_type} consultation`,
+        // Leads the sentence and the subject line, so it gets a capital.
+        sessionTitle: typeLabel.charAt(0).toUpperCase() + typeLabel.slice(1),
         recipient: { email: doctor.email },
         audience: "doctor",
         recipientName: doctor.full_name,
