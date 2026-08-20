@@ -1,7 +1,13 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
-import { createRoom, createMeetingToken } from "../lib/daily";
+import { createMeetingToken } from "../lib/daily";
 import { syncGroupSessionCalendarEvent } from "../lib/google-calendar";
+import {
+  deleteGroupSessionRoom,
+  ensureGroupSessionRoom,
+  groupSessionJoinWindow,
+  groupSessionRoomName,
+} from "../lib/group-session-room";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const StripeLib: new (key: string) => StripeClient = require("stripe");
@@ -322,6 +328,9 @@ export async function createSession(
   // by the reconciler until is_published flips true.
   if (data) void syncGroupSessionCalendarEvent(data.id as string);
 
+  // Create the room at publish time so the join link exists before go-live.
+  if (data?.is_published) void ensureGroupSessionRoom(data.id as string);
+
   res.status(201).json({ session: data });
 }
 
@@ -382,10 +391,9 @@ export async function updateSession(
     return;
   }
 
-  // goLive derives the Daily room's token expiry from the schedule it finds at
-  // that moment, so moving the clock underneath a running session leaves the
-  // room and the record disagreeing about when it ends. Everything else about
-  // a live session stays editable.
+  // Rescheduling a live session would shift the join window (and the room's
+  // Daily nbf/exp) out from under participants mid-call. Everything else
+  // about a live session stays editable.
   if (
     existing.status === "live" &&
     (scheduled_at !== undefined || duration_minutes !== undefined)
@@ -430,6 +438,18 @@ export async function updateSession(
   // edits patch it, publishing creates it, unpublishing removes it, and a
   // cancelled session stays deleted no matter what was patched.
   void syncGroupSessionCalendarEvent(id as string);
+
+  // Covers publish, reschedule, and duration edits; ensure is idempotent so
+  // over-calling here is harmless — the predicate just avoids a Daily
+  // round-trip on title-only edits.
+  if (
+    data.is_published &&
+    (scheduled_at !== undefined ||
+      duration_minutes !== undefined ||
+      is_published !== undefined)
+  ) {
+    void ensureGroupSessionRoom(id as string);
+  }
 
   res.json({ session: data });
 }
@@ -491,6 +511,9 @@ export async function cancelSession(
   // every registered attendee (sendUpdates=all).
   void syncGroupSessionCalendarEvent(id as string);
 
+  // A cancelled session's link should stop working immediately.
+  void deleteGroupSessionRoom(id as string);
+
   res.json({ success: true });
 }
 
@@ -528,33 +551,41 @@ export async function goLive(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const expiryEpoch =
-    Math.floor(Date.now() / 1000) + existing.duration_minutes * 60 + 3600;
+  const window = groupSessionJoinWindow(existing);
+  if (!window) {
+    res.status(500).json({ error: "Session has an unreadable schedule" });
+    return;
+  }
 
-  let roomName: string;
-  let roomUrl: string;
-  try {
-    // A live session's room is still created on demand when the doctor goes
-    // live, so it is joinable from that moment until the expiry above.
-    const room = await createRoom(String(id), {
-      notBefore: Math.floor(Date.now() / 1000),
-      expiry: expiryEpoch,
+  // Joins are window-gated, so flipping to live outside the window would wedge
+  // the session: unjoinable, and the live status blocks rescheduling out of it.
+  const now = Date.now();
+  if (now < window.opensAt.getTime()) {
+    res.status(400).json({
+      error: "This session cannot go live yet",
+      opensAt: window.opensAt.toISOString(),
     });
-    roomName = room.name;
-    roomUrl = room.url;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Failed to create room";
-    res.status(500).json({ error: message });
+    return;
+  }
+  if (now > window.closesAt.getTime()) {
+    res.status(400).json({
+      error: "This session's scheduled time has passed — reschedule it first",
+    });
+    return;
+  }
+
+  // The room exists from publish time with a schedule-derived window; going
+  // live only flips the status that drives badges and Join buttons. Ensure is
+  // the recovery path for sessions published before rooms were created eagerly.
+  const roomUrl = await ensureGroupSessionRoom(id as string);
+  if (!roomUrl) {
+    res.status(502).json({ error: "Video room is unavailable, please try again" });
     return;
   }
 
   const { data: updated, error: updateError } = await supabaseAdmin
     .from("group_sessions")
-    .update({
-      status: "live",
-      daily_room_name: roomName,
-      daily_room_url: roomUrl,
-    })
+    .update({ status: "live" })
     .eq("id", id)
     .select()
     .single();
@@ -564,22 +595,7 @@ export async function goLive(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Create an owner token for the doctor so they can join directly
-  const tokenExpiry = expiryEpoch;
-  let doctorToken: string | null = null;
-  try {
-    doctorToken = await createMeetingToken({
-      roomName,
-      userId: req.userId!,
-      userName: await resolveDisplayName(req.userId!, "Doctor"),
-      isOwner: true,
-      expiryEpoch: tokenExpiry,
-    });
-  } catch {
-    // Non-fatal — doctor can still join the room URL
-  }
-
-  res.json({ session: updated, doctorToken });
+  res.json({ session: updated });
 }
 
 // PATCH /api/live-sessions/:id/end
@@ -639,7 +655,7 @@ export async function registerForSession(
   const { data: session, error: sessionError } = await supabaseAdmin
     .from("group_sessions")
     .select(
-      "id, title, price_aed, is_free, status, is_published, max_participants, scheduled_at, duration_minutes, session_registrations (payment_status)"
+      "id, title, price_aed, is_free, status, is_published, max_participants, scheduled_at, duration_minutes, doctor_id, session_registrations (payment_status)"
     )
     .eq("id", id)
     .eq("is_published", true)
@@ -659,6 +675,22 @@ export async function registerForSession(
     res
       .status(400)
       .json({ error: "Registration for this session has closed" });
+    return;
+  }
+
+  // Hosts join through the host path; a registration row for the host would also consume a seat.
+  // A doctors lookup failure must not fail open into checkout for the host.
+  const { data: hostDoctor, error: hostDoctorError } = await supabaseAdmin
+    .from("doctors")
+    .select("id")
+    .eq("profile_id", userId)
+    .maybeSingle();
+  if (hostDoctorError) {
+    res.status(500).json({ error: hostDoctorError.message });
+    return;
+  }
+  if (hostDoctor && session.doctor_id === hostDoctor.id) {
+    res.status(400).json({ error: "You are the host of this session" });
     return;
   }
 
@@ -805,7 +837,7 @@ export async function joinSession(
   const { data: session, error: sessionError } = await supabaseAdmin
     .from("group_sessions")
     .select(
-      "id, status, daily_room_name, daily_room_url, duration_minutes, doctor_id"
+      "id, status, daily_room_name, daily_room_url, scheduled_at, duration_minutes, doctor_id"
     )
     .eq("id", id)
     .single();
@@ -815,13 +847,8 @@ export async function joinSession(
     return;
   }
 
-  if (session.status !== "live") {
-    res.status(400).json({ error: "Session is not currently live" });
-    return;
-  }
-
-  if (!session.daily_room_name || !session.daily_room_url) {
-    res.status(500).json({ error: "Room not configured yet" });
+  if (session.status === "cancelled" || session.status === "ended") {
+    res.status(400).json({ error: "This session is no longer available" });
     return;
   }
 
@@ -850,26 +877,54 @@ export async function joinSession(
     }
   }
 
-  const expiryEpoch =
-    Math.floor(Date.now() / 1000) + session.duration_minutes * 60 + 1800;
+  const window = groupSessionJoinWindow(session);
+  if (!window) {
+    res.status(500).json({ error: "Session has an unreadable schedule" });
+    return;
+  }
+
+  // The room exists from publish time, so the window — not the doctor pressing
+  // Go Live — is what stops anyone arriving days early or rejoining long after.
+  const now = Date.now();
+  if (now < window.opensAt.getTime()) {
+    res.status(403).json({
+      error: "This session is not open yet",
+      opensAt: window.opensAt.toISOString(),
+    });
+    return;
+  }
+  if (now > window.closesAt.getTime()) {
+    res.status(403).json({ error: "This session has ended" });
+    return;
+  }
+
+  // Reconciles a room whose window a failed background ensure left stale
+  // (e.g. after a reschedule); falls back to the stored URL so a Daily blip
+  // at join time does not block an otherwise-working room.
+  const roomUrl =
+    (await ensureGroupSessionRoom(id as string)) ?? session.daily_room_url;
+  if (!roomUrl) {
+    res.status(502).json({ error: "Video room is unavailable, please try again" });
+    return;
+  }
 
   let token: string;
   try {
     token = await createMeetingToken({
-      roomName: session.daily_room_name,
+      roomName: session.daily_room_name ?? groupSessionRoomName(id as string),
       userId,
       userName: await resolveDisplayName(userId, isDoctorHost ? "Doctor" : "Participant"),
       isOwner: isDoctorHost,
-      expiryEpoch,
+      expiryEpoch: Math.floor(window.closesAt.getTime() / 1000),
     });
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Failed to create token";
-    res.status(500).json({ error: message });
+    res
+      .status(502)
+      .json({ error: "Could not authorise you for the video room", detail: String(err) });
     return;
   }
 
-  res.json({ token, roomUrl: session.daily_room_url });
+  res.json({ token, roomUrl });
 }
 
 // GET /api/live-sessions/user/verify-payment?stripe_session_id=xxx

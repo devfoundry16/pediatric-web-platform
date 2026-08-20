@@ -374,8 +374,10 @@ function SessionRow({
               </AlertDialog>
             )}
 
-            {session.status === "live" && (
-              <>
+            {/* Rooms are created on publish — joining a draft would mint a
+                Daily room for a session parents cannot see. */}
+            {session.is_published &&
+              (session.status === "scheduled" || session.status === "live") && (
                 <Button
                   size="sm"
                   variant="outline"
@@ -387,34 +389,36 @@ function SessionRow({
                   <ExternalLink className="h-3.5 w-3.5" />
                   {t.liveSessions.joinRoom}
                 </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={actionLoading}
-                    >
+              )}
+
+            {session.status === "live" && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={actionLoading}
+                  >
+                    {t.liveSessions.endSession}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
                       {t.liveSessions.endSession}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        {t.liveSessions.endSession}
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {t.liveSessions.confirmEnd}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleEnd}>
-                        {t.liveSessions.endSession}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </>
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t.liveSessions.confirmEnd}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleEnd}>
+                      {t.liveSessions.endSession}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
 
             {session.status === "scheduled" && (
@@ -458,13 +462,18 @@ function SessionRow({
               </AlertDialog>
             )}
 
-            {(session.status === "scheduled" || session.status === "ended") && (
-              <Button size="sm" variant="ghost" asChild>
-                <Link href={`/live-sessions/${session.id}`}>
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
-              </Button>
-            )}
+            {session.is_published &&
+              (session.status === "scheduled" || session.status === "ended") && (
+                <Button size="sm" variant="ghost" asChild>
+                  <Link
+                    href={`/live-sessions/${session.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              )}
           </div>
         </div>
       </CardContent>
@@ -500,7 +509,11 @@ export default function DoctorLiveSessionsPage() {
       );
       toast.success(`${session.title} is now live!`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to go live";
+      // The API explains refusals (outside the go-live window, stale schedule)
+      // in the response body — err.message would only say "status code 400".
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error ?? "Failed to go live";
       toast.error(msg);
     }
   }

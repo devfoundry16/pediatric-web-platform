@@ -609,6 +609,7 @@
     "sessionFull": "Session Full",
     "scheduledFor": "Scheduled for",
     "hostedBy": "Hosted by",
+    "youAreHost": "You are hosting this session",
     "aboutSession": "About this session",
     "manageSessions": "Manage Live Sessions",
     "createSession": "Create Session",

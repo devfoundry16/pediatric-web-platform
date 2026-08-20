@@ -91,10 +91,11 @@ export interface DoctorProfile {
 // ─── API client ───────────────────────────────────────────────────────────────
 
 export const doctorApi = {
-  async getMe() {
-    const { data } = await axios.get(`${getBaseUrl()}/doctor/me`, {
-      headers: await authHeaders(),
-    });
+  async getMe(): Promise<DoctorProfile> {
+    const { data } = await axios.get<{ doctor: DoctorProfile }>(
+      `${getBaseUrl()}/doctor/me`,
+      { headers: await authHeaders() }
+    );
     return data.doctor;
   },
 

@@ -71,6 +71,10 @@ export interface CreateSessionPayload {
 
 export type UpdateSessionPayload = Partial<CreateSessionPayload>;
 
+export type SessionJoinResult =
+  | { ok: true; token: string; roomUrl: string }
+  | { ok: false; error: string; opensAt?: string };
+
 // ─── API client ───────────────────────────────────────────────────────────────
 
 export const liveSessionsApi = {
@@ -110,14 +114,26 @@ export const liveSessionsApi = {
     return data as { registration?: SessionRegistration; checkoutUrl?: string };
   },
 
-  async joinSession(
-    sessionId: string
-  ): Promise<{ token: string; roomUrl: string }> {
-    const { data } = await axios.get<{ token: string; roomUrl: string }>(
-      `${getBaseUrl()}/live-sessions/${sessionId}/join`,
-      { headers: await authHeaders() }
-    );
-    return data;
+  // Video rooms are private; joining requires a server-minted meeting token.
+  // Outside the session's join window the API refuses and says when it
+  // opens, which the room page shows instead of a connection error.
+  async joinSession(sessionId: string): Promise<SessionJoinResult> {
+    try {
+      const { data } = await axios.get<{ token: string; roomUrl: string }>(
+        `${getBaseUrl()}/live-sessions/${sessionId}/join`,
+        { headers: await authHeaders() }
+      );
+      return { ok: true, token: data.token, roomUrl: data.roomUrl };
+    } catch (err) {
+      const body = axios.isAxiosError(err)
+        ? (err.response?.data as { error?: string; opensAt?: string } | undefined)
+        : undefined;
+      return {
+        ok: false,
+        error: body?.error ?? "Could not join the session",
+        opensAt: body?.opensAt,
+      };
+    }
   },
 
   async verifyPayment(
@@ -169,13 +185,8 @@ export const liveSessionsApi = {
     });
   },
 
-  async goLive(
-    id: string
-  ): Promise<{ session: GroupSession; doctorToken: string | null }> {
-    const { data } = await axios.patch<{
-      session: GroupSession;
-      doctorToken: string | null;
-    }>(
+  async goLive(id: string): Promise<{ session: GroupSession }> {
+    const { data } = await axios.patch<{ session: GroupSession }>(
       `${getBaseUrl()}/live-sessions/${id}/go-live`,
       {},
       { headers: await authHeaders() }

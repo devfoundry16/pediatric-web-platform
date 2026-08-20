@@ -17,6 +17,7 @@ export default function SessionRoomPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [opensAt, setOpensAt] = useState<string | null>(null);
 
   // DailyIframe is loaded from the @daily-co/daily-js bundle which augments window
   type DailyCall = {
@@ -36,7 +37,16 @@ export default function SessionRoomPage() {
       if (!iframeRef.current) throw new Error("Room container not ready");
 
       // Fetch the Daily token + room URL from our API
-      const { token, roomUrl } = await liveSessionsApi.joinSession(params.id);
+      const joinInfo = await liveSessionsApi.joinSession(params.id);
+
+      // Outside the join window the API says when it opens, so say so rather
+      // than dropping the user into a failed connection.
+      if (!joinInfo.ok) {
+        setOpensAt(joinInfo.opensAt ?? null);
+        setError(joinInfo.error);
+        setLoading(false);
+        return;
+      }
 
       const call = DailyIframe.createFrame(iframeRef.current, {
         iframeStyle: {
@@ -63,7 +73,7 @@ export default function SessionRoomPage() {
       setLoading(false);
 
       // Fire join without blocking — Daily emits events for errors internally.
-      call.join({ url: roomUrl, token }).catch((err: unknown) => {
+      call.join({ url: joinInfo.roomUrl, token: joinInfo.token }).catch((err: unknown) => {
         const msg =
           err instanceof Error ? err.message : "Failed to join room";
         setError(msg);
@@ -131,8 +141,16 @@ export default function SessionRoomPage() {
           </div>
         )}
         {error && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background px-6 text-center">
             <p className="text-destructive text-sm">{error}</p>
+            {opensAt && (
+              <p className="text-sm text-muted-foreground">
+                {t.appointments.roomOpensAt.replace(
+                  "{time}",
+                  new Date(opensAt).toLocaleString()
+                )}
+              </p>
+            )}
             <Button onClick={() => router.back()}>{t.common.back}</Button>
           </div>
         )}

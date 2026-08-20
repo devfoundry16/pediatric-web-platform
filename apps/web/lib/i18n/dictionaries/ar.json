@@ -609,6 +609,7 @@
     "sessionFull": "الجلسة ممتلئة",
     "scheduledFor": "مجدولة في",
     "hostedBy": "يقدمها",
+    "youAreHost": "أنت مضيف هذه الجلسة",
     "aboutSession": "عن هذه الجلسة",
     "manageSessions": "إدارة الجلسات المباشرة",
     "createSession": "إنشاء جلسة",
