@@ -276,18 +276,18 @@ function ParentAppointmentsContent() {
               </Link>
             </Button>
           </div>
-          <Link href="/booking">
-            <Button size="sm" className="gap-1.5">
-              <Plus className="h-3.5 w-3.5" />
-              {t.parentDashboard.bookAppointment}
-            </Button>
-          </Link>
+          <div className="flex items-center gap-1">
+            <RefreshButton variant="rotate" onRefresh={() => loadAppointments(true)} />
+            <Link href="/booking">
+              <Button size="sm" className="gap-1.5">
+                <Plus className="h-3.5 w-3.5" />
+                {t.parentDashboard.bookAppointment}
+              </Button>
+            </Link>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <h1 className="text-2xl font-bold text-foreground">{t.appointments.title}</h1>
-          <RefreshButton variant="rotate" onRefresh={() => loadAppointments(true)} />
-        </div>
+        <h1 className="text-2xl font-bold text-foreground">{t.appointments.title}</h1>
         <p className="text-xs text-muted-foreground">
           {t.booking.timezoneHint.replace("{timezone}", formatTimezoneLabel(viewerTimezone))}
         </p>

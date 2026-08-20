@@ -69,18 +69,18 @@ export function UpcomingAppointments() {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <div className="flex items-center gap-2">
-          <CardTitle className="text-lg">
-            {t.parentDashboard.upcomingAppointments}
-          </CardTitle>
+        <CardTitle className="text-lg">
+          {t.parentDashboard.upcomingAppointments}
+        </CardTitle>
+        <div className="flex items-center gap-1">
           <RefreshButton onRefresh={load} />
+          <Link href="/booking">
+            <Button size="sm" className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" />
+              {t.parentDashboard.bookAppointment}
+            </Button>
+          </Link>
         </div>
-        <Link href="/booking">
-          <Button size="sm" className="gap-1.5">
-            <Plus className="h-3.5 w-3.5" />
-            {t.parentDashboard.bookAppointment}
-          </Button>
-        </Link>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {isLoading ? (

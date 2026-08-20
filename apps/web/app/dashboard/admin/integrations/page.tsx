@@ -116,17 +116,15 @@ function IntegrationsPageInner() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between gap-4">
+        <div>
           <h1 className="text-2xl font-bold text-foreground">Integrations</h1>
-          <RefreshButton
-            onRefresh={() => Promise.all([loadStatus(true), loadLogs(true)])}
-          />
+          <p className="text-sm text-muted-foreground">
+            Connect your Google Calendar. As an admin you receive every appointment and live
+            session on the platform; parents and doctors only receive their own.
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Connect your Google Calendar. As an admin you receive every appointment and live session
-          on the platform; parents and doctors only receive their own.
-        </p>
+        <RefreshButton onRefresh={() => Promise.all([loadStatus(true), loadLogs(true)])} />
       </div>
 
       {justConnected && (

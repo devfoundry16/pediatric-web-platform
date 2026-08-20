@@ -213,12 +213,14 @@ function DoctorAppointmentsContent() {
     <DashboardLayout role="doctor">
       <div className="flex flex-col gap-6">
         {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            {t.doctorDashboard.allAppointments}
-          </h1>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">
+              {t.doctorDashboard.allAppointments}
+            </h1>
+            <TimezoneNotice timezone={doctorTimezone} variant="compact" />
+          </div>
           <RefreshButton onRefresh={load} />
-          <TimezoneNotice timezone={doctorTimezone} variant="compact" />
         </div>
 
         {/* Filter tabs */}
