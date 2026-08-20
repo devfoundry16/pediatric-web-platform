@@ -210,3 +210,23 @@ export function tokenRefreshRoute(byRefreshToken: Record<string, string> = {}): 
     },
   };
 }
+
+// ─── Express response stub ────────────────────────────────────────────────────
+// Minimal stand-in for an Express Response so controllers can be invoked
+// directly, with no app or HTTP layer involved.
+
+export function makeRes() {
+  const res: any = {
+    statusCode: 200,
+    body: undefined as unknown,
+  };
+  res.status = (code: number) => {
+    res.statusCode = code;
+    return res;
+  };
+  res.json = (body: unknown) => {
+    res.body = body;
+    return res;
+  };
+  return res;
+}
