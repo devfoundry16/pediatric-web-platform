@@ -14,12 +14,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AlertCircle, Calendar, CheckCircle, XCircle } from "lucide-react";
-import {
-  adminApi,
-  type CalendarAccount,
-  type CalendarEventLog,
-  type CalendarIntegrationStatus,
-} from "@/lib/api/admin";
+import { adminApi, type CalendarAccount, type CalendarEventLog } from "@/lib/api/admin";
+import { calendarApi, type CalendarConnectionStatus } from "@/lib/api/calendar";
 
 // Codes the OAuth callback can bounce back with (?error=...), mapped to
 // something an admin can act on. Keep in step with googleCalendarCallback in
@@ -27,7 +23,6 @@ import {
 const CALLBACK_ERRORS: Record<string, string> = {
   access_denied: "The Google consent screen was cancelled. No changes were made.",
   invalid_state: "The connection link expired or was tampered with. Try connecting again.",
-  not_admin: "Only admins can connect the clinic calendar.",
   missing_code: "Google did not return an authorization code. Try connecting again.",
   exchange_failed: "Google rejected the authorization code. Try connecting again.",
   no_refresh_token:
@@ -37,10 +32,10 @@ const CALLBACK_ERRORS: Record<string, string> = {
 
 function IntegrationsPageInner() {
   const searchParams = useSearchParams();
-  const justConnected = searchParams.get("connected") === "1";
-  const callbackError = searchParams.get("error");
+  const justConnected = searchParams.get("calendar") === "connected";
+  const callbackError = searchParams.get("calendar_error");
 
-  const [status, setStatus] = useState<CalendarIntegrationStatus | null>(null);
+  const [status, setStatus] = useState<CalendarConnectionStatus | null>(null);
   const [statusLoading, setStatusLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -55,8 +50,8 @@ function IntegrationsPageInner() {
 
   const loadStatus = useCallback(() => {
     setStatusLoading(true);
-    adminApi
-      .getGoogleCalendarStatus()
+    calendarApi
+      .getStatus()
       .then(setStatus)
       .catch(() => setStatus(null))
       .finally(() => setStatusLoading(false));
@@ -93,8 +88,7 @@ function IntegrationsPageInner() {
   const handleConnect = async () => {
     setBusy(true);
     try {
-      const { url } = await adminApi.connectGoogleCalendar();
-      window.location.href = url;
+      window.location.href = await calendarApi.connect();
     } catch {
       setBusy(false);
     }
@@ -103,13 +97,13 @@ function IntegrationsPageInner() {
   const handleDisconnect = async () => {
     if (
       !window.confirm(
-        "Disconnect the clinic Google Calendar? New bookings will stop appearing on it until an account is connected again."
+        "Disconnect your Google Calendar? Bookings will stop appearing on it, and the events already there will be removed."
       )
     )
       return;
     setBusy(true);
     try {
-      await adminApi.disconnectGoogleCalendar();
+      await calendarApi.disconnect();
       loadStatus();
     } finally {
       setBusy(false);
@@ -123,14 +117,15 @@ function IntegrationsPageInner() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Integrations</h1>
         <p className="text-sm text-muted-foreground">
-          Connect the clinic Google Calendar so confirmed bookings and live sessions appear on it
+          Connect your Google Calendar. As an admin you receive every appointment and live session
+          on the platform; parents and doctors only receive their own.
         </p>
       </div>
 
       {justConnected && (
         <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
           <CheckCircle className="h-4 w-4 shrink-0" />
-          Google Calendar connected. New confirmed bookings will now appear on the clinic calendar.
+          Google Calendar connected. Every appointment and live session will now appear on it.
         </div>
       )}
       {callbackError && (
@@ -159,8 +154,8 @@ function IntegrationsPageInner() {
           ) : !status.connected ? (
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
-                No account connected. Connect the clinic Google account whose calendar should hold
-                every confirmed booking; parents are invited to each event by email.
+                No account connected. Connect yours to receive every appointment and live session on
+                the platform.
               </p>
               <Button onClick={handleConnect} disabled={busy}>
                 {busy ? "Redirecting…" : "Connect Google Calendar"}
