@@ -5,31 +5,28 @@ import {
   disconnectAccount,
   exchangeCode,
   getAccountForUser,
-  getClinicAccount,
   isCalendarConfigured,
   listAccounts,
   resyncUpcomingForUser,
   saveAccount,
   signState,
   verifyState,
-  type ConnectTarget,
 } from "../lib/google-calendar";
 
 function frontendUrl(): string {
   return process.env.FRONTEND_URL ?? "http://localhost:3333";
 }
 
-/** Where to send the browser back to after consent, per audience. */
-async function returnPathFor(userId: string, target: ConnectTarget): Promise<string> {
-  if (target === "clinic") return "/dashboard/admin/integrations";
+/** Where the browser lands after consent — admins manage this on Integrations. */
+async function returnPathFor(userId: string): Promise<string> {
   if (!supabaseAdmin) return "/dashboard/parent/profile";
   const { data } = await supabaseAdmin
     .from("profiles")
     .select("role")
     .eq("id", userId)
     .maybeSingle();
-  const role = data?.role === "doctor" ? "doctor" : data?.role === "admin" ? "admin" : "parent";
-  return role === "admin" ? "/dashboard/admin/integrations" : `/dashboard/${role}/profile`;
+  if (data?.role === "admin") return "/dashboard/admin/integrations";
+  return data?.role === "doctor" ? "/dashboard/doctor/profile" : "/dashboard/parent/profile";
 }
 
 // ─── Current user ─────────────────────────────────────────────────────────────
@@ -59,7 +56,24 @@ export async function getMyCalendarStatus(req: Request, res: Response): Promise<
 
 // POST /api/google-calendar/connect
 export async function startMyCalendarConnect(req: Request, res: Response): Promise<void> {
-  startConnect(req, res, "self");
+  if (!isCalendarConfigured()) {
+    res.status(500).json({ error: "Google Calendar is not configured on the server" });
+    return;
+  }
+
+  const state = signState(req.userId!);
+  if (!state) {
+    res.status(500).json({ error: "JWT_SECRET is not configured" });
+    return;
+  }
+
+  const url = buildAuthUrl(state);
+  if (!url) {
+    res.status(500).json({ error: "Google Calendar is not configured on the server" });
+    return;
+  }
+
+  res.json({ url });
 }
 
 // DELETE /api/google-calendar
@@ -71,41 +85,7 @@ export async function disconnectMyCalendar(req: Request, res: Response): Promise
   res.json({ success: true });
 }
 
-// ─── Admin: clinic-wide account ───────────────────────────────────────────────
-
-// GET /api/admin/google-calendar/status
-export async function getCalendarStatus(_req: Request, res: Response): Promise<void> {
-  if (!isCalendarConfigured()) {
-    res.json({ configured: false, connected: false });
-    return;
-  }
-
-  const account = await getClinicAccount();
-  if (!account) {
-    res.json({ configured: true, connected: false });
-    return;
-  }
-
-  res.json({
-    configured: true,
-    connected: true,
-    email: account.google_email,
-    status: account.status,
-    lastError: account.last_error,
-    connectedAt: account.connected_at,
-  });
-}
-
-// POST /api/admin/google-calendar/connect
-export async function startCalendarConnect(req: Request, res: Response): Promise<void> {
-  startConnect(req, res, "clinic");
-}
-
-// DELETE /api/admin/google-calendar
-export async function disconnectCalendar(_req: Request, res: Response): Promise<void> {
-  await disconnectAccount({ userId: null });
-  res.json({ success: true });
-}
+// ─── Admin oversight ──────────────────────────────────────────────────────────
 
 // GET /api/admin/google-calendar/accounts
 export async function listCalendarAccounts(_req: Request, res: Response): Promise<void> {
@@ -115,9 +95,9 @@ export async function listCalendarAccounts(_req: Request, res: Response): Promis
   }
 
   const accounts = await listAccounts();
-  const userIds = accounts.map((a) => a.user_id).filter((id): id is string => !!id);
+  const userIds = accounts.map((a) => a.user_id);
 
-  // Label each account with who owns it. The clinic account has no user.
+  // Label each account with who owns it and the role that decides its contents.
   const names = new Map<string, { full_name: string | null; role: string }>();
   if (userIds.length > 0) {
     const { data } = await supabaseAdmin
@@ -139,38 +119,13 @@ export async function listCalendarAccounts(_req: Request, res: Response): Promis
       status: a.status,
       lastError: a.last_error,
       connectedAt: a.connected_at,
-      owner: a.user_id
-        ? {
-            userId: a.user_id,
-            fullName: names.get(a.user_id)?.full_name ?? null,
-            role: names.get(a.user_id)?.role ?? "unknown",
-          }
-        : { userId: null, fullName: "Clinic account", role: "clinic" },
+      owner: {
+        userId: a.user_id,
+        fullName: names.get(a.user_id)?.full_name ?? null,
+        role: names.get(a.user_id)?.role ?? "unknown",
+      },
     })),
   });
-}
-
-// ─── Shared connect entry point ───────────────────────────────────────────────
-
-function startConnect(req: Request, res: Response, target: ConnectTarget): void {
-  if (!isCalendarConfigured()) {
-    res.status(500).json({ error: "Google Calendar is not configured on the server" });
-    return;
-  }
-
-  const state = signState(req.userId!, target);
-  if (!state) {
-    res.status(500).json({ error: "JWT_SECRET is not configured" });
-    return;
-  }
-
-  const url = buildAuthUrl(state);
-  if (!url) {
-    res.status(500).json({ error: "Google Calendar is not configured on the server" });
-    return;
-  }
-
-  res.json({ url });
 }
 
 // ─── OAuth callback (public) ──────────────────────────────────────────────────
@@ -196,7 +151,7 @@ export async function googleCalendarCallback(req: Request, res: Response): Promi
 
   if (error) {
     // e.g. access_denied when the user cancels the consent screen.
-    const path = verified ? await returnPathFor(verified.userId, verified.target) : "/dashboard/parent/profile";
+    const path = verified ? await returnPathFor(verified.userId) : "/dashboard/parent/profile";
     await redirect(path, `calendar_error=${encodeURIComponent(error)}`);
     return;
   }
@@ -206,20 +161,7 @@ export async function googleCalendarCallback(req: Request, res: Response): Promi
     return;
   }
 
-  const returnPath = await returnPathFor(verified.userId, verified.target);
-
-  if (verified.target === "clinic") {
-    const { data: profile } = await supabaseAdmin
-      .from("profiles")
-      .select("role")
-      .eq("id", verified.userId)
-      .single();
-
-    if (profile?.role !== "admin") {
-      await redirect(returnPath, "calendar_error=not_admin");
-      return;
-    }
-  }
+  const returnPath = await returnPathFor(verified.userId);
 
   if (!code) {
     await redirect(returnPath, "calendar_error=missing_code");
@@ -246,7 +188,7 @@ export async function googleCalendarCallback(req: Request, res: Response): Promi
 
   try {
     await saveAccount({
-      userId: verified.target === "clinic" ? null : verified.userId,
+      userId: verified.userId,
       email: email ?? "(unknown account)",
       refreshToken,
     });
@@ -256,9 +198,9 @@ export async function googleCalendarCallback(req: Request, res: Response): Promi
     return;
   }
 
-  // Fill their calendar with what they already have booked, rather than making
-  // them wait for the next booking or the sweep.
-  if (verified.target === "self") void resyncUpcomingForUser(verified.userId);
+  // Fill their calendar with what they already have, rather than making them
+  // wait for the next booking or the sweep. For an admin that is everything.
+  void resyncUpcomingForUser(verified.userId);
 
   await redirect(returnPath, "calendar=connected");
 }
