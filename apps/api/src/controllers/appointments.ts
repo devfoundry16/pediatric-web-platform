@@ -8,6 +8,12 @@ import {
 } from "../lib/resend";
 import { notifyBookingConfirmed } from "../lib/booking-notifications";
 import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
+import {
+  appointmentJoinWindow,
+  appointmentRoomName,
+  deleteAppointmentRoom,
+  ensureAppointmentRoom,
+} from "../lib/appointment-room";
 import { CONSULTATION_CONFIG, isBlockingAppointment } from "../lib/consultation";
 import { generateSlots } from "../lib/slots";
 import { hhmmToMinutes } from "../lib/timezone";
@@ -524,8 +530,9 @@ export async function cancelAppointment(req: Request, res: Response): Promise<vo
     return;
   }
 
-  // Remove the mirrored Google Calendar event (non-blocking)
+  // Remove the mirrored Google Calendar event and the video room (non-blocking)
   void syncAppointmentCalendarEvent(id as string);
+  void deleteAppointmentRoom(id as string);
 
   // Fire cancellation email (non-blocking)
   resolveParentEmail(req.userId!).then(async (parent) => {
@@ -564,7 +571,9 @@ export async function joinAppointment(req: Request, res: Response): Promise<void
 
   const { data: appt } = await supabaseAdmin
     .from("appointments")
-    .select("id, status, meeting_url, parent_id, doctor_id, scheduled_date, scheduled_time, duration_minutes")
+    .select(
+      "id, status, meeting_url, parent_id, doctor_id, scheduled_date, scheduled_time, timezone, duration_minutes"
+    )
     .eq("id", id)
     .single();
 
@@ -590,26 +599,61 @@ export async function joinAppointment(req: Request, res: Response): Promise<void
     }
   }
 
-  if (!appt.meeting_url) {
-    res.status(400).json({ error: "Meeting room has not been started yet" });
+  if (["cancelled", "rescheduled"].includes(appt.status as string)) {
+    res.status(400).json({ error: "This appointment is no longer scheduled" });
     return;
   }
 
-  // Rooms are private (see createRoom), so a token is required to join. The
-  // doctor joins as owner (host controls / recording); the parent as a
-  // participant. The room name must match the one used at creation in
-  // startSession (`appt-<id>`).
-  const roomName = `appt-${id}`;
-  const expiryEpoch = Math.floor(Date.now() / 1000) + 4 * 60 * 60;
+  const window = appointmentJoinWindow(appt);
+  if (!window) {
+    res.status(500).json({ error: "Appointment has an unreadable schedule" });
+    return;
+  }
+
+  // The room now exists from booking time, so the window — not the room's
+  // absence — is what stops anyone arriving days early or rejoining long after.
+  const now = Date.now();
+  if (now < window.opensAt.getTime()) {
+    res.status(403).json({
+      error: "This consultation is not open yet",
+      opensAt: window.opensAt.toISOString(),
+    });
+    return;
+  }
+  if (now > window.closesAt.getTime()) {
+    res.status(403).json({ error: "This consultation has ended" });
+    return;
+  }
+
+  // Recovers bookings made before rooms were created eagerly, and any booking
+  // whose room creation failed at confirmation time.
+  const roomUrl = appt.meeting_url ?? (await ensureAppointmentRoom(id as string));
+  if (!roomUrl) {
+    res.status(502).json({ error: "Video room is unavailable, please try again" });
+    return;
+  }
+
+  const { data: profile } = await supabaseAdmin
+    .from("profiles")
+    .select("full_name")
+    .eq("id", req.userId)
+    .maybeSingle();
 
   try {
-    const token = await createMeetingToken(roomName, req.userId!, isDoctor, expiryEpoch);
-    res.json({ tokenUrl: `${appt.meeting_url}?t=${token}` });
-  } catch {
-    // If token generation fails, return the base URL. NOTE: with private rooms
-    // this URL will not grant entry without a token — surfaced so the client
-    // can show a retry rather than a silent failure.
-    res.json({ tokenUrl: appt.meeting_url });
+    // Returned separately, not as `${url}?t=${token}`: the token belongs in
+    // daily-js join(), and a token in the URL is what breaks Daily's hosted
+    // leave flow (it reloads the room without it, and a private room with no
+    // token reports that the meeting does not exist).
+    const token = await createMeetingToken({
+      roomName: appointmentRoomName(id as string),
+      userId: req.userId!,
+      userName: profile?.full_name ?? (isDoctor ? "Doctor" : "Patient"),
+      isOwner: isDoctor,
+      expiryEpoch: Math.floor(window.closesAt.getTime() / 1000),
+    });
+    res.json({ roomUrl, token });
+  } catch (err) {
+    res.status(502).json({ error: "Could not authorise you for the video room", detail: String(err) });
   }
 }
 
@@ -697,6 +741,8 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
   // only creates an event for settled bookings, so rescheduling an unpaid
   // pending row (whose status is force-set to confirmed above) stays event-less.
   void syncAppointmentCalendarEvent(id as string);
+  // The room's joinable window still points at the old slot until this runs.
+  void ensureAppointmentRoom(id as string);
 
   // Fire reschedule email (non-blocking)
   resolveParentEmail(req.userId!).then(async (parent) => {
