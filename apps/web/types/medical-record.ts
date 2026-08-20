@@ -53,7 +53,11 @@ export interface MedicalFile {
   id: string;
   file_name: string;
   file_type: string;
+  /** Legacy column. The bucket is private, so this is not a usable link. */
   file_url: string;
+  /** Short-lived signed URL minted by the API. Null if it could not be signed. */
+  signed_url: string | null;
+  storage_path: string | null;
   file_size_bytes: number | null;
   created_at: string;
   child_id: string;

@@ -380,7 +380,16 @@
     "backToDashboard": "Back to Dashboard",
     "unitMonths": "months",
     "unitYear": "year",
-    "unitYears": "years"
+    "unitYears": "years",
+    "attachmentsLabel": "Documents (optional)",
+    "attachmentsHint": "Photos, lab results or referral letters help the doctor prepare. Images, PDF or Word, up to 10 MB each, 5 files maximum.",
+    "attachmentsAdd": "Add documents",
+    "attachmentsRemove": "Remove",
+    "attachmentsTooMany": "You can attach up to {max} files.",
+    "attachmentsTooLarge": "{name} is larger than 10 MB.",
+    "attachmentsBadType": "{name} is not a supported file type.",
+    "attachmentsFailed": "That upload did not complete. Please try again.",
+    "attachmentsOpen": "Open"
   },
   "appointments": {
     "title": "My Appointments",

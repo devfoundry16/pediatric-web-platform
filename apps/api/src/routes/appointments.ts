@@ -10,6 +10,7 @@ import {
   cancelAppointment,
   rescheduleAppointment,
   joinAppointment,
+  listAppointmentFiles,
 } from "../controllers/appointments";
 
 const router = Router();
@@ -23,6 +24,7 @@ router.post("/:id/checkout", createAppointmentCheckout);
 router.post("/:id/verify", verifyAppointmentPayment);
 router.delete("/:id", abandonAppointment);
 router.get("/:id/join", joinAppointment);
+router.get("/:id/files", listAppointmentFiles);
 router.patch("/:id/cancel", cancelAppointment);
 router.patch("/:id/reschedule", rescheduleAppointment);
 

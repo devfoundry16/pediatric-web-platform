@@ -380,7 +380,16 @@
     "backToDashboard": "العودة إلى لوحة التحكم",
     "unitMonths": "أشهر",
     "unitYear": "سنة",
-    "unitYears": "سنوات"
+    "unitYears": "سنوات",
+    "attachmentsLabel": "المستندات (اختياري)",
+    "attachmentsHint": "الصور أو نتائج التحاليل أو خطابات الإحالة تساعد الطبيب على الاستعداد. صور أو PDF أو Word، بحد أقصى 10 ميغابايت لكل ملف و5 ملفات.",
+    "attachmentsAdd": "إضافة مستندات",
+    "attachmentsRemove": "إزالة",
+    "attachmentsTooMany": "يمكنك إرفاق {max} ملفات كحد أقصى.",
+    "attachmentsTooLarge": "حجم {name} أكبر من 10 ميغابايت.",
+    "attachmentsBadType": "نوع الملف {name} غير مدعوم.",
+    "attachmentsFailed": "لم يكتمل الرفع. يرجى المحاولة مرة أخرى.",
+    "attachmentsOpen": "فتح"
   },
   "appointments": {
     "title": "مواعيدي",

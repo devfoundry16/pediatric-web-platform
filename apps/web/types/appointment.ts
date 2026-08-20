@@ -83,6 +83,17 @@ export interface CreateAppointmentPayload {
   date: string;
   time: string;
   symptoms?: string;
+  /**
+   * Documents already uploaded to Storage during the symptoms step. Only the
+   * metadata travels here; the API verifies each path belongs to childId
+   * before linking it to the new appointment.
+   */
+  attachments?: {
+    fileName: string;
+    fileType: string;
+    storagePath: string;
+    fileSizeBytes: number;
+  }[];
 }
 
 export interface BookingFormData {

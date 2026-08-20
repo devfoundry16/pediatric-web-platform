@@ -37,6 +37,7 @@ interface MedicalFile {
   file_name: string;
   file_type: string;
   file_url: string;
+  signed_url: string | null;
   file_size_bytes: number;
   created_at: string;
 }
@@ -196,7 +197,7 @@ export default function AdminPatientDetailPage() {
                 <ul className="flex flex-col gap-2">
                   {files.map((f) => (
                     <li key={f.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
-                      <a href={f.file_url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline truncate max-w-xs">
+                      <a href={f.signed_url ?? "#"} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline truncate max-w-xs">
                         {f.file_name}
                       </a>
                       <div className="text-right text-xs text-muted-foreground">

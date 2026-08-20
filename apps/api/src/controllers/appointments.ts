@@ -14,6 +14,11 @@ import {
   deleteAppointmentRoom,
   ensureAppointmentRoom,
 } from "../lib/appointment-room";
+import {
+  saveBookingAttachments,
+  signMedicalFiles,
+  validateAttachments,
+} from "../lib/medical-storage";
 import { CONSULTATION_CONFIG, isBlockingAppointment } from "../lib/consultation";
 import { generateSlots } from "../lib/slots";
 import { hhmmToMinutes } from "../lib/timezone";
@@ -131,7 +136,7 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     return;
   }
 
-  const { childId, doctorId, consultationType, date, time, symptoms } = req.body;
+  const { childId, doctorId, consultationType, date, time, symptoms, attachments } = req.body;
 
   if (!childId || !consultationType || !date || !time) {
     res.status(400).json({ error: "childId, consultationType, date, and time are required" });
@@ -141,6 +146,15 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
   const config = CONSULTATION_CONFIG[consultationType];
   if (!config) {
     res.status(400).json({ error: "Invalid consultationType" });
+    return;
+  }
+
+  // Documents the parent attached while booking. Uploaded browser → Storage,
+  // so the metadata arrives from the client and is checked before it is
+  // trusted — in particular that each path sits under this child's folder.
+  const parsedAttachments = validateAttachments(attachments, String(childId));
+  if (!parsedAttachments.ok) {
+    res.status(400).json({ error: parsedAttachments.error });
     return;
   }
 
@@ -286,6 +300,18 @@ export async function createAppointment(req: Request, res: Response): Promise<vo
     }
     res.status(500).json({ error: error.message });
     return;
+  }
+
+  // Link the uploaded documents now that there is an appointment to hang them
+  // off. Awaited so the doctor sees them the moment the booking appears, but
+  // it never throws: the booking is committed and must not fail over a file.
+  if (appointment) {
+    await saveBookingAttachments({
+      attachments: parsedAttachments.attachments,
+      childId: String(childId),
+      appointmentId: appointment.id as string,
+      uploadedBy: req.userId!,
+    });
   }
 
   // Credit was already reserved above — just record the usage log.
@@ -559,6 +585,63 @@ export async function cancelAppointment(req: Request, res: Response): Promise<vo
   }).catch(() => {});
 
   res.json({ message: "Appointment cancelled successfully" });
+}
+
+// GET /api/appointments/:id/files
+// Documents the parent attached to this booking, each with a short-lived signed
+// URL. The bucket is private, so this endpoint is the only way to reach them —
+// and only for the parent who booked, the treating doctor, or an admin.
+export async function listAppointmentFiles(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { id } = req.params;
+
+  const { data: appt } = await supabaseAdmin
+    .from("appointments")
+    .select("id, parent_id, doctor_id")
+    .eq("id", id)
+    .single();
+
+  if (!appt) {
+    res.status(404).json({ error: "Appointment not found" });
+    return;
+  }
+
+  let allowed = appt.parent_id === req.userId;
+
+  if (!allowed) {
+    const { data: doctorRow } = await supabaseAdmin
+      .from("doctors")
+      .select("id")
+      .eq("profile_id", req.userId)
+      .maybeSingle();
+    allowed = !!doctorRow && appt.doctor_id === doctorRow.id;
+  }
+
+  if (!allowed) {
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", req.userId)
+      .maybeSingle();
+    allowed = profile?.role === "admin";
+  }
+
+  if (!allowed) {
+    res.status(403).json({ error: "Not authorized to view these documents" });
+    return;
+  }
+
+  const { data: files } = await supabaseAdmin
+    .from("medical_files")
+    .select("id, file_name, file_type, file_size_bytes, storage_path, created_at")
+    .eq("appointment_id", id)
+    .order("created_at", { ascending: true });
+
+  res.json({ files: await signMedicalFiles(files ?? []) });
 }
 
 export async function joinAppointment(req: Request, res: Response): Promise<void> {

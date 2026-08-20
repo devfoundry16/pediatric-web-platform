@@ -66,6 +66,16 @@ export const doctorsApi = {
   },
 };
 
+export interface AppointmentFile {
+  id: string;
+  file_name: string;
+  file_type: string;
+  file_size_bytes: number | null;
+  /** Short-lived signed URL; the bucket is private so there is no public link. */
+  signed_url: string | null;
+  created_at: string;
+}
+
 export type JoinResult =
   | { ok: true; roomUrl: string; token: string }
   | { ok: false; error: string; opensAt?: string };
@@ -161,6 +171,15 @@ export const appointmentsApi = {
   // it in join() — putting it in the URL is what breaks Daily's leave flow.
   // Outside the appointment's join window the API refuses and says when it
   // opens, which the room page shows instead of a connection error.
+  /** Documents the parent attached when booking. Parent, treating doctor or admin only. */
+  async listFiles(id: string): Promise<AppointmentFile[]> {
+    const { data } = await axios.get<{ files: AppointmentFile[] }>(
+      `${getBaseUrl()}/appointments/${id}/files`,
+      { headers: await authHeaders() }
+    );
+    return data.files;
+  },
+
   async join(id: string): Promise<JoinResult> {
     try {
       const { data } = await axios.get<{ roomUrl: string; token: string }>(
