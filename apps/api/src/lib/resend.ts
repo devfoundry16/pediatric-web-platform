@@ -168,8 +168,10 @@ interface AppointmentEmailData {
   consultationType: string;
   durationMinutes: number;
   priceAed: number;
-  /** Deep link to the appointment in the app, where the call is joined. */
+  /** Deep link to the appointment in the app, for managing it. */
   appointmentUrl?: string;
+  /** Deep link that joins the video call. Prefer this on the action button. */
+  meetingUrl?: string;
 }
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? "noreply@littlecare.ae";
@@ -232,8 +234,9 @@ export async function sendBookingConfirmation(data: AppointmentEmailData): Promi
       <tr><td style="padding:4px 12px 4px 0;color:#666">Type</td><td><strong>${data.consultationType} (${data.durationMinutes} min)</strong></td></tr>
       <tr><td style="padding:4px 12px 4px 0;color:#666">Amount</td><td><strong>AED ${data.priceAed}</strong></td></tr>
     </table>
-    ${joinButton(data.appointmentUrl, "Join the consultation")}
-    <p style="margin-top:16px">The video room opens at your scheduled time. Sign in with this email address to join.</p>
+    ${joinButton(data.meetingUrl ?? data.appointmentUrl, "Join the consultation")}
+    <p style="margin-top:16px">The room opens 15 minutes before your appointment. Sign in with this email address to join.</p>
+    ${data.meetingUrl && data.appointmentUrl ? `<p style="color:#666;font-size:12px">Manage this booking: ${data.appointmentUrl}</p>` : ""}
     <p>Thank you for choosing ${APP_NAME}.</p>
   `;
 
@@ -267,6 +270,8 @@ export async function sendBookingNotification(data: {
   durationMinutes: number;
   symptoms?: string | null;
   appointmentUrl?: string;
+  /** Deep link that joins the video call — the doctor's primary action. */
+  meetingUrl?: string;
 }): Promise<void> {
   const forDoctor = data.audience === "doctor";
   const heading = forDoctor ? "You have a new appointment" : "New appointment booked";
@@ -283,7 +288,8 @@ export async function sendBookingNotification(data: {
       <tr><td style="padding:4px 12px 4px 0;color:#666">Type</td><td><strong>${data.consultationType} (${data.durationMinutes} min)</strong></td></tr>
       ${data.symptoms ? `<tr><td style="padding:4px 12px 4px 0;color:#666;vertical-align:top">Reason</td><td>${data.symptoms}</td></tr>` : ""}
     </table>
-    ${joinButton(data.appointmentUrl, forDoctor ? "Open the consultation" : "View the appointment")}
+    ${joinButton(forDoctor ? (data.meetingUrl ?? data.appointmentUrl) : data.appointmentUrl, forDoctor ? "Join the consultation" : "View the appointment")}
+    ${forDoctor && data.meetingUrl && data.appointmentUrl ? `<p style="color:#666;font-size:12px">Manage this booking: ${data.appointmentUrl}</p>` : ""}
     <p style="margin-top:16px">Sign in with this email address to open the appointment.</p>
   `;
 
