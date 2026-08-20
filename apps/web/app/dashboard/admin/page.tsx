@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -56,18 +57,31 @@ export default function AdminOverviewPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    adminApi
+  // Extracted from the effect so the refresh control can call it too. The
+  // error is cleared on success rather than up front: a synchronous setState
+  // here runs inside the mount effect and triggers a cascading render.
+  const load = useCallback(() => {
+    return adminApi
       .getStats()
-      .then(setStats)
+      .then((data) => {
+        setStats(data);
+        setError(null);
+      })
       .catch(() => setError("Failed to load stats"))
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Admin Overview</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">Admin Overview</h1>
+          <RefreshButton onRefresh={load} />
+        </div>
         <p className="text-sm text-muted-foreground">
           Platform summary and quick status
         </p>

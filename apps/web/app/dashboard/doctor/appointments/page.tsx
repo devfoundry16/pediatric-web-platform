@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { useRouter } from "next/navigation";
 
 import { Suspense, useEffect, useState, useCallback } from "react";
@@ -216,6 +217,7 @@ function DoctorAppointmentsContent() {
           <h1 className="text-2xl font-bold text-foreground">
             {t.doctorDashboard.allAppointments}
           </h1>
+          <RefreshButton onRefresh={load} />
           <TimezoneNotice timezone={doctorTimezone} variant="compact" />
         </div>
 

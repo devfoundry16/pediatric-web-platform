@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
@@ -578,9 +579,12 @@ export default function DoctorLiveSessionsPage() {
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">
-              {t.liveSessions.manageSessions}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold text-foreground">
+                {t.liveSessions.manageSessions}
+              </h1>
+              <RefreshButton onRefresh={loadSessions} />
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
               {t.liveSessions.subtitle}
             </p>

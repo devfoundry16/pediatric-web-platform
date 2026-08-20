@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { useRouter } from "next/navigation";
 
 import { Suspense, useEffect, useState } from "react";
@@ -90,8 +91,10 @@ function ParentAppointmentsContent() {
   const rescheduleToday = parseLocalYMD(todayInTimezone(rescheduleTimezone));
   const { highlightedId, highlightRef } = useHighlightedAppointment(!isLoading);
 
-  const loadAppointments = () => {
-    setIsLoading(true);
+  // `silent` keeps the list on screen for a manual refresh; without it the
+  // content is replaced by skeletons and the page jumps.
+  const loadAppointments = (silent = false) => {
+    if (!silent) setIsLoading(true);
     setError(null);
     appointmentsApi
       .list()
@@ -281,7 +284,10 @@ function ParentAppointmentsContent() {
           </Link>
         </div>
 
-        <h1 className="text-2xl font-bold text-foreground">{t.appointments.title}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">{t.appointments.title}</h1>
+          <RefreshButton variant="rotate" onRefresh={() => loadAppointments(true)} />
+        </div>
         <p className="text-xs text-muted-foreground">
           {t.booking.timezoneHint.replace("{timezone}", formatTimezoneLabel(viewerTimezone))}
         </p>
@@ -295,7 +301,9 @@ function ParentAppointmentsContent() {
         ) : error ? (
           <div className="flex flex-col items-center gap-4 py-16">
             <p className="text-sm text-destructive">{error}</p>
-            <Button variant="outline" onClick={loadAppointments}>
+            {/* Wrapped: passing the loader directly would hand the click event
+                in as `silent`. */}
+            <Button variant="outline" onClick={() => loadAppointments()}>
               {t.appointments.tryAgain}
             </Button>
           </div>
