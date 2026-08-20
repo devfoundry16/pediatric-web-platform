@@ -1,3 +1,4 @@
+import { frontendUrl } from "../lib/app-url";
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
 import { createMeetingToken } from "../lib/daily";
@@ -350,7 +351,7 @@ export async function createAppointmentCheckout(req: Request, res: Response): Pr
     return;
   }
 
-  const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3333";
+  const appUrl = frontendUrl();
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
@@ -373,8 +374,8 @@ export async function createAppointmentCheckout(req: Request, res: Response): Pr
       appointmentId: appt.id,
       userId: req.userId!,
     },
-    success_url: `${frontendUrl}/booking/success?appointment=${appt.id}&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${frontendUrl}/booking?cancelled=${appt.id}`,
+    success_url: `${appUrl}/booking/success?appointment=${appt.id}&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appUrl}/booking?cancelled=${appt.id}`,
   });
 
   res.json({ url: session.url });
@@ -757,7 +758,7 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
       parentEmail: parent.email,
       parentName: parent.name,
       parentUserId: req.userId,
-      appointmentUrl: `${process.env.FRONTEND_URL ?? "http://localhost:3333"}/dashboard/parent/appointments?appointment=${id}`,
+      appointmentUrl: `${frontendUrl()}/dashboard/parent/appointments?appointment=${id}`,
       doctorName: docRow?.full_name ?? "Your doctor",
       scheduledDate: newDate as string,
       scheduledTime: newTime as string,

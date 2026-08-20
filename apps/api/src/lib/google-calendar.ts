@@ -1,3 +1,4 @@
+import { frontendUrl } from "./app-url";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
 import { DEFAULT_TIMEZONE, wallClockToInstant } from "./timezone";
@@ -41,10 +42,6 @@ const EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/eve
 const OAUTH_SCOPE = "openid email https://www.googleapis.com/auth/calendar.events";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
-
-function frontendUrl(): string {
-  return process.env.FRONTEND_URL ?? "http://localhost:3333";
-}
 
 interface OAuthConfig {
   clientId: string;

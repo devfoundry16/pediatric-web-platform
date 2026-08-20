@@ -1,3 +1,4 @@
+import { frontendUrl } from "./app-url";
 import { supabaseAdmin } from "./supabase";
 import { alreadySent, recordEmailFailure, sendSessionReminder } from "./resend";
 import { meetingUrlFor } from "./booking-notifications";
@@ -19,10 +20,6 @@ export interface ReminderRun {
   considered: number;
   sent: number;
   failed: number;
-}
-
-function frontendUrl(): string {
-  return process.env.FRONTEND_URL ?? "http://localhost:3333";
 }
 
 /**

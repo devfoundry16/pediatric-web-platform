@@ -1,3 +1,4 @@
+import { frontendUrl } from "./app-url";
 import { supabaseAdmin } from "./supabase";
 import {
   alreadySent,
@@ -8,10 +9,6 @@ import {
 import { activeAdminRecipients } from "./recipients";
 import { DEFAULT_TIMEZONE } from "./timezone";
 import { ensureAppointmentRoom } from "./appointment-room";
-
-function frontendUrl(): string {
-  return process.env.FRONTEND_URL ?? "http://localhost:3333";
-}
 
 /**
  * Where each audience manages the appointment (reschedule, cancel, history).

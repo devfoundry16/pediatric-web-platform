@@ -16,9 +16,15 @@ import adminRouter from "./routes/admin";
 import googleCalendarRouter from "./routes/google-calendar";
 import { stripeWebhook } from "./controllers/packages";
 import { startReminderScheduler } from "./lib/reminder-scheduler";
+import { assertFrontendUrl } from "./lib/app-url";
 import { startCalendarSweep } from "./lib/calendar-sweep";
 
 dotenv.config();
+
+// Checked before the server accepts traffic: every emailed and calendared link
+// is built from FRONTEND_URL, so a deployment without it mails patients links
+// to localhost. Better to refuse to start than to find out from a recipient.
+assertFrontendUrl();
 
 const app = express();
 
