@@ -26,14 +26,16 @@ const APPT_EVENT_ID = `appt${APPT_ID.replace(/-/g, "")}`;
 const SESSION_ID = "11111111-2222-4333-8444-555555555555";
 const SESSION_EVENT_ID = `gsess${SESSION_ID.replace(/-/g, "")}`;
 
+const ADMIN_ID = "admin-1";
 const PARENT_ID = "parent-1";
+const OTHER_PARENT_ID = "parent-2";
 const DOCTOR_PROFILE_ID = "doctor-profile-1";
 
-const CLINIC_ACCOUNT = {
-  id: "acct-clinic",
-  user_id: null,
-  google_email: "clinic@example.com",
-  refresh_token: "rt-clinic",
+const ADMIN_ACCOUNT = {
+  id: "acct-admin",
+  user_id: ADMIN_ID,
+  google_email: "admin@example.com",
+  refresh_token: "rt-admin",
   status: "connected",
   last_error: null,
   connected_at: "2026-08-01T00:00:00Z",
@@ -58,6 +60,22 @@ const DOCTOR_ACCOUNT = {
   last_error: null,
   connected_at: "2026-08-03T00:00:00Z",
 };
+
+const ACCESS_TOKENS = {
+  "rt-admin": "at-admin",
+  "rt-parent": "at-parent",
+  "rt-doctor": "at-doctor",
+  "rt-registrant": "at-registrant",
+};
+
+const PROFILES = [
+  { id: ADMIN_ID, role: "admin", is_active: true, full_name: "Admin" },
+  { id: PARENT_ID, role: "parent", is_active: true, full_name: "Parent One" },
+  { id: OTHER_PARENT_ID, role: "parent", is_active: true, full_name: "Parent Two" },
+  { id: DOCTOR_PROFILE_ID, role: "doctor", is_active: true, full_name: "Dr. Sahar" },
+  { id: "u1", role: "parent", is_active: true, full_name: "Registrant One" },
+  { id: "u2", role: "parent", is_active: true, full_name: "Registrant Two" },
+];
 
 function appointmentRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -101,16 +119,9 @@ function sessionRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const EMAILS: Record<string, string> = {
-  [PARENT_ID]: "parent@example.com",
-  u1: "one@example.com",
-  u2: "two@example.com",
-  u3: "three@example.com",
-};
-
 /**
  * Wire up supabase with a set of connected accounts, a stateful mirrors table,
- * and whatever booking rows the test needs.
+ * profiles (so roles resolve), and whatever booking rows the test needs.
  */
 function setup(options: {
   accounts?: any[];
@@ -123,6 +134,7 @@ function setup(options: {
   const accounts = options.accounts ?? [];
 
   const mock = createSupabaseMock({
+    profiles: (q) => applyFilters(PROFILES, q),
     google_calendar_accounts: (q) => {
       if (q.op === "update" || q.op === "insert" || q.op === "delete") return {};
       return applyFilters(accounts, q);
@@ -137,10 +149,6 @@ function setup(options: {
   });
 
   supabaseHolder.current = mock.client;
-  mock.getUserById.mockImplementation(async (id: string) => ({
-    data: { user: EMAILS[id] ? { email: EMAILS[id] } : null },
-    error: null,
-  }));
   return { mock, mirrors: mirrorStore.rows, accounts };
 }
 
@@ -151,15 +159,19 @@ function logInserts(mock: ReturnType<typeof createSupabaseMock>) {
 /** Body of the POST that created an event in a given calendar. */
 function createdIn(fetchMock: ReturnType<typeof createFetchMock>, accessToken: string) {
   return fetchMock.calls.find(
-    (c) => c.method === "POST" && c.url.startsWith(EVENTS) && c.authorization === `Bearer ${accessToken}`
+    (c) =>
+      c.method === "POST" && c.url.startsWith(EVENTS) && c.authorization === `Bearer ${accessToken}`
   )?.body;
 }
 
-const ACCESS_TOKENS = {
-  "rt-clinic": "at-clinic",
-  "rt-parent": "at-parent",
-  "rt-doctor": "at-doctor",
-};
+/** Standard "no event exists yet, creation succeeds" Google stub. */
+function createRoutes(eventId: string) {
+  return [
+    tokenRefreshRoute(ACCESS_TOKENS),
+    { match: (m: string) => m === "GET", respond: () => json(404, {}) },
+    { match: (m: string) => m === "POST", respond: () => json(200, { id: eventId }) },
+  ];
+}
 
 async function loadLib() {
   return import("../src/lib/google-calendar");
@@ -183,16 +195,10 @@ afterEach(() => {
 // ─── State tokens ─────────────────────────────────────────────────────────────
 
 describe("OAuth state tokens", () => {
-  it("round-trips a userId and defaults to the self target", async () => {
+  it("round-trips a userId", async () => {
     const lib = await loadLib();
     const state = lib.signState("user-42");
-    expect(lib.verifyState(state!)).toEqual({ userId: "user-42", target: "self" });
-  });
-
-  it("carries the clinic target", async () => {
-    const lib = await loadLib();
-    const state = lib.signState("admin-1", "clinic");
-    expect(lib.verifyState(state!)).toEqual({ userId: "admin-1", target: "clinic" });
+    expect(lib.verifyState(state!)).toEqual({ userId: "user-42" });
   });
 
   it("rejects a tampered payload", async () => {
@@ -200,9 +206,7 @@ describe("OAuth state tokens", () => {
     const state = lib.signState("user-42")!;
     const sig = state.slice(state.lastIndexOf(".") + 1);
     const forged =
-      Buffer.from(JSON.stringify({ u: "attacker", g: "clinic", t: Date.now() })).toString(
-        "base64url"
-      ) +
+      Buffer.from(JSON.stringify({ u: "attacker", t: Date.now() })).toString("base64url") +
       "." +
       sig;
     expect(lib.verifyState(forged)).toBeNull();
@@ -258,7 +262,7 @@ describe("event ids and auth url", () => {
   it("exchanges a code for a refresh token and the account email", async () => {
     const idToken = [
       Buffer.from(JSON.stringify({ alg: "RS256" })).toString("base64url"),
-      Buffer.from(JSON.stringify({ email: "clinic@example.com" })).toString("base64url"),
+      Buffer.from(JSON.stringify({ email: "someone@example.com" })).toString("base64url"),
       "sig",
     ].join(".");
     const fetchMock = createFetchMock([
@@ -272,15 +276,15 @@ describe("event ids and auth url", () => {
     const lib = await loadLib();
     await expect(lib.exchangeCode("the-code")).resolves.toEqual({
       refreshToken: "rt-new",
-      email: "clinic@example.com",
+      email: "someone@example.com",
     });
   });
 });
 
-// ─── Appointment reconciler ───────────────────────────────────────────────────
+// ─── Who receives which booking ───────────────────────────────────────────────
 
-describe("syncAppointmentCalendarEvent", () => {
-  it("does nothing, silently, when nobody has connected a calendar", async () => {
+describe("appointment visibility by role", () => {
+  it("writes nothing when nobody has connected a calendar", async () => {
     const { mock } = setup({ accounts: [], appointment: appointmentRow() });
     const fetchMock = createFetchMock([]);
     vi.stubGlobal("fetch", fetchMock.fn);
@@ -292,158 +296,163 @@ describe("syncAppointmentCalendarEvent", () => {
     expect(logInserts(mock)).toHaveLength(0);
   });
 
-  it("invites both participants on the clinic event when neither has connected", async () => {
-    setup({ accounts: [CLINIC_ACCOUNT], appointment: appointmentRow() });
-    const fetchMock = createFetchMock([
-      tokenRefreshRoute(ACCESS_TOKENS),
-      { match: (m) => m === "GET", respond: () => json(404, {}) },
-      { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
-    ]);
-    vi.stubGlobal("fetch", fetchMock.fn);
-
-    const lib = await loadLib();
-    await lib.syncAppointmentCalendarEvent(APPT_ID);
-
-    const clinicEvent = createdIn(fetchMock, "at-clinic");
-    expect(clinicEvent.attendees.map((a: any) => a.email).sort()).toEqual([
-      "doctor@example.com",
-      "parent@example.com",
-    ]);
-    // 09:00 Asia/Dubai (UTC+4) on 2026-09-01 → 05:00Z, 30 minutes long
-    expect(Date.parse(clinicEvent.start.dateTime)).toBe(Date.parse("2026-09-01T05:00:00Z"));
-    expect(Date.parse(clinicEvent.end.dateTime)).toBe(Date.parse("2026-09-01T05:30:00Z"));
-    expect(clinicEvent.guestsCanSeeOtherGuests).toBe(false);
-    // PHI-minimal: dashboard links only
-    expect(clinicEvent.description).toContain("/dashboard/parent/appointments?appointment=");
-  });
-
-  it("writes into a connected parent's own calendar and drops them from the clinic invites", async () => {
+  it("gives the parent and the doctor their own private copies", async () => {
     const { mirrors } = setup({
-      accounts: [CLINIC_ACCOUNT, PARENT_ACCOUNT],
+      accounts: [PARENT_ACCOUNT, DOCTOR_ACCOUNT],
       appointment: appointmentRow(),
     });
-    const fetchMock = createFetchMock([
-      tokenRefreshRoute(ACCESS_TOKENS),
-      { match: (m) => m === "GET", respond: () => json(404, {}) },
-      { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
-    ]);
+    const fetchMock = createFetchMock(createRoutes(APPT_EVENT_ID));
     vi.stubGlobal("fetch", fetchMock.fn);
 
     const lib = await loadLib();
     await lib.syncAppointmentCalendarEvent(APPT_ID);
 
-    // The parent got their own copy, with no attendees on it.
     const parentEvent = createdIn(fetchMock, "at-parent");
+    const doctorEvent = createdIn(fetchMock, "at-doctor");
     expect(parentEvent).toBeDefined();
-    expect(parentEvent.id).toBe(APPT_EVENT_ID);
+    expect(doctorEvent).toBeDefined();
+
+    // Nobody is an attendee anywhere, so no address is shared between them.
     expect(parentEvent.attendees).toEqual([]);
+    expect(doctorEvent.attendees).toEqual([]);
 
-    // ...and is NOT invited to the clinic event (that would collide with the id
-    // Google reuses for an attendee's copy). The doctor still is.
-    const clinicEvent = createdIn(fetchMock, "at-clinic");
-    expect(clinicEvent.attendees.map((a: any) => a.email)).toEqual(["doctor@example.com"]);
+    // 09:00 Asia/Dubai (UTC+4) on 2026-09-01 → 05:00Z, 30 minutes long.
+    expect(Date.parse(parentEvent.start.dateTime)).toBe(Date.parse("2026-09-01T05:00:00Z"));
+    expect(Date.parse(parentEvent.end.dateTime)).toBe(Date.parse("2026-09-01T05:30:00Z"));
 
-    // Both calendars are recorded so later updates find them.
-    expect(mirrors.map((m) => m.account_id).sort()).toEqual(["acct-clinic", "acct-parent"]);
+    expect(mirrors.map((m) => m.account_id).sort()).toEqual(["acct-doctor", "acct-parent"]);
   });
 
-  it("writes to every connected participant, leaving the clinic event without invites", async () => {
+  it("never puts one parent's appointment on another parent's calendar", async () => {
+    // The booking belongs to OTHER_PARENT; only PARENT_ID has connected.
+    const { mirrors } = setup({
+      accounts: [PARENT_ACCOUNT],
+      appointment: appointmentRow({ parent_id: OTHER_PARENT_ID }),
+    });
+    const fetchMock = createFetchMock(createRoutes(APPT_EVENT_ID));
+    vi.stubGlobal("fetch", fetchMock.fn);
+
+    const lib = await loadLib();
+    await lib.syncAppointmentCalendarEvent(APPT_ID);
+
+    expect(fetchMock.calls.filter((c) => c.url.startsWith(EVENTS))).toHaveLength(0);
+    expect(mirrors).toHaveLength(0);
+  });
+
+  it("never puts an appointment on an unrelated doctor's calendar", async () => {
+    const { mirrors } = setup({
+      accounts: [DOCTOR_ACCOUNT],
+      appointment: appointmentRow({
+        doctors: { full_name: "Other Doctor", email: null, profile_id: "some-other-doctor" },
+      }),
+    });
+    const fetchMock = createFetchMock(createRoutes(APPT_EVENT_ID));
+    vi.stubGlobal("fetch", fetchMock.fn);
+
+    const lib = await loadLib();
+    await lib.syncAppointmentCalendarEvent(APPT_ID);
+
+    expect(fetchMock.calls.filter((c) => c.url.startsWith(EVENTS))).toHaveLength(0);
+    expect(mirrors).toHaveLength(0);
+  });
+
+  it("gives an admin every booking, including ones they take no part in", async () => {
     setup({
-      accounts: [CLINIC_ACCOUNT, PARENT_ACCOUNT, DOCTOR_ACCOUNT],
+      accounts: [ADMIN_ACCOUNT],
+      appointment: appointmentRow({ parent_id: OTHER_PARENT_ID }),
+    });
+    const fetchMock = createFetchMock(createRoutes(APPT_EVENT_ID));
+    vi.stubGlobal("fetch", fetchMock.fn);
+
+    const lib = await loadLib();
+    await lib.syncAppointmentCalendarEvent(APPT_ID);
+
+    const adminEvent = createdIn(fetchMock, "at-admin");
+    expect(adminEvent).toBeDefined();
+    expect(adminEvent.attendees).toEqual([]);
+    expect(adminEvent.description).toContain("/dashboard/admin/appointments?appointment=");
+  });
+
+  it("skips an admin whose calendar is disconnected but keeps the participants", async () => {
+    setup({
+      accounts: [PARENT_ACCOUNT, { ...ADMIN_ACCOUNT, status: "error" }],
       appointment: appointmentRow(),
     });
-    const fetchMock = createFetchMock([
-      tokenRefreshRoute(ACCESS_TOKENS),
-      { match: (m) => m === "GET", respond: () => json(404, {}) },
-      { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
-    ]);
+    const fetchMock = createFetchMock(createRoutes(APPT_EVENT_ID));
     vi.stubGlobal("fetch", fetchMock.fn);
 
     const lib = await loadLib();
     await lib.syncAppointmentCalendarEvent(APPT_ID);
 
     expect(createdIn(fetchMock, "at-parent")).toBeDefined();
-    expect(createdIn(fetchMock, "at-doctor")).toBeDefined();
-    expect(createdIn(fetchMock, "at-clinic").attendees).toEqual([]);
+    expect(createdIn(fetchMock, "at-admin")).toBeUndefined();
   });
 
-  it("shows each personal calendar only the link its owner can use", async () => {
+  it("shows each calendar only the link its owner can open", async () => {
     setup({
-      accounts: [PARENT_ACCOUNT, DOCTOR_ACCOUNT],
+      accounts: [PARENT_ACCOUNT, DOCTOR_ACCOUNT, ADMIN_ACCOUNT],
       appointment: appointmentRow(),
     });
-    const fetchMock = createFetchMock([
-      tokenRefreshRoute(ACCESS_TOKENS),
-      { match: (m) => m === "GET", respond: () => json(404, {}) },
-      { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
-    ]);
+    const fetchMock = createFetchMock(createRoutes(APPT_EVENT_ID));
     vi.stubGlobal("fetch", fetchMock.fn);
 
     const lib = await loadLib();
     await lib.syncAppointmentCalendarEvent(APPT_ID);
 
-    // The parent sees the parent dashboard link and nothing about starting.
     const parentDesc = createdIn(fetchMock, "at-parent").description;
     expect(parentDesc).toContain("/dashboard/parent/appointments?appointment=");
     expect(parentDesc).not.toContain("/dashboard/doctor/");
+    expect(parentDesc).not.toContain("/dashboard/admin/");
 
-    // The doctor sees the doctor link only.
     const doctorDesc = createdIn(fetchMock, "at-doctor").description;
     expect(doctorDesc).toContain("/dashboard/doctor/appointments?appointment=");
     expect(doctorDesc).not.toContain("/dashboard/parent/");
+
+    const adminDesc = createdIn(fetchMock, "at-admin").description;
+    expect(adminDesc).toContain("/dashboard/admin/appointments?appointment=");
+    expect(adminDesc).not.toContain("/dashboard/parent/");
   });
 
-  it("gives the clinic event only the link of the role it is inviting", async () => {
-    // The doctor has connected, so only the parent is invited to the clinic event.
-    setup({
-      accounts: [CLINIC_ACCOUNT, DOCTOR_ACCOUNT],
-      appointment: appointmentRow(),
-    });
-    const fetchMock = createFetchMock([
-      tokenRefreshRoute(ACCESS_TOKENS),
-      { match: (m) => m === "GET", respond: () => json(404, {}) },
-      { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
-    ]);
+  it("keeps the participant link when an admin is also the doctor on the booking", async () => {
+    // Same person is the host and an admin — the host link is the useful one.
+    const adminIsDoctor = { ...ADMIN_ACCOUNT, user_id: DOCTOR_PROFILE_ID };
+    setup({ accounts: [adminIsDoctor], appointment: appointmentRow() });
+    const fetchMock = createFetchMock(createRoutes(APPT_EVENT_ID));
     vi.stubGlobal("fetch", fetchMock.fn);
 
     const lib = await loadLib();
     await lib.syncAppointmentCalendarEvent(APPT_ID);
 
-    const clinicEvent = createdIn(fetchMock, "at-clinic");
-    expect(clinicEvent.attendees.map((a: any) => a.email)).toEqual(["parent@example.com"]);
-    expect(clinicEvent.description).toContain("/dashboard/parent/");
-    expect(clinicEvent.description).not.toContain("/dashboard/doctor/");
+    const created = fetchMock.calls.filter((c) => c.method === "POST" && c.url.startsWith(EVENTS));
+    expect(created).toHaveLength(1); // one copy, not two
+    expect(created[0].body.description).toContain("/dashboard/doctor/appointments?appointment=");
   });
 
   it("keeps per-account access tokens separate", async () => {
-    setup({
-      accounts: [CLINIC_ACCOUNT, PARENT_ACCOUNT],
-      appointment: appointmentRow(),
-    });
-    const fetchMock = createFetchMock([
-      tokenRefreshRoute(ACCESS_TOKENS),
-      { match: (m) => m === "GET", respond: () => json(404, {}) },
-      { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
-    ]);
+    setup({ accounts: [PARENT_ACCOUNT, DOCTOR_ACCOUNT], appointment: appointmentRow() });
+    const fetchMock = createFetchMock(createRoutes(APPT_EVENT_ID));
     vi.stubGlobal("fetch", fetchMock.fn);
 
     const lib = await loadLib();
     await lib.syncAppointmentCalendarEvent(APPT_ID);
 
-    // One refresh per account, and no calendar call used the wrong token.
     const refreshes = fetchMock.calls.filter((c) =>
       c.url.startsWith("https://oauth2.googleapis.com/token")
     );
-    expect(refreshes.map((c) => c.body.refresh_token).sort()).toEqual(["rt-clinic", "rt-parent"]);
+    expect(refreshes.map((c) => c.body.refresh_token).sort()).toEqual(["rt-doctor", "rt-parent"]);
     const used = new Set(
       fetchMock.calls.filter((c) => c.url.startsWith(EVENTS)).map((c) => c.authorization)
     );
-    expect(used).toEqual(new Set(["Bearer at-clinic", "Bearer at-parent"]));
+    expect(used).toEqual(new Set(["Bearer at-parent", "Bearer at-doctor"]));
   });
+});
 
+// ─── Lifecycle ────────────────────────────────────────────────────────────────
+
+describe("appointment lifecycle", () => {
   it("creates no event for a confirmed but unpaid appointment", async () => {
     setup({
-      accounts: [CLINIC_ACCOUNT],
+      accounts: [PARENT_ACCOUNT],
       appointment: appointmentRow({ payment_status: "pending" }),
     });
     const fetchMock = createFetchMock([]);
@@ -456,11 +465,11 @@ describe("syncAppointmentCalendarEvent", () => {
 
   it("leaves a completed appointment's events untouched", async () => {
     setup({
-      accounts: [CLINIC_ACCOUNT],
+      accounts: [PARENT_ACCOUNT],
       appointment: appointmentRow({ status: "completed" }),
       mirrors: [
         {
-          account_id: "acct-clinic",
+          account_id: "acct-parent",
           related_type: "appointment",
           related_id: APPT_ID,
           google_event_id: APPT_EVENT_ID,
@@ -477,11 +486,11 @@ describe("syncAppointmentCalendarEvent", () => {
 
   it("deletes from every mirrored calendar when the appointment is cancelled", async () => {
     const { mirrors } = setup({
-      accounts: [CLINIC_ACCOUNT, PARENT_ACCOUNT],
+      accounts: [PARENT_ACCOUNT, ADMIN_ACCOUNT],
       appointment: appointmentRow({ status: "cancelled", payment_status: "refunded" }),
       mirrors: [
         {
-          account_id: "acct-clinic",
+          account_id: "acct-admin",
           related_type: "appointment",
           related_id: APPT_ID,
           google_event_id: APPT_EVENT_ID,
@@ -505,17 +514,44 @@ describe("syncAppointmentCalendarEvent", () => {
 
     const deletes = fetchMock.calls.filter((c) => c.method === "DELETE");
     expect(deletes.map((c) => c.authorization).sort()).toEqual([
-      "Bearer at-clinic",
+      "Bearer at-admin",
       "Bearer at-parent",
     ]);
     expect(mirrors).toHaveLength(0);
   });
 
-  it("removes the copy belonging to a calendar that is no longer a target", async () => {
-    // The parent disconnected: their account row is gone, but the mirror remains.
+  it("removes the copy of someone who disconnected", async () => {
     const { mirrors } = setup({
-      accounts: [CLINIC_ACCOUNT, { ...PARENT_ACCOUNT, user_id: "someone-else" }],
+      accounts: [PARENT_ACCOUNT, { ...DOCTOR_ACCOUNT, user_id: "left-the-clinic" }],
       appointment: appointmentRow(),
+      mirrors: [
+        {
+          account_id: "acct-doctor",
+          related_type: "appointment",
+          related_id: APPT_ID,
+          google_event_id: APPT_EVENT_ID,
+        },
+      ],
+    });
+    const fetchMock = createFetchMock([
+      ...createRoutes(APPT_EVENT_ID),
+      { match: (m: string) => m === "DELETE", respond: () => empty(204) },
+    ]);
+    vi.stubGlobal("fetch", fetchMock.fn);
+
+    const lib = await loadLib();
+    await lib.syncAppointmentCalendarEvent(APPT_ID);
+
+    expect(
+      fetchMock.calls.some((c) => c.method === "DELETE" && c.authorization === "Bearer at-doctor")
+    ).toBe(true);
+    expect(mirrors.some((m) => m.account_id === "acct-doctor")).toBe(false);
+  });
+
+  it("treats deleting an already-gone event as success without logging", async () => {
+    const { mock } = setup({
+      accounts: [PARENT_ACCOUNT],
+      appointment: appointmentRow({ status: "cancelled" }),
       mirrors: [
         {
           account_id: "acct-parent",
@@ -527,23 +563,17 @@ describe("syncAppointmentCalendarEvent", () => {
     });
     const fetchMock = createFetchMock([
       tokenRefreshRoute(ACCESS_TOKENS),
-      { match: (m) => m === "GET", respond: () => json(404, {}) },
-      { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
-      { match: (m) => m === "DELETE", respond: () => empty(204) },
+      { match: (m) => m === "DELETE", respond: () => json(404, { error: "gone" }) },
     ]);
     vi.stubGlobal("fetch", fetchMock.fn);
 
     const lib = await loadLib();
     await lib.syncAppointmentCalendarEvent(APPT_ID);
-
-    expect(
-      fetchMock.calls.some((c) => c.method === "DELETE" && c.authorization === "Bearer at-parent")
-    ).toBe(true);
-    expect(mirrors.some((m) => m.account_id === "acct-parent")).toBe(false);
+    expect(logInserts(mock)).toHaveLength(0);
   });
 
   it("does not PATCH (or re-notify) when the existing event already matches", async () => {
-    setup({ accounts: [CLINIC_ACCOUNT], appointment: appointmentRow() });
+    setup({ accounts: [PARENT_ACCOUNT], appointment: appointmentRow() });
     let created: any = null;
     let existsNow = false;
     const fetchMock = createFetchMock([
@@ -558,10 +588,6 @@ describe("syncAppointmentCalendarEvent", () => {
                 // Same instants, different representation — must compare equal.
                 start: { dateTime: "2026-09-01T09:00:00+04:00", timeZone: "Asia/Dubai" },
                 end: { dateTime: "2026-09-01T09:30:00+04:00", timeZone: "Asia/Dubai" },
-                attendees: [
-                  { email: "parent@example.com", responseStatus: "accepted" },
-                  { email: "doctor@example.com", responseStatus: "needsAction" },
-                ],
               })
             : json(404, {}),
       },
@@ -580,12 +606,14 @@ describe("syncAppointmentCalendarEvent", () => {
     await lib.syncAppointmentCalendarEvent(APPT_ID);
     await lib.syncAppointmentCalendarEvent(APPT_ID); // replay (verify-page reload)
 
-    expect(fetchMock.calls.filter((c) => c.method === "POST" && c.url.startsWith(EVENTS))).toHaveLength(1);
+    expect(
+      fetchMock.calls.filter((c) => c.method === "POST" && c.url.startsWith(EVENTS))
+    ).toHaveLength(1);
     expect(fetchMock.calls.filter((c) => c.method === "PATCH")).toHaveLength(0);
   });
 
-  it("patches on a real change, preserving attendee RSVPs", async () => {
-    const { mock } = setup({ accounts: [CLINIC_ACCOUNT], appointment: appointmentRow() });
+  it("patches on a real change and strips any guests a previous version carried", async () => {
+    const { mock } = setup({ accounts: [PARENT_ACCOUNT], appointment: appointmentRow() });
     let patched: any = null;
     const fetchMock = createFetchMock([
       tokenRefreshRoute(ACCESS_TOKENS),
@@ -599,7 +627,7 @@ describe("syncAppointmentCalendarEvent", () => {
             description: "stale",
             start: { dateTime: "2026-09-01T04:00:00Z", timeZone: "Asia/Dubai" },
             end: { dateTime: "2026-09-01T04:30:00Z", timeZone: "Asia/Dubai" },
-            attendees: [{ email: "parent@example.com", responseStatus: "accepted" }],
+            attendees: [{ email: "someone-else@example.com", responseStatus: "accepted" }],
           }),
       },
       {
@@ -617,13 +645,12 @@ describe("syncAppointmentCalendarEvent", () => {
 
     expect(Date.parse(patched.start.dateTime)).toBe(Date.parse("2026-09-01T05:00:00Z"));
     expect(patched.status).toBe("confirmed"); // resurrect-capable
-    const parent = patched.attendees.find((a: any) => a.email === "parent@example.com");
-    expect(parent.responseStatus).toBe("accepted");
+    expect(patched.attendees).toEqual([]); // old guests removed
     expect(logInserts(mock)[0].payload).toMatchObject({ action: "update", status: "sent" });
   });
 
   it("converges through PATCH when a concurrent create wins the race (insert 409)", async () => {
-    const { mock } = setup({ accounts: [CLINIC_ACCOUNT], appointment: appointmentRow() });
+    const { mock } = setup({ accounts: [PARENT_ACCOUNT], appointment: appointmentRow() });
     let patchCount = 0;
     const fetchMock = createFetchMock([
       tokenRefreshRoute(ACCESS_TOKENS),
@@ -651,7 +678,7 @@ describe("syncAppointmentCalendarEvent", () => {
 
   it("marks only the broken account on invalid_grant and still syncs the others", async () => {
     const { mock } = setup({
-      accounts: [CLINIC_ACCOUNT, PARENT_ACCOUNT],
+      accounts: [PARENT_ACCOUNT, DOCTOR_ACCOUNT],
       appointment: appointmentRow(),
     });
     const fetchMock = createFetchMock([
@@ -660,7 +687,7 @@ describe("syncAppointmentCalendarEvent", () => {
         respond: (call) =>
           call.body.refresh_token === "rt-parent"
             ? json(400, { error: "invalid_grant" })
-            : json(200, { access_token: "at-clinic", expires_in: 3600 }),
+            : json(200, { access_token: "at-doctor", expires_in: 3600 }),
       },
       { match: (m) => m === "GET", respond: () => json(404, {}) },
       { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
@@ -670,73 +697,84 @@ describe("syncAppointmentCalendarEvent", () => {
     const lib = await loadLib();
     await lib.syncAppointmentCalendarEvent(APPT_ID);
 
-    // The parent's account was flagged...
     const updates = mock.queries.filter(
       (q) => q.table === "google_calendar_accounts" && q.op === "update"
     );
     expect(updates.length).toBeGreaterThan(0);
     expect((updates[0].payload as any).status).toBe("error");
-    // ...but the clinic calendar still got its event.
-    expect(createdIn(fetchMock, "at-clinic")).toBeDefined();
+    expect(createdIn(fetchMock, "at-doctor")).toBeDefined();
   });
 });
 
-// ─── Group session reconciler ─────────────────────────────────────────────────
+// ─── Group sessions ───────────────────────────────────────────────────────────
 
-describe("syncGroupSessionCalendarEvent", () => {
-  it("invites unconnected registrants and hides them from each other", async () => {
-    setup({ accounts: [CLINIC_ACCOUNT], session: sessionRow() });
-    const fetchMock = createFetchMock([
-      tokenRefreshRoute(ACCESS_TOKENS),
-      { match: (m) => m === "GET", respond: () => json(404, {}) },
-      { match: (m) => m === "POST", respond: () => json(200, { id: SESSION_EVENT_ID }) },
-    ]);
+describe("live session visibility", () => {
+  it("gives the host and each confirmed registrant a private copy", async () => {
+    const registrant = {
+      id: "acct-u1",
+      user_id: "u1",
+      google_email: "one@example.com",
+      refresh_token: "rt-registrant",
+      status: "connected",
+      last_error: null,
+      connected_at: "2026-08-04T00:00:00Z",
+    };
+    setup({ accounts: [DOCTOR_ACCOUNT, registrant], session: sessionRow() });
+    const fetchMock = createFetchMock(createRoutes(SESSION_EVENT_ID));
     vi.stubGlobal("fetch", fetchMock.fn);
 
     const lib = await loadLib();
     await lib.syncGroupSessionCalendarEvent(SESSION_ID);
 
-    const event = createdIn(fetchMock, "at-clinic");
-    expect(event.summary).toBe("Newborn sleep basics");
-    // paid + free registrants and the doctor; the pending one is excluded
-    expect(event.attendees.map((a: any) => a.email).sort()).toEqual([
-      "doctor@example.com",
-      "one@example.com",
-      "two@example.com",
-    ]);
-    expect(event.guestsCanSeeOtherGuests).toBe(false);
-    expect(Date.parse(event.start.dateTime)).toBe(Date.parse("2026-09-05T15:00:00Z"));
-    expect(Date.parse(event.end.dateTime)).toBe(Date.parse("2026-09-05T16:00:00Z"));
-    expect(event.description).toContain(`/live-sessions/${SESSION_ID}`);
+    const hostEvent = createdIn(fetchMock, "at-doctor");
+    const registrantEvent = createdIn(fetchMock, "at-registrant");
+    expect(hostEvent.summary).toBe("Newborn sleep basics");
+    // No attendees anywhere: registrants never learn each other's addresses.
+    expect(hostEvent.attendees).toEqual([]);
+    expect(registrantEvent.attendees).toEqual([]);
+    expect(Date.parse(hostEvent.start.dateTime)).toBe(Date.parse("2026-09-05T15:00:00Z"));
+    expect(Date.parse(hostEvent.end.dateTime)).toBe(Date.parse("2026-09-05T16:00:00Z"));
+    expect(hostEvent.description).toContain(`/live-sessions/${SESSION_ID}`);
   });
 
-  it("gives a connected registrant their own copy instead of an invite", async () => {
-    const registrantAccount = { ...PARENT_ACCOUNT, id: "acct-u1", user_id: "u1", refresh_token: "rt-u1" };
-    setup({ accounts: [CLINIC_ACCOUNT, registrantAccount], session: sessionRow() });
-    const fetchMock = createFetchMock([
-      tokenRefreshRoute({ ...ACCESS_TOKENS, "rt-u1": "at-u1" }),
-      { match: (m) => m === "GET", respond: () => json(404, {}) },
-      { match: (m) => m === "POST", respond: () => json(200, { id: SESSION_EVENT_ID }) },
-    ]);
+  it("skips a registrant whose payment is still pending", async () => {
+    const pending = {
+      id: "acct-u3",
+      user_id: "u3",
+      google_email: "three@example.com",
+      refresh_token: "rt-pending",
+      status: "connected",
+      last_error: null,
+      connected_at: "2026-08-04T00:00:00Z",
+    };
+    setup({ accounts: [pending], session: sessionRow() });
+    const fetchMock = createFetchMock(createRoutes(SESSION_EVENT_ID));
     vi.stubGlobal("fetch", fetchMock.fn);
 
     const lib = await loadLib();
     await lib.syncGroupSessionCalendarEvent(SESSION_ID);
 
-    expect(createdIn(fetchMock, "at-u1").attendees).toEqual([]);
-    expect(createdIn(fetchMock, "at-clinic").attendees.map((a: any) => a.email).sort()).toEqual([
-      "doctor@example.com",
-      "two@example.com",
-    ]);
+    expect(fetchMock.calls.filter((c) => c.url.startsWith(EVENTS))).toHaveLength(0);
+  });
+
+  it("gives an admin every published session", async () => {
+    setup({ accounts: [ADMIN_ACCOUNT], session: sessionRow() });
+    const fetchMock = createFetchMock(createRoutes(SESSION_EVENT_ID));
+    vi.stubGlobal("fetch", fetchMock.fn);
+
+    const lib = await loadLib();
+    await lib.syncGroupSessionCalendarEvent(SESSION_ID);
+
+    expect(createdIn(fetchMock, "at-admin")).toBeDefined();
   });
 
   it("removes the event when the session is cancelled", async () => {
     const { mirrors } = setup({
-      accounts: [CLINIC_ACCOUNT],
+      accounts: [DOCTOR_ACCOUNT],
       session: sessionRow({ status: "cancelled" }),
       mirrors: [
         {
-          account_id: "acct-clinic",
+          account_id: "acct-doctor",
           related_type: "group_session",
           related_id: SESSION_ID,
           google_event_id: SESSION_EVENT_ID,
@@ -757,7 +795,7 @@ describe("syncGroupSessionCalendarEvent", () => {
   });
 
   it("keeps unpublished drafts off every calendar", async () => {
-    setup({ accounts: [CLINIC_ACCOUNT], session: sessionRow({ is_published: false }) });
+    setup({ accounts: [DOCTOR_ACCOUNT], session: sessionRow({ is_published: false }) });
     const fetchMock = createFetchMock([
       tokenRefreshRoute(ACCESS_TOKENS),
       { match: (m) => m === "DELETE", respond: () => json(404, {}) },
@@ -788,8 +826,8 @@ describe("sweepMissedCalendarEvents", () => {
   });
 
   it("re-syncs upcoming bookings", async () => {
-    const { mock } = setup({
-      accounts: [CLINIC_ACCOUNT],
+    setup({
+      accounts: [PARENT_ACCOUNT],
       appointment: appointmentRow(),
       extra: {
         appointments: (q: RecordedQuery) => {
@@ -802,18 +840,13 @@ describe("sweepMissedCalendarEvents", () => {
         group_sessions: () => ({ data: [] }),
       },
     });
-    const fetchMock = createFetchMock([
-      tokenRefreshRoute(ACCESS_TOKENS),
-      { match: (m) => m === "GET", respond: () => json(404, {}) },
-      { match: (m) => m === "POST", respond: () => json(200, { id: APPT_EVENT_ID }) },
-    ]);
+    const fetchMock = createFetchMock(createRoutes(APPT_EVENT_ID));
     vi.stubGlobal("fetch", fetchMock.fn);
 
     const lib = await loadLib();
     const run = await lib.sweepMissedCalendarEvents();
 
     expect(run.considered).toBe(1);
-    expect(createdIn(fetchMock, "at-clinic")).toBeDefined();
-    expect(logInserts(mock).length).toBeGreaterThan(0);
+    expect(createdIn(fetchMock, "at-parent")).toBeDefined();
   });
 });
