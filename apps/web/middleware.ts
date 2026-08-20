@@ -49,6 +49,11 @@ export async function middleware(request: NextRequest) {
     "/booking",
     "/live-sessions",
     "/packages",
+    // Consultation rooms are reached from an emailed or calendar link, so the
+    // visitor is often signed out. Without this they land on the room page,
+    // which calls the API with no token and shows "Missing or invalid
+    // Authorization header" instead of a login form.
+    "/appointments",
   ];
 
   const isProtected = protectedPaths.some((p) => pathname.startsWith(p));

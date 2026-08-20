@@ -163,7 +163,9 @@ export function LoginForm() {
         disabled={isLoading}
         onClick={() => {
           clearError();
-          signInWithGoogle();
+          // Same destination the password form honours, so arriving from a
+          // consultation link ends up at the consultation either way.
+          signInWithGoogle(searchParams.get("redirectTo") ?? undefined);
         }}
       >
         <GoogleIcon />
