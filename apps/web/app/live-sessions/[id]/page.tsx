@@ -80,13 +80,15 @@ export default function SessionDetailPage() {
             // not registered or not logged in
           }
 
-          if ((user.user_metadata?.role as string) === "doctor") {
-            try {
-              const doctor = await doctorApi.getMe();
-              setHostDoctorId(doctor.id);
-            } catch {
-              // no doctor row for this account
-            }
+          // JWT metadata role lags admin promotions (provisioning updates
+          // profiles.role, not user_metadata), so the doctors table is the
+          // only reliable host check. For non-doctors the 404 is the
+          // expected cheap outcome.
+          try {
+            const doctor = await doctorApi.getMe();
+            setHostDoctorId(doctor.id);
+          } catch {
+            // no doctor row for this account
           }
         }
       } catch {
