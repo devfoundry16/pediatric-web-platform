@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
+import { removeMedicalFile, signMedicalFiles } from "../lib/medical-storage";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ export async function listMedicalFiles(req: Request, res: Response): Promise<voi
       file_name,
       file_type,
       file_url,
+      storage_path,
       file_size_bytes,
       created_at,
       child_id,
@@ -103,7 +105,7 @@ export async function listMedicalFiles(req: Request, res: Response): Promise<voi
     return;
   }
 
-  res.json({ files: data });
+  res.json({ files: await signMedicalFiles(data ?? []) });
 }
 
 // ─── Save file metadata (file already uploaded to Supabase Storage by client) ─
@@ -120,7 +122,7 @@ export async function createMedicalFile(req: Request, res: Response): Promise<vo
     return;
   }
 
-  const { childId, recordId, appointmentId, fileName, fileType, fileUrl, fileSizeBytes } =
+  const { childId, recordId, appointmentId, fileName, fileType, fileUrl, storagePath, fileSizeBytes } =
     req.body;
 
   if (!childId || !fileName || !fileType || !fileUrl) {
@@ -167,6 +169,9 @@ export async function createMedicalFile(req: Request, res: Response): Promise<vo
       file_name: fileName,
       file_type: fileType,
       file_url: fileUrl,
+      // The bucket is private, so the path — not the URL — is what makes the
+      // file reachable later, via a short-lived signed URL.
+      storage_path: storagePath ?? null,
       file_size_bytes: fileSizeBytes ?? null,
       uploaded_by: req.userId,
     })
@@ -175,6 +180,7 @@ export async function createMedicalFile(req: Request, res: Response): Promise<vo
       file_name,
       file_type,
       file_url,
+      storage_path,
       file_size_bytes,
       created_at,
       child_id,
@@ -194,7 +200,8 @@ export async function createMedicalFile(req: Request, res: Response): Promise<vo
     return;
   }
 
-  res.status(201).json({ file });
+  const [signed] = await signMedicalFiles(file ? [file] : []);
+  res.status(201).json({ file: signed ?? file });
 }
 
 // ─── Delete file (uploader only) ─────────────────────────────────────────────
@@ -209,7 +216,7 @@ export async function deleteMedicalFile(req: Request, res: Response): Promise<vo
 
   const { data: existing } = await supabaseAdmin
     .from("medical_files")
-    .select("id, uploaded_by")
+    .select("id, uploaded_by, storage_path")
     .eq("id", id)
     .single();
 
@@ -229,6 +236,10 @@ export async function deleteMedicalFile(req: Request, res: Response): Promise<vo
     res.status(500).json({ error: error.message });
     return;
   }
+
+  // Row gone, object gone: otherwise the bucket keeps patient documents that
+  // nothing references and nobody can find to delete.
+  await removeMedicalFile(existing.storage_path as string | null);
 
   res.status(204).send();
 }
