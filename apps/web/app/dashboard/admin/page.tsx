@@ -77,14 +77,14 @@ export default function AdminOverviewPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <div className="flex items-center gap-2">
+      <div className="flex items-start justify-between gap-4">
+        <div>
           <h1 className="text-2xl font-bold text-foreground">Admin Overview</h1>
-          <RefreshButton onRefresh={load} />
+          <p className="text-sm text-muted-foreground">
+            Platform summary and quick status
+          </p>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Platform summary and quick status
-        </p>
+        <RefreshButton onRefresh={load} />
       </div>
 
       {error && (

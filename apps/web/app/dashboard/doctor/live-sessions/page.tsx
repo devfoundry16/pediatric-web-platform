@@ -579,22 +579,22 @@ export default function DoctorLiveSessionsPage() {
       <div className="flex flex-col gap-6">
         <div className="flex items-center justify-between">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold text-foreground">
-                {t.liveSessions.manageSessions}
-              </h1>
-              <RefreshButton onRefresh={loadSessions} />
-            </div>
+            <h1 className="text-2xl font-bold text-foreground">
+              {t.liveSessions.manageSessions}
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {t.liveSessions.subtitle}
             </p>
           </div>
-          <Button asChild className="gap-2">
-            <Link href="/dashboard/doctor/live-sessions/new">
-              <Plus className="h-4 w-4" />
-              {t.liveSessions.newSession}
-            </Link>
-          </Button>
+          <div className="flex items-center gap-1">
+            <RefreshButton onRefresh={loadSessions} />
+            <Button asChild className="gap-2">
+              <Link href="/dashboard/doctor/live-sessions/new">
+                <Plus className="h-4 w-4" />
+                {t.liveSessions.newSession}
+              </Link>
+            </Button>
+          </div>
         </div>
 
         {loading ? (

@@ -136,13 +136,11 @@ export function TodaySchedule() {
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <CardTitle className="text-lg">
-            {t.doctorDashboard.todaySchedule}
-          </CardTitle>
-          <RefreshButton onRefresh={load} />
-        </div>
+      <CardHeader className="flex flex-row items-center justify-between gap-4">
+        <CardTitle className="text-lg">
+          {t.doctorDashboard.todaySchedule}
+        </CardTitle>
+        <RefreshButton onRefresh={load} />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {loading ? (
