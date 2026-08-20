@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { doctorApi, type DoctorAppointment } from "@/lib/api/doctor";
-import { DEFAULT_TIMEZONE, formatDateDisplayDubai } from "@/lib/timezone";
+import { DEFAULT_TIMEZONE, formatDateDisplayDubai, wallClockToInstant } from "@/lib/timezone";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -45,7 +45,26 @@ function formatTime(time: string): string {
 
 type FilterTab = "all" | "today" | "upcoming" | "completed" | "cancelled";
 
-function getStatusBadge(apt: DoctorAppointment): {
+/**
+ * Whether the consultation's slot is happening now.
+ *
+ * This used to be inferred from meeting_url, back when a room only existed
+ * once the doctor pressed Start. Rooms are now created when the booking is
+ * confirmed, so meeting_url says nothing about whether the session is under
+ * way — every confirmed appointment would have read "In Progress".
+ */
+function isUnderway(
+  apt: DoctorAppointment,
+  timezone: string,
+  now: number = Date.now()
+): boolean {
+  const start = wallClockToInstant(apt.scheduled_date, apt.scheduled_time, timezone);
+  if (isNaN(start.getTime())) return false;
+  const end = start.getTime() + apt.duration_minutes * 60_000;
+  return now >= start.getTime() && now <= end;
+}
+
+function getStatusBadge(apt: DoctorAppointment, timezone: string): {
   label: string;
   variant: "default" | "secondary" | "destructive" | "outline";
   className: string;
@@ -62,7 +81,7 @@ function getStatusBadge(apt: DoctorAppointment): {
       variant: "destructive",
       className: "bg-red-100 text-red-700",
     };
-  if (apt.status === "confirmed" && apt.meeting_url)
+  if (apt.status === "confirmed" && isUnderway(apt, timezone))
     return {
       label: "In Progress",
       variant: "default",
@@ -241,14 +260,15 @@ function DoctorAppointmentsContent() {
         ) : (
           <div className="flex flex-col gap-4">
             {visible.map((apt) => {
-              const badge = getStatusBadge(apt);
+              const badge = getStatusBadge(apt, doctorTimezone);
               const childName = apt.child_profiles
                 ? `${apt.child_profiles.first_name} ${apt.child_profiles.last_name}`
                 : "—";
-              const showStart =
-                (apt.status === "pending" || apt.status === "confirmed") &&
-                !apt.meeting_url;
-              const showJoin = apt.status === "confirmed" && !!apt.meeting_url;
+              // Start confirms a pending booking; a confirmed one is simply
+              // joined. Neither depends on meeting_url any more, which is
+              // filled in asynchronously once the booking is confirmed.
+              const showStart = apt.status === "pending";
+              const showJoin = apt.status === "confirmed";
               const showComplete = apt.status === "confirmed";
 
               const isHighlighted = apt.id === highlightedId;
