@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHighlightedAppointment } from "@/hooks/use-highlighted-appointment";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
+import { AppointmentDocuments } from "@/components/dashboard/appointment-documents";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -346,7 +347,7 @@ function DoctorAppointmentsContent() {
                           {t.doctorDashboard.completeSession}
                         </Button>
                       )}
-                      {apt.symptoms && (
+                      {(
                         <Button
                           size="sm"
                           variant="ghost"
@@ -375,9 +376,14 @@ function DoctorAppointmentsContent() {
           <DialogHeader>
             <DialogTitle>{t.doctorDashboard.symptoms}</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-foreground whitespace-pre-wrap">
-            {symptomsApt?.symptoms ?? t.doctorDashboard.noSymptoms}
-          </p>
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-foreground whitespace-pre-wrap">
+              {symptomsApt?.symptoms ?? t.doctorDashboard.noSymptoms}
+            </p>
+            {symptomsApt && (
+              <AppointmentDocuments key={symptomsApt.id} appointmentId={symptomsApt.id} />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </DashboardLayout>

@@ -44,21 +44,11 @@ export const medicalFilesApi = {
     // Build a unique storage path: {childId}/{timestamp}-{filename}
     const ext = file.name.split(".").pop() ?? "bin";
     const storagePath = `${childId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    console.log("storagePath", storagePath);
-    console.log("file", ext);
+
     const { error: uploadError } = await supabase.storage
       .from(STORAGE_BUCKET)
-      .upload(storagePath, file, { upsert: false });
-    if (uploadError) {
-      console.log("uploadError", uploadError.message);
-      throw new Error(uploadError.message);
-    }
-
-    const { data: urlData } = supabase.storage
-      .from(STORAGE_BUCKET)
-      .getPublicUrl(storagePath);
-
-    const fileUrl = urlData.publicUrl;
+      .upload(storagePath, file, { upsert: false, contentType: file.type || undefined });
+    if (uploadError) throw new Error(uploadError.message);
 
     const { data } = await axios.post<{ file: MedicalFile }>(
       `${getBaseUrl()}/medical-files`,
@@ -68,7 +58,10 @@ export const medicalFilesApi = {
         appointmentId: opts?.appointmentId ?? null,
         fileName: file.name,
         fileType: file.type || "application/octet-stream",
-        fileUrl,
+        // The bucket is private, so there is no public URL to store. The path
+        // is what the API signs on demand for whoever is allowed to read it.
+        fileUrl: storagePath,
+        storagePath,
         fileSizeBytes: file.size,
       },
       { headers: await authHeaders() }

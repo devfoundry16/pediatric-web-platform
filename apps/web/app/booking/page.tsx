@@ -10,6 +10,7 @@ import { StepSelectPlan } from "@/components/booking/step-select-plan";
 import { StepSelectDoctor } from "@/components/booking/step-select-doctor";
 import { StepSelectDateTime } from "@/components/booking/step-select-datetime";
 import { StepSymptoms } from "@/components/booking/step-symptoms";
+import type { BookingAttachment } from "@/lib/booking-attachments";
 import { StepReview } from "@/components/booking/step-review";
 import { StepConfirmation } from "@/components/booking/step-confirmation";
 import { Button } from "@/components/ui/button";
@@ -81,6 +82,9 @@ export default function BookingPage() {
     // in the visitor's own zone on the review and confirmation steps.
     doctorTimezone: DEFAULT_TIMEZONE,
     symptoms: "",
+    // Uploaded to Storage as they are picked; only metadata travels with the
+    // booking request, and the API links them to the new appointment.
+    attachments: [] as BookingAttachment[],
   });
   const [confirmedAppointmentId, setConfirmedAppointmentId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -246,6 +250,7 @@ export default function BookingPage() {
         date: bookingData.date,
         time: bookingData.time,
         symptoms: bookingData.symptoms || undefined,
+        attachments: bookingData.attachments.length ? bookingData.attachments : undefined,
       });
 
       // One-time consult with no package credit → settle through Stripe. The
@@ -329,6 +334,9 @@ export default function BookingPage() {
           <StepSymptoms
             value={bookingData.symptoms}
             onChange={(symptoms) => updateBooking({ symptoms })}
+            childId={bookingData.childId}
+            attachments={bookingData.attachments}
+            onAttachmentsChange={(attachments) => updateBooking({ attachments })}
           />
         );
       case "review":

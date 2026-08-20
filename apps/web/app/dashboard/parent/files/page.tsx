@@ -263,7 +263,7 @@ export default function ParentFilesPage() {
                       <FileIcon mimeType={file.file_type} />
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <a
-                          href={file.file_url}
+                          href={file.signed_url ?? "#"}
                           target="_blank"
                           rel="noopener noreferrer"
                           title="Open file"
