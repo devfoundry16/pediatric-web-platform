@@ -898,10 +898,11 @@ export async function joinSession(
     return;
   }
 
-  // Recovers sessions published before rooms were created eagerly, and any
-  // whose room creation failed.
+  // Reconciles a room whose window a failed background ensure left stale
+  // (e.g. after a reschedule); falls back to the stored URL so a Daily blip
+  // at join time does not block an otherwise-working room.
   const roomUrl =
-    session.daily_room_url ?? (await ensureGroupSessionRoom(id as string));
+    (await ensureGroupSessionRoom(id as string)) ?? session.daily_room_url;
   if (!roomUrl) {
     res.status(502).json({ error: "Video room is unavailable, please try again" });
     return;

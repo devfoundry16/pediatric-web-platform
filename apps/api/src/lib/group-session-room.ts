@@ -72,12 +72,19 @@ export async function ensureGroupSessionRoom(sessionId: string): Promise<string 
   try {
     if (!supabaseAdmin) return null;
 
-    const { data } = await supabaseAdmin
+    const { data, error } = await supabaseAdmin
       .from("group_sessions")
       .select("id, status, scheduled_at, duration_minutes, daily_room_name, daily_room_url")
       .eq("id", sessionId)
       .single();
 
+    if (error) {
+      console.error(
+        `[daily] Could not load group session ${sessionId}:`,
+        error.message
+      );
+      return null;
+    }
     if (!data) return null;
     // A cancelled or ended session should never gain a room.
     if (["cancelled", "ended"].includes(data.status as string)) return null;
@@ -112,10 +119,17 @@ export async function ensureGroupSessionRoom(sessionId: string): Promise<string 
     }
 
     if (data.daily_room_name !== roomName || data.daily_room_url !== url) {
-      await supabaseAdmin
+      const { error: storeError } = await supabaseAdmin
         .from("group_sessions")
         .update({ daily_room_name: roomName, daily_room_url: url })
         .eq("id", sessionId);
+      // Still return the url — the room exists; the next call retries the write.
+      if (storeError) {
+        console.error(
+          `[daily] Could not store room for group session ${sessionId}:`,
+          storeError.message
+        );
+      }
     }
     return url;
   } catch (err) {
@@ -129,10 +143,16 @@ export async function deleteGroupSessionRoom(sessionId: string): Promise<void> {
   try {
     if (!supabaseAdmin) return;
     await deleteRoom(groupSessionRoomName(sessionId));
-    await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from("group_sessions")
       .update({ daily_room_name: null, daily_room_url: null })
       .eq("id", sessionId);
+    if (error) {
+      console.error(
+        `[daily] Could not clear room columns for group session ${sessionId}:`,
+        error.message
+      );
+    }
   } catch (err) {
     console.error(`[daily] Could not delete room for group session ${sessionId}:`, String(err));
   }
