@@ -1,3 +1,4 @@
+import dotenv from "dotenv";
 import { supabaseAdmin } from "./supabase";
 import { alreadySent, recordEmailFailure, sendSessionReminder } from "./resend";
 import { meetingUrlFor } from "./booking-notifications";
@@ -9,6 +10,7 @@ import {
   wallClockToInstant,
 } from "./timezone";
 
+dotenv.config();
 /** How far ahead of the start a reminder goes out. */
 export const LEAD_MINUTES = 10;
 
