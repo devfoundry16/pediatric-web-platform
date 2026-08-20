@@ -112,6 +112,9 @@ export interface AdminAppointment {
   cancellation_reason: string | null;
   created_at: string;
   parent_id: string;
+  // Only the appointment list resolves this; endpoints that return a lighter
+  // appointment row (dashboard stats) leave it undefined.
+  parent_name?: string | null;
   child_profiles: { id: string; first_name: string; last_name: string } | null;
   doctors: { id: string; full_name: string; specialty: string | null } | null;
 }
