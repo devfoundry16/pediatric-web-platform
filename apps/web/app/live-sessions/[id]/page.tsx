@@ -26,6 +26,7 @@ import {
   type GroupSession,
   type SessionRegistration,
 } from "@/lib/api/live-sessions";
+import { doctorApi } from "@/lib/api/doctor";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
 
@@ -43,6 +44,7 @@ export default function SessionDetailPage() {
   const [registration, setRegistration] = useState<SessionRegistration | null>(
     null
   );
+  const [hostDoctorId, setHostDoctorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +79,15 @@ export default function SessionDetailPage() {
           } catch {
             // not registered or not logged in
           }
+
+          if ((user.user_metadata?.role as string) === "doctor") {
+            try {
+              const doctor = await doctorApi.getMe();
+              setHostDoctorId(doctor.id);
+            } catch {
+              // no doctor row for this account
+            }
+          }
         }
       } catch {
         setError("Session not found");
@@ -89,6 +100,7 @@ export default function SessionDetailPage() {
 
   const isRegistered = isConfirmedRegistration(registration?.payment_status);
   const paymentPending = registration?.payment_status === "pending";
+  const isHost = hostDoctorId !== null && session?.doctors?.id === hostDoctorId;
 
   // The doctor can start the room at any moment. Without this the page keeps
   // showing "Scheduled" and withholds the Join button until a manual reload.
@@ -174,6 +186,9 @@ export default function SessionDetailPage() {
   const hasFinished =
     Date.now() > scheduledDate.getTime() + session.duration_minutes * 60_000;
   const registrationClosed = hasFinished || session.status === "cancelled";
+  const canJoinNow =
+    session.status === "live" ||
+    (session.status === "scheduled" && !registrationClosed);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -292,10 +307,28 @@ export default function SessionDetailPage() {
                       {t.liveSessions.sessionEnded}
                     </p>
                   )
-                ) : isRegistered &&
-                  (session.status === "live" ||
-                    (session.status === "scheduled" &&
-                      !registrationClosed)) ? (
+                ) : session.status === "cancelled" ? (
+                  <p className="text-sm text-center text-destructive font-medium">
+                    {t.liveSessions.statusCancelled}
+                  </p>
+                ) : isHost ? (
+                  <div className="flex flex-col gap-2">
+                    <p className="text-sm text-center text-muted-foreground">
+                      {t.liveSessions.youAreHost}
+                    </p>
+                    {canJoinNow && (
+                      <Button
+                        className="w-full gap-2"
+                        onClick={() =>
+                          router.push(`/live-sessions/${params.id}/room`)
+                        }
+                      >
+                        <Radio className="h-4 w-4" />
+                        {t.liveSessions.joinRoom}
+                      </Button>
+                    )}
+                  </div>
+                ) : isRegistered && canJoinNow ? (
                   <>
                     <Button
                       className="w-full gap-2"
@@ -322,10 +355,6 @@ export default function SessionDetailPage() {
                       {formatTimeInTimezone(scheduledDate, viewerTimezone)}
                     </p>
                   </div>
-                ) : session.status === "cancelled" ? (
-                  <p className="text-sm text-center text-destructive font-medium">
-                    {t.liveSessions.statusCancelled}
-                  </p>
                 ) : registrationClosed ? (
                   <p className="text-sm text-center text-muted-foreground font-medium">
                     {t.liveSessions.registrationClosed}
@@ -352,13 +381,14 @@ export default function SessionDetailPage() {
                 {/* Checkout was started but never paid, so no place is held —
                     say so rather than letting the Register button imply the
                     first attempt simply vanished. */}
-                {paymentPending && !isRegistered && !registrationClosed && (
+                {!isHost && paymentPending && !isRegistered && !registrationClosed && (
                   <p className="text-xs text-center text-amber-600">
                     {t.liveSessions.paymentPending}
                   </p>
                 )}
 
-                {!isFull &&
+                {!isHost &&
+                  !isFull &&
                   !isRegistered &&
                   !registrationClosed &&
                   session.status === "scheduled" && (

@@ -459,13 +459,18 @@ function SessionRow({
               </AlertDialog>
             )}
 
-            {(session.status === "scheduled" || session.status === "ended") && (
-              <Button size="sm" variant="ghost" asChild>
-                <Link href={`/live-sessions/${session.id}`}>
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </Link>
-              </Button>
-            )}
+            {session.is_published &&
+              (session.status === "scheduled" || session.status === "ended") && (
+                <Button size="sm" variant="ghost" asChild>
+                  <Link
+                    href={`/live-sessions/${session.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Link>
+                </Button>
+              )}
           </div>
         </div>
       </CardContent>
