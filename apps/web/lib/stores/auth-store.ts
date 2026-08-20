@@ -13,7 +13,8 @@ interface AuthState {
 
 interface AuthActions {
   signIn: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  /** `redirectTo` is a same-origin path to land on after the OAuth round trip. */
+  signInWithGoogle: (redirectTo?: string) => Promise<void>;
   signUp: (
     email: string,
     password: string,
@@ -118,17 +119,27 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ isLoading: false });
   },
 
-  signInWithGoogle: async () => {
+  signInWithGoogle: async (redirectTo) => {
     const supabase = createClient();
     set({ isLoading: true, error: null });
+
+    // Carry the intended destination through the round trip. Someone opening a
+    // consultation link while signed out is sent to the login form with
+    // ?redirectTo=; without passing it on, signing in with Google would drop
+    // them on their dashboard and lose the meeting they were trying to join.
+    // The callback only honours same-origin paths (see auth/callback/route.ts).
+    const callback = new URL("/auth/callback", window.location.origin);
+    if (redirectTo?.startsWith("/") && !redirectTo.startsWith("//")) {
+      callback.searchParams.set("next", redirectTo);
+    }
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         // Land on the existing PKCE callback, which exchanges the code for a
-        // session and routes the user to their role-based dashboard. Google
-        // users are created as parents (migration 012) with an empty phone.
-        redirectTo: `${window.location.origin}/auth/callback`,
+        // session and routes the user on. Google users are created as parents
+        // (migration 012) with an empty phone.
+        redirectTo: callback.toString(),
       },
     });
 
