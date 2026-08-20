@@ -3,18 +3,22 @@
 Bookings are pushed to Google Calendar, Calendly-style: the app is the source of
 truth and creates, updates and deletes the events it owns.
 
-**Anyone can connect their own calendar.** Parents and doctors connect from
-their profile page (**Dashboard → Profile → Google Calendar**); an admin can
-also connect one clinic-wide account from **Dashboard → Admin → Integrations**.
+**Anyone can connect their own calendar**, and their role decides what appears
+on it:
 
-- **Connected** — appointments and live sessions are written directly into that
-  person's own calendar, and kept in step through reschedules and cancellations.
-- **Not connected** — they are invited to the clinic calendar's event by email,
-  exactly as before. Nothing is required of them.
+| Role | What lands on their calendar | Where they connect |
+| --- | --- | --- |
+| **Admin** | Every appointment and live session on the platform | Dashboard → Admin → Integrations |
+| **Doctor** | The appointments and sessions they host | Dashboard → Profile |
+| **Parent** | The appointments they booked and sessions they registered for | Dashboard → Profile |
 
-Connecting is always optional, so the integration works from day one and gets
-better as people opt in. Events link to the app dashboards — video calls stay on
-Daily.co.
+Each person gets their **own private copy** of the event. Nobody is added as an
+attendee on anybody else's event, so one family never sees another's email
+address. Anyone who has not connected a calendar simply gets nothing here — they
+still receive the usual booking emails.
+
+Connecting is always optional. Events link to the app dashboards (each calendar
+shows only the link its owner can open) — video calls stay on Daily.co.
 
 ## Step 1: Google Cloud project
 
@@ -53,19 +57,19 @@ Run these in the Supabase SQL Editor, in order:
 
 1. `database/migrations/024_google_calendar.sql`
 2. `database/migrations/025_google_calendar_accounts.sql`
+3. `database/migrations/026_calendar_personal_accounts.sql`
 
-025 carries any account connected under 024 forward, so it is safe to run on an
-environment that already had the clinic-only version.
+Each carries the previous version's data forward. If an earlier build connected
+a shared "clinic" calendar, **disconnect it before running 026** — otherwise the
+events it created stay on that Google account and have to be removed by hand.
 
 ## Step 4: Connect
 
 - **Parents / doctors** — Dashboard → Profile → **Connect Google Calendar**.
-- **Admin (clinic account)** — Dashboard → Admin → Integrations → **Connect**.
-  This is the calendar that carries invitations for everyone who has not
-  connected their own, so it is worth setting up even once users start
-  connecting individually.
+- **Admins** — Dashboard → Admin → Integrations → **Connect**. An admin's
+  calendar receives every booking on the platform.
 
-Admins can see every connected account and every calendar write (including
+Admins can also see every connected account and every calendar write (including
 failures) on the Integrations page.
 
 ## Google verification — required before launch
@@ -75,8 +79,9 @@ failures) on the Integrations page.
 
 **Until it is approved:** a hard cap of **100 connected Google accounts**, and
 users see an "unverified app" warning during consent (they can continue via
-**Advanced → Continue**). Everything else keeps working — unconnected users get
-email invitations as usual.
+**Advanced → Continue**). Everything else keeps working — bookings, and the
+booking emails everyone receives regardless of whether they connected a
+calendar.
 
 Checklist before submitting in the Cloud Console **Verification Center**:
 
@@ -99,15 +104,15 @@ Expect around 10 days officially, often several weeks in practice.
 
 | App change | Calendar effect |
 | --- | --- |
-| Appointment confirmed (credit or Stripe) | Event created on every connected participant's calendar; anyone unconnected is invited via the clinic event |
+| Appointment confirmed (credit or Stripe) | Event created on the parent's, doctor's and every admin's connected calendar |
 | Appointment rescheduled (parent or admin) | Every copy moves |
 | Appointment cancelled / no-show / refunded | Every copy removed |
 | Appointment completed | Left as calendar history |
 | Live session published | Event created |
-| Registration confirmed (free or paid) | Registrant gets their own event, or an invite if not connected |
+| Registration confirmed (free or paid) | Registrant gets their own event |
 | Session edited / cancelled / registration refunded | Copies patched / removed |
-| User connects | Their upcoming bookings are backfilled immediately |
-| User disconnects | Their copies are removed; they go back to email invitations |
+| User connects | Their upcoming bookings are backfilled immediately (for an admin, everything) |
+| User disconnects | Their copies are removed from their calendar |
 
 A background sweep re-checks upcoming bookings every few minutes and repairs
 anything a transient Google outage dropped.
@@ -123,10 +128,12 @@ anything a transient Google outage dropped.
   old grant exists. Remove the app at
   [myaccount.google.com/permissions](https://myaccount.google.com/permissions)
   and connect again.
-- **A parent's event did not appear automatically** — they have not connected
-  their calendar, so they received an invitation instead; Google adds it once
-  they accept. Connecting removes that step entirely.
+- **A parent's event did not appear** — they have not connected a calendar.
+  Only connected users receive events; everyone still gets the booking emails.
 - **Nothing syncs at all** — either the `GOOGLE_*` variables are missing (the
   Integrations page says "Not configured") or nobody has connected an account.
+- **An event shows at an unexpected time** — appointments are stored in the
+  clinic's timezone (Asia/Dubai by default) and Google renders them in each
+  viewer's own zone, so 13:00 Dubai correctly reads 11:00 on a Berlin calendar.
 - **Failures** — every failed write is listed on the Integrations page with the
   exact Google error and the account it belongs to.
