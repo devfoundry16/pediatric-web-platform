@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 
 import { useEffect, useState, useCallback } from "react";
-import { DEFAULT_TIMEZONE } from "@/lib/timezone";
+import { DEFAULT_TIMEZONE, wallClockToInstant } from "@/lib/timezone";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -29,7 +29,26 @@ function consultationLabel(type: string): string {
   return type.charAt(0).toUpperCase() + type.slice(1);
 }
 
-function getStatusDisplay(apt: DoctorAppointment): {
+/**
+ * Whether the consultation's slot is happening now.
+ *
+ * This used to be inferred from meeting_url, back when a room only existed
+ * once the doctor pressed Start. Rooms are now created when the booking is
+ * confirmed, so meeting_url says nothing about whether the session is under
+ * way — every confirmed appointment would have read "In Progress".
+ */
+function isUnderway(
+  apt: DoctorAppointment,
+  timezone: string,
+  now: number = Date.now()
+): boolean {
+  const start = wallClockToInstant(apt.scheduled_date, apt.scheduled_time, timezone);
+  if (isNaN(start.getTime())) return false;
+  const end = start.getTime() + apt.duration_minutes * 60_000;
+  return now >= start.getTime() && now <= end;
+}
+
+function getStatusDisplay(apt: DoctorAppointment, timezone: string): {
   label: string;
   className: string;
   inProgress: boolean;
@@ -46,7 +65,7 @@ function getStatusDisplay(apt: DoctorAppointment): {
       className: "bg-red-100 text-red-700",
       inProgress: false,
     };
-  if (apt.status === "confirmed" && apt.meeting_url)
+  if (apt.status === "confirmed" && isUnderway(apt, timezone))
     return {
       label: "In Progress",
       className: "bg-green-100 text-green-800",
@@ -133,14 +152,15 @@ export function TodaySchedule() {
           </div>
         ) : (
           appointments.map((apt) => {
-            const display = getStatusDisplay(apt);
+            const display = getStatusDisplay(apt, doctorTimezone);
             const childName = apt.child_profiles
               ? `${apt.child_profiles.first_name} ${apt.child_profiles.last_name}`
               : "—";
-            const showStart =
-              (apt.status === "pending" || apt.status === "confirmed") &&
-              !apt.meeting_url;
-            const showJoin = apt.status === "confirmed" && !!apt.meeting_url;
+            // Start confirms a pending booking; a confirmed one is simply
+            // joined. Neither depends on meeting_url any more, which is filled
+            // in asynchronously once the booking is confirmed.
+            const showStart = apt.status === "pending";
+            const showJoin = apt.status === "confirmed";
             const showComplete = apt.status === "confirmed";
 
             return (

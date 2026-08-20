@@ -134,7 +134,8 @@ export function UpcomingAppointments() {
                   >
                     {getAppointmentStatusLabel(t, appt.status)}
                   </Badge>
-                  {appt.status === "confirmed" && appt.meeting_url && (
+                  {/* Status alone — see the appointments list for why. */}
+                  {appt.status === "confirmed" && (
                     <Button
                       size="sm"
                       variant="outline"

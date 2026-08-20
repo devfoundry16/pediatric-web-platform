@@ -223,7 +223,12 @@ function ParentAppointmentsContent() {
           </div>
 
           <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
-            {appt.status === "confirmed" && appt.meeting_url && (
+            {/* Keyed off status alone. meeting_url is filled in by a background
+                job just after payment settles, so gating on it hid Join until
+                the page happened to be reloaded. The room page handles the rest:
+                it creates the room if it is somehow missing and says when the
+                room opens if you are early. */}
+            {appt.status === "confirmed" && (
               <Button
                 size="sm"
                 className="gap-1.5"
