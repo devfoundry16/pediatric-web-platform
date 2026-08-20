@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { useRouter } from "next/navigation";
 
 import { useEffect, useState, useCallback } from "react";
@@ -136,9 +137,12 @@ export function TodaySchedule() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">
-          {t.doctorDashboard.todaySchedule}
-        </CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-lg">
+            {t.doctorDashboard.todaySchedule}
+          </CardTitle>
+          <RefreshButton onRefresh={load} />
+        </div>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {loading ? (

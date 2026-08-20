@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { RefreshButton } from "@/components/ui/refresh-button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/i18n-context";
@@ -35,11 +36,12 @@ export function UpcomingAppointments() {
     router.push(`/appointments/${id}/room`);
   }
 
-  useEffect(() => {
+  // Extracted from the effect so the refresh control can call it too.
+  const load = useCallback(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    appointmentsApi
+    return appointmentsApi
       .list()
       .then((all) => {
         const upcoming = all
@@ -60,12 +62,19 @@ export function UpcomingAppointments() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  useEffect(() => {
+    load();
+  }, [load]);
+
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-lg">
-          {t.parentDashboard.upcomingAppointments}
-        </CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-lg">
+            {t.parentDashboard.upcomingAppointments}
+          </CardTitle>
+          <RefreshButton onRefresh={load} />
+        </div>
         <Link href="/booking">
           <Button size="sm" className="gap-1.5">
             <Plus className="h-3.5 w-3.5" />

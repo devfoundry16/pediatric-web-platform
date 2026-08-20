@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -39,8 +40,9 @@ export default function AdminNotificationsPage() {
   const [page, setPage] = useState(1);
   const LIMIT = 50;
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    // Skip the skeleton swap on a manual refresh — see RefreshButton.
+    if (!silent) setLoading(true);
     adminApi.listEmailLogs({
       status: filterStatus || undefined,
       email_type: filterType || undefined,
@@ -61,7 +63,10 @@ export default function AdminNotificationsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
+          <RefreshButton onRefresh={() => load(true)} />
+        </div>
         <p className="text-sm text-muted-foreground">Monitor outbound email status and delivery</p>
       </div>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -48,8 +49,8 @@ function IntegrationsPageInner() {
   const [page, setPage] = useState(1);
   const LIMIT = 50;
 
-  const loadStatus = useCallback(() => {
-    setStatusLoading(true);
+  const loadStatus = useCallback((silent = false) => {
+    if (!silent) setStatusLoading(true);
     calendarApi
       .getStatus()
       .then(setStatus)
@@ -61,8 +62,9 @@ function IntegrationsPageInner() {
       .catch(() => setAccounts([]));
   }, []);
 
-  const loadLogs = useCallback(() => {
-    setLogsLoading(true);
+  const loadLogs = useCallback((silent = false) => {
+    // Skip the skeleton swap on a manual refresh — see RefreshButton.
+    if (!silent) setLogsLoading(true);
     adminApi
       .listCalendarLogs({
         status: filterStatus || undefined,
@@ -115,7 +117,12 @@ function IntegrationsPageInner() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Integrations</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">Integrations</h1>
+          <RefreshButton
+            onRefresh={() => Promise.all([loadStatus(true), loadLogs(true)])}
+          />
+        </div>
         <p className="text-sm text-muted-foreground">
           Connect your Google Calendar. As an admin you receive every appointment and live session
           on the platform; parents and doctors only receive their own.

@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -31,8 +32,9 @@ export default function AdminPaymentsPage() {
   const [filterStatus, setFilterStatus] = useState("");
   const LIMIT = 50;
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    // Skip the skeleton swap on a manual refresh — see RefreshButton.
+    if (!silent) setLoading(true);
     adminApi.listPayments({ status: filterStatus || undefined, page, limit: LIMIT })
       .then(({ payments: p, total: t }) => { setPayments(p); setTotal(t); })
       .catch(() => {})
@@ -47,7 +49,10 @@ export default function AdminPaymentsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Payments</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">Payments</h1>
+          <RefreshButton onRefresh={() => load(true)} />
+        </div>
         <p className="text-sm text-muted-foreground">Monitor all payment transactions</p>
       </div>
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshButton } from "@/components/ui/refresh-button";
 import { Suspense, useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHighlightedAppointment } from "@/hooks/use-highlighted-appointment";
@@ -82,8 +83,9 @@ function AdminAppointmentsContent() {
   const [rescheduleTime, setRescheduleTime] = useState("");
   const [isActing, setIsActing] = useState(false);
 
-  const load = useCallback(() => {
-    setLoading(true);
+  const load = useCallback((silent = false) => {
+    // Skip the skeleton swap on a manual refresh — see RefreshButton.
+    if (!silent) setLoading(true);
     Promise.all([
       adminApi.listAppointments({
         date: filterDate || undefined,
@@ -132,7 +134,10 @@ function AdminAppointmentsContent() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Appointments</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-foreground">Appointments</h1>
+          <RefreshButton onRefresh={() => load(true)} />
+        </div>
         <p className="text-sm text-muted-foreground">View and manage all appointments across the platform</p>
       </div>
 
