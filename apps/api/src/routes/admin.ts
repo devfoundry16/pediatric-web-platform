@@ -29,13 +29,7 @@ import {
   linkDoctorAccountAdmin,
 } from "../controllers/admin";
 import { updateFeatureFlag } from "../controllers/feature-flags";
-import {
-  getCalendarStatus,
-  startCalendarConnect,
-  disconnectCalendar,
-  listCalendarAccounts,
-  listCalendarLogs,
-} from "../controllers/google-calendar";
+import { listCalendarAccounts, listCalendarLogs } from "../controllers/google-calendar";
 
 const router = Router();
 
@@ -87,10 +81,8 @@ router.get("/notes", listNotes);
 // Email logs
 router.get("/email-logs", listEmailLogs);
 
-// Google Calendar integration (clinic-wide account + oversight)
-router.get("/google-calendar/status", getCalendarStatus);
-router.post("/google-calendar/connect", startCalendarConnect);
-router.delete("/google-calendar", disconnectCalendar);
+// Google Calendar oversight. Admins connect their OWN calendar through the
+// shared /api/google-calendar routes; these are read-only views for support.
 router.get("/google-calendar/accounts", listCalendarAccounts);
 router.get("/calendar-logs", listCalendarLogs);
 

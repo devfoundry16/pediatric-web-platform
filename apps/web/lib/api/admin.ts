@@ -181,16 +181,6 @@ export interface EmailLog {
   created_at: string;
 }
 
-export interface CalendarIntegrationStatus {
-  /** False when the server is missing the GOOGLE_* env vars entirely. */
-  configured: boolean;
-  connected: boolean;
-  email?: string;
-  status?: "connected" | "error";
-  lastError?: string | null;
-  connectedAt?: string;
-}
-
 export interface CalendarAccount {
   id: string;
   googleEmail: string;
@@ -314,9 +304,8 @@ export const adminApi = {
     get<{ emailLogs: EmailLog[]; total: number; page: number; limit: number }>("/email-logs", params as Record<string, string | number | undefined>),
 
   // Google Calendar integration
-  getGoogleCalendarStatus: () => get<CalendarIntegrationStatus>("/google-calendar/status"),
-  connectGoogleCalendar: () => post<{ url: string }>("/google-calendar/connect", {}),
-  disconnectGoogleCalendar: () => del("/google-calendar"),
+  // Admins connect their OWN calendar via calendarApi, same as everyone else;
+  // these are the read-only oversight views.
   listCalendarAccounts: () => get<{ accounts: CalendarAccount[] }>("/google-calendar/accounts"),
   listCalendarLogs: (params?: { status?: string; related_type?: string; page?: number; limit?: number }) =>
     get<{ calendarLogs: CalendarEventLog[]; total: number; page: number; limit: number }>("/calendar-logs", params as Record<string, string | number | undefined>),

@@ -8,25 +8,22 @@ import { appointmentUrlFor } from "./booking-notifications";
  * Calendar, Calendly-style: the app is the source of truth and pushes
  * events out (insert/patch/delete), never reads back.
  *
- * Each booking can land on SEVERAL calendars:
- *   - the clinic account (an admin-connected account, user_id IS NULL), and
- *   - the personal calendar of every participant who connected their own
- *     Google account (parent, doctor, session registrant).
+ * Every connected calendar belongs to one user, and their role decides what
+ * lands on it:
+ *   Admin  — every booking on the platform.
+ *   Doctor — the appointments and sessions they host.
+ *   Parent — the appointments they booked and the sessions they registered for.
  *
- * Anyone who has NOT connected is invited to the clinic event as an email
- * attendee instead — the pre-Phase-2 behaviour, which is also the graceful
- * fallback while Google verification is pending (unverified apps cap at 100
- * connected accounts).
- *
- * Connected users are deliberately EXCLUDED from the clinic event's attendee
- * list. This is a correctness requirement, not a preference: Google reuses the
- * organiser's event id for the copy it places in an attendee's calendar, so
- * inviting someone *and* writing our own event with the same deterministic id
- * into their calendar would collide (409) or duplicate.
+ * Each recipient gets their OWN copy of the event, written directly into their
+ * calendar. Events carry no attendees at all: nobody is invited to anyone
+ * else's calendar, so no family's address is ever exposed to another. Someone
+ * who has not connected a calendar simply gets nothing here — they still
+ * receive the booking emails (see booking-notifications.ts).
  *
  * Events link to the app dashboards, never to a Daily room — same reasoning as
  * booking-notifications.ts: rooms are private, tokened, and do not exist until
- * the doctor starts the session.
+ * the doctor starts the session. Each calendar shows only the dashboard link
+ * its owner can actually open.
  *
  * Every sync function here is fire-and-forget: it never throws and never blocks
  * a booking. Each calendar write (or failure) is recorded in
@@ -73,9 +70,6 @@ export function isCalendarConfigured(): boolean {
 // clicked Connect. HMAC over {userId, target, issuedAt} with the existing
 // JWT_SECRET — no new dependency; tampering and replay past the TTL fail closed.
 
-/** Whose calendar the consent is for: the caller's own, or the clinic's. */
-export type ConnectTarget = "self" | "clinic";
-
 function stateSecret(): string | null {
   return process.env.JWT_SECRET ?? null;
 }
@@ -84,16 +78,14 @@ function hmac(payload: string, secret: string): string {
   return createHmac("sha256", secret).update(payload).digest("base64url");
 }
 
-export function signState(userId: string, target: ConnectTarget = "self"): string | null {
+export function signState(userId: string): string | null {
   const secret = stateSecret();
   if (!secret) return null;
-  const payload = Buffer.from(JSON.stringify({ u: userId, g: target, t: Date.now() })).toString(
-    "base64url"
-  );
+  const payload = Buffer.from(JSON.stringify({ u: userId, t: Date.now() })).toString("base64url");
   return `${payload}.${hmac(payload, secret)}`;
 }
 
-export function verifyState(state: unknown): { userId: string; target: ConnectTarget } | null {
+export function verifyState(state: unknown): { userId: string } | null {
   const secret = stateSecret();
   if (!secret || typeof state !== "string") return null;
 
@@ -109,13 +101,11 @@ export function verifyState(state: unknown): { userId: string; target: ConnectTa
   try {
     const parsed = JSON.parse(Buffer.from(payload, "base64url").toString()) as {
       u?: string;
-      g?: string;
       t?: number;
     };
     if (typeof parsed.u !== "string" || typeof parsed.t !== "number") return null;
     if (Date.now() - parsed.t > STATE_TTL_MS) return null;
-    const target: ConnectTarget = parsed.g === "clinic" ? "clinic" : "self";
-    return { userId: parsed.u, target };
+    return { userId: parsed.u };
   } catch {
     return null;
   }
@@ -188,8 +178,8 @@ export async function exchangeCode(
 
 interface AccountRow {
   id: string;
-  /** NULL marks the clinic-wide account connected by an admin. */
-  user_id: string | null;
+  /** Owner of the calendar. Their role decides what gets mirrored onto it. */
+  user_id: string;
   google_email: string;
   refresh_token: string;
   status: "connected" | "error";
@@ -207,16 +197,6 @@ function toPublic(row: AccountRow): PublicAccount {
   return rest;
 }
 
-async function fetchClinicAccount(): Promise<AccountRow | null> {
-  if (!supabaseAdmin) return null;
-  const { data } = await supabaseAdmin
-    .from("google_calendar_accounts")
-    .select(ACCOUNT_FIELDS)
-    .is("user_id", null)
-    .maybeSingle();
-  return (data as AccountRow | null) ?? null;
-}
-
 async function fetchUserAccount(userId: string): Promise<AccountRow | null> {
   if (!supabaseAdmin) return null;
   const { data } = await supabaseAdmin
@@ -227,9 +207,27 @@ async function fetchUserAccount(userId: string): Promise<AccountRow | null> {
   return (data as AccountRow | null) ?? null;
 }
 
-export async function getClinicAccount(): Promise<PublicAccount | null> {
-  const row = await fetchClinicAccount();
-  return row ? toPublic(row) : null;
+/**
+ * Connected calendars of every active admin. Admins mirror every booking, so
+ * this is folded into the target list for each sync.
+ */
+async function connectedAdminAccounts(): Promise<AccountRow[]> {
+  if (!supabaseAdmin) return [];
+  const { data: admins } = await supabaseAdmin
+    .from("profiles")
+    .select("id")
+    .eq("role", "admin")
+    .eq("is_active", true);
+
+  const ids = (admins ?? []).map((a) => a.id as string);
+  if (ids.length === 0) return [];
+
+  const { data } = await supabaseAdmin
+    .from("google_calendar_accounts")
+    .select(ACCOUNT_FIELDS)
+    .in("user_id", ids)
+    .eq("status", "connected");
+  return (data as AccountRow[] | null) ?? [];
 }
 
 export async function getAccountForUser(userId: string): Promise<PublicAccount | null> {
@@ -252,15 +250,13 @@ export async function listAccounts(): Promise<PublicAccount[]> {
  * owner. `userId` null saves the clinic account.
  */
 export async function saveAccount(params: {
-  userId: string | null;
+  userId: string;
   email: string;
   refreshToken: string;
 }): Promise<void> {
   if (!supabaseAdmin) throw new Error("Supabase is not configured");
 
-  const existing = params.userId
-    ? await fetchUserAccount(params.userId)
-    : await fetchClinicAccount();
+  const existing = await fetchUserAccount(params.userId);
 
   if (existing) {
     const { error } = await supabaseAdmin
@@ -281,6 +277,7 @@ export async function saveAccount(params: {
 
   const { error } = await supabaseAdmin.from("google_calendar_accounts").insert({
     user_id: params.userId,
+    connected_by: params.userId,
     google_email: params.email,
     refresh_token: params.refreshToken,
     status: "connected",
@@ -294,9 +291,9 @@ export async function saveAccount(params: {
  * reconnect starts clean rather than trying to patch events that the user may
  * have deleted in the meantime.
  */
-export async function disconnectAccount(params: { userId: string | null }): Promise<void> {
+export async function disconnectAccount(params: { userId: string }): Promise<void> {
   if (!supabaseAdmin) return;
-  const row = params.userId ? await fetchUserAccount(params.userId) : await fetchClinicAccount();
+  const row = await fetchUserAccount(params.userId);
   if (!row) return;
 
   // Best effort: a failed revoke still leaves the token deleted on our side.
@@ -434,7 +431,15 @@ async function calendarRequest(
   path: string,
   body?: CalendarEvent
 ): Promise<CalendarResponse> {
-  const accessToken = await getAccessToken(account);
+  // A dead grant must not abort the whole sync: one person's revoked access
+  // would otherwise stop everyone else on the booking from getting their copy.
+  // Turn it into a failed response so the caller logs it and moves on.
+  let accessToken: string | null;
+  try {
+    accessToken = await getAccessToken(account);
+  } catch (err) {
+    return { status: 0, body: null, errorText: String(err) };
+  }
   if (!accessToken) {
     return { status: 0, body: null, errorText: "No Google access token available" };
   }
@@ -558,23 +563,6 @@ function attendeeEmails(event: CalendarEvent): Set<string> {
   );
 }
 
-/**
- * Keep every attendee object Google already knows (their responseStatus — the
- * RSVP — lives there, and a bare {email} would reset it), drop the ones no
- * longer wanted, append the new ones.
- */
-function mergeAttendees(existing: CalendarEvent | null, desired: string[]): EventAttendee[] {
-  const wanted = new Set(desired.map((e) => e.toLowerCase()));
-  const kept = (existing?.attendees ?? []).filter(
-    (a) => a.organizer || a.self || wanted.has(a.email.toLowerCase())
-  );
-  const present = new Set(kept.map((a) => a.email.toLowerCase()));
-  for (const email of desired) {
-    if (!present.has(email.toLowerCase())) kept.push({ email });
-  }
-  return kept;
-}
-
 function sameInstant(a: string | undefined, b: string | undefined): boolean {
   if (!a || !b) return false;
   const pa = Date.parse(a);
@@ -618,7 +606,6 @@ async function upsertEvent(target: SyncTarget, desired: CalendarEvent): Promise<
     }
     const patched = await calendarRequest(account, "PATCH", `/${eventId}`, {
       ...desired,
-      attendees: mergeAttendees(existing.body, (desired.attendees ?? []).map((a) => a.email)),
       // Also resurrects an event that was cancelled (booking cancelled, then
       // rescheduled back) — deleted Google events keep their id, and only a
       // status flip brings them back; re-inserting the id would 409.
@@ -709,37 +696,43 @@ async function deleteEvent(target: SyncTarget): Promise<void> {
 
 // ─── Participant / account resolution ─────────────────────────────────────────
 
-/** Which side of the consultation someone is on — decides which link they see. */
-type ParticipantRole = "parent" | "doctor";
+/** Which dashboard the recipient uses — decides which link their copy shows. */
+type ParticipantRole = "parent" | "doctor" | "admin";
 
-interface Participant {
-  userId: string | null;
-  email: string | null;
+/** One calendar to write this booking to, and the link its owner can open. */
+interface SyncRecipient {
+  account: AccountRow;
   role: ParticipantRole;
 }
 
 /**
- * Split participants into those with their own connected calendar (each gets a
- * personal event) and those without (invited to the clinic event by email).
- * Roles are carried through so each event can show only the join link that
- * belongs to its audience.
+ * Everyone who should receive a copy of a booking: the participants who have
+ * connected a calendar, plus every admin who has (admins mirror everything).
+ *
+ * Participants are given first so that an admin who is also the parent or the
+ * doctor on a booking keeps the more specific role — and therefore the link
+ * they will actually use.
  */
-async function resolveParticipants(participants: Participant[]): Promise<{
-  connected: Array<{ account: AccountRow; role: ParticipantRole }>;
-  invites: Array<{ email: string; role: ParticipantRole }>;
-}> {
-  const connected: Array<{ account: AccountRow; role: ParticipantRole }> = [];
-  const invites: Array<{ email: string; role: ParticipantRole }> = [];
+async function resolveRecipients(
+  participants: Array<{ userId: string | null; role: ParticipantRole }>
+): Promise<SyncRecipient[]> {
+  const byAccountId = new Map<string, SyncRecipient>();
 
   for (const participant of participants) {
-    const account = participant.userId ? await fetchUserAccount(participant.userId) : null;
-    if (account && account.status === "connected") {
-      connected.push({ account, role: participant.role });
-    } else if (participant.email) {
-      invites.push({ email: participant.email, role: participant.role });
+    if (!participant.userId) continue;
+    const account = await fetchUserAccount(participant.userId);
+    if (account && account.status === "connected" && !byAccountId.has(account.id)) {
+      byAccountId.set(account.id, { account, role: participant.role });
     }
   }
-  return { connected, invites };
+
+  for (const account of await connectedAdminAccounts()) {
+    if (!byAccountId.has(account.id)) {
+      byAccountId.set(account.id, { account, role: "admin" });
+    }
+  }
+
+  return [...byAccountId.values()];
 }
 
 /** Accounts that hold a mirror for this booking but are no longer a target. */
@@ -766,12 +759,6 @@ async function allMirroredAccounts(
   relatedId: string
 ): Promise<AccountRow[]> {
   return staleTargets(relatedType, relatedId, new Set());
-}
-
-async function resolveUserEmail(userId: string): Promise<string | null> {
-  if (!supabaseAdmin) return null;
-  const { data } = await supabaseAdmin.auth.admin.getUserById(userId);
-  return data?.user?.email ?? null;
 }
 
 // ─── Appointment reconciler ───────────────────────────────────────────────────
@@ -848,35 +835,29 @@ export async function syncAppointmentCalendarEvent(appointmentId: string): Promi
     }
     const end = new Date(start.getTime() + appt.duration_minutes * 60_000);
 
-    const { connected, invites } = await resolveParticipants([
-      { userId: appt.parent_id, email: await resolveUserEmail(appt.parent_id), role: "parent" },
-      {
-        userId: appt.doctors?.profile_id ?? null,
-        email: appt.doctors?.email ?? null,
-        role: "doctor",
-      },
+    const recipients = await resolveRecipients([
+      { userId: appt.parent_id, role: "parent" },
+      { userId: appt.doctors?.profile_id ?? null, role: "doctor" },
     ]);
 
     const doctorName = appt.doctors?.full_name ?? "Your doctor";
 
     /**
-     * Show a calendar only the link its audience can actually use — a parent
-     * has no access to the doctor dashboard, and vice versa. A personal
-     * calendar has exactly one audience; the clinic event serves whoever is
-     * invited to it, so it lists a link per role present (both only when the
-     * invitees genuinely span both sides, since one event body reaches all
-     * attendees).
+     * Each copy shows only the link its owner can open — a parent has no access
+     * to the doctor dashboard, and vice versa.
      */
-    const describeFor = (roles: Set<ParticipantRole>): string => {
-      const lines = [`Pediatric video consultation (${appt.duration_minutes} min).`];
-      if (roles.has("parent")) {
-        lines.push(`Join from your dashboard:\n${appointmentUrlFor("parent", appt.id)}`);
-      }
-      if (roles.has("doctor")) {
-        lines.push(`Start the consultation from your dashboard:\n${appointmentUrlFor("doctor", appt.id)}`);
-      }
-      lines.push("The video link becomes active when the doctor starts the session.");
-      return lines.join("\n\n");
+    const describeFor = (role: ParticipantRole): string => {
+      const action =
+        role === "doctor"
+          ? `Start the consultation from your dashboard:\n${appointmentUrlFor("doctor", appt.id)}`
+          : role === "admin"
+            ? `Open this booking in the admin dashboard:\n${appointmentUrlFor("admin", appt.id)}`
+            : `Join from your dashboard:\n${appointmentUrlFor("parent", appt.id)}`;
+      return [
+        `Pediatric video consultation (${appt.duration_minutes} min).`,
+        action,
+        "The video link becomes active when the doctor starts the session.",
+      ].join("\n\n");
     };
 
     // PHI-minimal on purpose: no child name, no symptoms — calendars are shared
@@ -893,37 +874,27 @@ export async function syncAppointmentCalendarEvent(appointmentId: string): Promi
 
     const keep = new Set<string>();
 
-    // The clinic calendar carries the invites for everyone who has not
-    // connected. Skipped entirely when nobody needs inviting and no clinic
-    // account exists.
-    const clinic = await fetchClinicAccount();
-    if (clinic && clinic.status === "connected") {
-      keep.add(clinic.id);
-      // With nobody left to invite the clinic event is just the clinic's own
-      // record, so it carries both links.
-      const clinicRoles: Set<ParticipantRole> =
-        invites.length > 0
-          ? new Set(invites.map((i) => i.role))
-          : new Set<ParticipantRole>(["parent", "doctor"]);
-      await upsertEvent(
-        { account: clinic, relatedType: "appointment", relatedId: appt.id, eventId },
-        {
-          ...baseEvent,
-          description: describeFor(clinicRoles),
-          attendees: invites.map(({ email }) => ({ email })),
-        }
-      );
-    }
-
-    // Personal copies carry no attendees: the event is already in the owner's
-    // calendar, and inviting from a personal account would mail people on
-    // their behalf.
-    for (const { account, role } of connected) {
+    // Every copy is private: no attendees, so no address is shared between a
+    // family and anyone else. `attendees: []` is explicit so a copy created
+    // before this rule loses the guests it used to carry.
+    for (const { account, role } of recipients) {
       keep.add(account.id);
-      await upsertEvent(
-        { account, relatedType: "appointment", relatedId: appt.id, eventId },
-        { ...baseEvent, description: describeFor(new Set([role])), attendees: [] }
-      );
+      try {
+        await upsertEvent(
+          { account, relatedType: "appointment", relatedId: appt.id, eventId },
+          { ...baseEvent, description: describeFor(role), attendees: [] }
+        );
+      } catch (err) {
+        // One calendar failing must not cost the others their copy.
+        await logCalendar({
+          action: "update",
+          related_type: "appointment",
+          related_id: appt.id,
+          account_id: account.id,
+          status: "failed",
+          error_message: String(err),
+        });
+      }
     }
 
     // Someone disconnected, or stopped being a participant: clear their copy.
@@ -1003,20 +974,11 @@ export async function syncGroupSessionCalendarEvent(sessionId: string): Promise<
     const confirmed = (session.session_registrations ?? []).filter((r) =>
       ["free", "paid"].includes(r.payment_status)
     );
-    const participants: Participant[] = await Promise.all(
-      confirmed.map(async (r) => ({
-        userId: r.user_id,
-        email: await resolveUserEmail(r.user_id),
-        role: "parent" as const,
-      }))
-    );
-    participants.push({
-      userId: session.doctors?.profile_id ?? null,
-      email: session.doctors?.email ?? null,
-      role: "doctor",
-    });
-
-    const { connected, invites } = await resolveParticipants(participants);
+    const recipients = await resolveRecipients([
+      // The host first, so a doctor who also registered keeps the host link.
+      { userId: session.doctors?.profile_id ?? null, role: "doctor" },
+      ...confirmed.map((r) => ({ userId: r.user_id, role: "parent" as const })),
+    ]);
 
     const baseEvent: CalendarEvent = {
       summary: session.title,
@@ -1033,21 +995,26 @@ export async function syncGroupSessionCalendarEvent(sessionId: string): Promise<
 
     const keep = new Set<string>();
 
-    const clinic = await fetchClinicAccount();
-    if (clinic && clinic.status === "connected") {
-      keep.add(clinic.id);
-      await upsertEvent(
-        { account: clinic, relatedType: "group_session", relatedId: session.id, eventId },
-        { ...baseEvent, attendees: invites.map(({ email }) => ({ email })) }
-      );
-    }
-
-    for (const { account } of connected) {
+    // Private copies only — registrants never see each other's addresses
+    // because nobody is an attendee on anybody's event.
+    for (const { account } of recipients) {
       keep.add(account.id);
-      await upsertEvent(
-        { account, relatedType: "group_session", relatedId: session.id, eventId },
-        { ...baseEvent, attendees: [] }
-      );
+      try {
+        await upsertEvent(
+          { account, relatedType: "group_session", relatedId: session.id, eventId },
+          { ...baseEvent, attendees: [] }
+        );
+      } catch (err) {
+        // One calendar failing must not cost the others their copy.
+        await logCalendar({
+          action: "update",
+          related_type: "group_session",
+          related_id: session.id,
+          account_id: account.id,
+          status: "failed",
+          error_message: String(err),
+        });
+      }
     }
 
     // Unregistered, refunded or disconnected: drop their copy.
@@ -1142,6 +1109,19 @@ export async function resyncUpcomingForUser(userId: string): Promise<void> {
     if (!supabaseAdmin || !isCalendarConfigured()) return;
     const nowIso = new Date().toISOString();
     const today = nowIso.slice(0, 10);
+
+    // Admins mirror every booking, so their backfill is the whole upcoming
+    // schedule rather than the handful of rows they appear on.
+    const { data: profile } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .maybeSingle();
+
+    if (profile?.role === "admin") {
+      await sweepMissedCalendarEvents();
+      return;
+    }
 
     const { data: appointments } = await supabaseAdmin
       .from("appointments")
