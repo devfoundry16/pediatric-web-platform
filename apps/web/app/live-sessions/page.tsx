@@ -13,6 +13,7 @@ import {
   type GroupSession,
   type RegistrationPaymentStatus,
 } from "@/lib/api/live-sessions";
+import { doctorApi } from "@/lib/api/doctor";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
@@ -32,6 +33,7 @@ export default function LiveSessionsPage() {
   const [registrations, setRegistrations] = useState<
     Map<string, RegistrationPaymentStatus>
   >(new Map());
+  const [hostDoctorId, setHostDoctorId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,13 +44,14 @@ export default function LiveSessionsPage() {
         // The list endpoint is unauthenticated and cannot know who is asking,
         // so the viewer's own registrations are fetched alongside and joined
         // here — otherwise every card offers "Register" to someone who already
-        // holds a place.
-        const [up, pa, regs] = await Promise.all([
+        // holds a place. Host status is joined the same way.
+        const [up, pa, regs, hostDoctor] = await Promise.all([
           liveSessionsApi.listSessions("upcoming"),
           liveSessionsApi.listSessions("past"),
           user
             ? liveSessionsApi.getMyRegistrations().catch(() => [])
             : Promise.resolve([]),
+          user ? doctorApi.getMe().catch(() => null) : Promise.resolve(null),
         ]);
         if (cancelled) return;
         setUpcoming(up);
@@ -62,6 +65,7 @@ export default function LiveSessionsPage() {
             )
           )
         );
+        setHostDoctorId(hostDoctor?.id ?? null);
       } catch {
         // Keep whatever is already on screen rather than blanking the page.
       } finally {
@@ -129,6 +133,9 @@ export default function LiveSessionsPage() {
                         ),
                         paymentPending:
                           registrations.get(session.id) === "pending",
+                        isHost:
+                          hostDoctorId !== null &&
+                          session.doctors?.id === hostDoctorId,
                       }}
                     />
                   </Link>

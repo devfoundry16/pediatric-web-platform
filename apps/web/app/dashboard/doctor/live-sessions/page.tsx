@@ -56,6 +56,13 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
+// Ending is how a finished session leaves the upcoming list, so it can't wait
+// for a 'live' status that no longer happens now that joins are window-gated
+// instead of doctor-triggered.
+function sessionHasStarted(session: GroupSession): boolean {
+  return Date.now() >= new Date(session.scheduled_at).getTime();
+}
+
 function statusBadge(
   status: GroupSession["status"],
   t: ReturnType<typeof useI18n>["dictionary"]
@@ -187,14 +194,12 @@ function RescheduleDialog({
 
 function SessionRow({
   session,
-  onGoLive,
   onEnd,
   onPublish,
   onReschedule,
   onCancel,
 }: {
   session: GroupSession;
-  onGoLive: (id: string) => Promise<void>;
   onEnd: (id: string) => Promise<void>;
   onPublish: (id: string) => Promise<void>;
   onReschedule: (id: string, scheduledAt: string) => Promise<void>;
@@ -218,15 +223,6 @@ function SessionRow({
   // zone rather than relying on the runtime default.
   const { timezone: viewerTimezone } = useViewerTimezone();
   const scheduledDate = new Date(session.scheduled_at);
-
-  async function handleGoLive() {
-    setActionLoading(true);
-    try {
-      await onGoLive(session.id);
-    } finally {
-      setActionLoading(false);
-    }
-  }
 
   async function handleEnd() {
     setActionLoading(true);
@@ -343,37 +339,6 @@ function SessionRow({
               </>
             )}
 
-            {session.status === "scheduled" && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button
-                    size="sm"
-                    className="gap-1.5"
-                    disabled={actionLoading}
-                  >
-                    <Radio className="h-3.5 w-3.5" />
-                    {t.liveSessions.goLive}
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>
-                      {t.liveSessions.goLive}
-                    </AlertDialogTitle>
-                    <AlertDialogDescription>
-                      {t.liveSessions.confirmGoLive}
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleGoLive}>
-                      {t.liveSessions.goLive}
-                    </AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-
             {/* Rooms are created on publish — joining a draft would mint a
                 Daily room for a session parents cannot see. */}
             {session.is_published &&
@@ -391,7 +356,9 @@ function SessionRow({
                 </Button>
               )}
 
-            {session.status === "live" && (
+            {(session.status === "live" ||
+              (session.status === "scheduled" &&
+                sessionHasStarted(session))) && (
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -461,19 +428,6 @@ function SessionRow({
                 </AlertDialogContent>
               </AlertDialog>
             )}
-
-            {session.is_published &&
-              (session.status === "scheduled" || session.status === "ended") && (
-                <Button size="sm" variant="ghost" asChild>
-                  <Link
-                    href={`/live-sessions/${session.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" />
-                  </Link>
-                </Button>
-              )}
           </div>
         </div>
       </CardContent>
@@ -500,23 +454,6 @@ export default function DoctorLiveSessionsPage() {
   useEffect(() => {
     void loadSessions();
   }, []);
-
-  async function handleGoLive(id: string) {
-    try {
-      const { session } = await liveSessionsApi.goLive(id);
-      setSessions((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, ...session } : s))
-      );
-      toast.success(`${session.title} is now live!`);
-    } catch (err: unknown) {
-      // The API explains refusals (outside the go-live window, stale schedule)
-      // in the response body — err.message would only say "status code 400".
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error ?? "Failed to go live";
-      toast.error(msg);
-    }
-  }
 
   async function handleEnd(id: string) {
     try {
@@ -631,7 +568,6 @@ export default function DoctorLiveSessionsPage() {
                     <SessionRow
                       key={s.id}
                       session={s}
-                      onGoLive={handleGoLive}
                       onEnd={handleEnd}
                       onPublish={handlePublish}
                       onReschedule={handleReschedule}
@@ -654,7 +590,6 @@ export default function DoctorLiveSessionsPage() {
                     <SessionRow
                       key={s.id}
                       session={s}
-                      onGoLive={handleGoLive}
                       onEnd={handleEnd}
                       onPublish={handlePublish}
                       onReschedule={handleReschedule}

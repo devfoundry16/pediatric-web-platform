@@ -36,6 +36,8 @@ interface SessionCardProps {
     isRegistered?: boolean;
     /** Viewer started checkout but never paid, so they hold nothing yet. */
     paymentPending?: boolean;
+    /** Viewer is the doctor hosting this session. */
+    isHost?: boolean;
   };
 }
 
@@ -107,7 +109,23 @@ export function SessionCard({ session }: SessionCardProps) {
                   {t.liveSessions.full}
                 </span>
               )}
-              {session.isLive && session.isRegistered ? (
+              {session.isHost ? (
+                // The caller wraps this card in a link to the detail page, so
+                // this cannot be an anchor of its own — nested anchors are
+                // invalid and React will complain on hydration. Cancel the
+                // outer link's navigation and route to the room instead.
+                <Button
+                  className="gap-2"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    router.push(`/live-sessions/${session.id}/room`);
+                  }}
+                >
+                  <Radio className="h-4 w-4" />
+                  {t.liveSessions.joinRoom}
+                </Button>
+              ) : session.isLive && session.isRegistered ? (
                 // The caller wraps this card in a link to the detail page, so
                 // this cannot be an anchor of its own — nested anchors are
                 // invalid and React will complain on hydration. Cancel the

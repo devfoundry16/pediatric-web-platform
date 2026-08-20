@@ -185,15 +185,6 @@ export const liveSessionsApi = {
     });
   },
 
-  async goLive(id: string): Promise<{ session: GroupSession }> {
-    const { data } = await axios.patch<{ session: GroupSession }>(
-      `${getBaseUrl()}/live-sessions/${id}/go-live`,
-      {},
-      { headers: await authHeaders() }
-    );
-    return data;
-  },
-
   async endSession(
     id: string,
     recording_url?: string
