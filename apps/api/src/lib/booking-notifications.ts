@@ -7,26 +7,20 @@ import {
 } from "./resend";
 import { activeAdminRecipients } from "./recipients";
 import { DEFAULT_TIMEZONE } from "./timezone";
+import { ensureAppointmentRoom } from "./appointment-room";
 
 function frontendUrl(): string {
   return process.env.FRONTEND_URL ?? "http://localhost:3333";
 }
 
 /**
- * Where each audience opens the appointment.
+ * Where each audience manages the appointment (reschedule, cancel, history).
  *
- * Deliberately the app, not the Daily room. Two reasons:
- *
- * Rooms are private and entry needs a per-user token minted for an
- * authenticated request (see lib/daily.ts), so a room URL in an inbox is either
- * useless or, if rooms were opened up to make it work, a way into a paediatric
- * consultation for anyone holding the mail.
- *
- * And the room deliberately does not exist yet. It is created when the doctor
- * presses "Start session", and that absence is what stops a parent walking into
- * an empty room days early — the parent's Join button keys off meeting_url.
- * Provisioning it at booking time would quietly remove that guarantee. The
- * dashboard is the right destination: it shows Start or Join as appropriate.
+ * Deliberately the app, not the Daily room: rooms are private and entry needs a
+ * per-user token minted for an authenticated request (see lib/daily.ts), so a
+ * room URL in an inbox is either useless or, if rooms were opened up to make it
+ * work, a way into a paediatric consultation for anyone holding the mail. See
+ * meetingUrlFor for the link that actually joins the call.
  */
 export function appointmentUrlFor(
   audience: "parent" | "doctor" | "admin",
@@ -35,6 +29,11 @@ export function appointmentUrlFor(
   // ?appointment= lets the dashboard scroll to and highlight this booking
   // rather than dropping the recipient on an undifferentiated list.
   return `${frontendUrl()}/dashboard/${audience}/appointments?appointment=${appointmentId}`;
+}
+
+/** Where anyone joins the call itself — an app page, never the raw Daily URL. */
+export function meetingUrlFor(appointmentId: string): string {
+  return `${frontendUrl()}/appointments/${appointmentId}/room`;
 }
 
 /**
@@ -49,6 +48,10 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
   if (!supabaseAdmin) return;
 
   try {
+    // Before anything is sent, so the confirmation carries a link that works.
+    // Idempotent, and the join endpoint re-runs it if this ever fails.
+    await ensureAppointmentRoom(appointmentId);
+
     if (await alreadySent(appointmentId, "booking_confirmation")) return;
 
     const { data: appt } = await supabaseAdmin
@@ -102,6 +105,7 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
       timezone: appt.timezone ?? DEFAULT_TIMEZONE,
       consultationType: appt.consultation_type,
       durationMinutes: appt.duration_minutes,
+      meetingUrl: meetingUrlFor(appt.id),
     };
 
     if (authUser?.user?.email) {

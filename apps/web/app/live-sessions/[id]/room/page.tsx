@@ -21,6 +21,7 @@ export default function SessionRoomPage() {
   // DailyIframe is loaded from the @daily-co/daily-js bundle which augments window
   type DailyCall = {
     join(opts: { url: string; token: string }): Promise<unknown>;
+    on(event: string, handler: () => void): void;
     destroy(): void;
   };
   type DailyFactory = {
@@ -49,6 +50,14 @@ export default function SessionRoomPage() {
 
       callRef.current = call;
 
+      // Without this, leaving strands the participant on Daily's own end
+      // screen inside our shell instead of returning them to the session page.
+      call.on("left-meeting", () => {
+        call.destroy();
+        callRef.current = null;
+        router.push(`/live-sessions/${params.id}`);
+      });
+
       // Hide our loading overlay as soon as the iframe is mounted.
       // Daily's prebuilt UI handles its own "connecting…" state from here.
       setLoading(false);
@@ -60,7 +69,7 @@ export default function SessionRoomPage() {
         setError(msg);
       });
     },
-    [params.id]
+    [params.id, router]
   );
 
   useEffect(() => {

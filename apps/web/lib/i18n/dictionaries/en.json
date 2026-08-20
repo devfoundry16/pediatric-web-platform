@@ -407,7 +407,9 @@
     "statusCancelled": "Cancelled",
     "statusRescheduled": "Rescheduled",
     "minSuffix": "min",
-    "dash": "—"
+    "dash": "—",
+    "consultationRoom": "Consultation room",
+    "roomOpensAt": "The room opens at {time}."
   },
   "patient": {
     "personalInfo": "Personal Information",

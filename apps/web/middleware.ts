@@ -190,6 +190,7 @@ export const config = {
     "/booking/:path*",
     "/live-sessions",
     "/live-sessions/:path*",
+    "/appointments/:path*",
     "/packages",
     "/packages/:path*",
   ],

@@ -407,7 +407,9 @@
     "statusCancelled": "ملغى",
     "statusRescheduled": "أعيد جدولته",
     "minSuffix": "د",
-    "dash": "—"
+    "dash": "—",
+    "consultationRoom": "غرفة الاستشارة",
+    "roomOpensAt": "تفتح الغرفة في {time}."
   },
   "patient": {
     "personalInfo": "المعلومات الشخصية",

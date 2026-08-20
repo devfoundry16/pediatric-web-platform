@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
@@ -58,10 +60,6 @@ const STATUS_VARIANTS: Record<
   rescheduled: "secondary",
 };
 
-// Rooms are private; the join URL (with a meeting token) comes from the API.
-const getJoinUrl = (appointmentId: string): Promise<string | null> =>
-  appointmentsApi.join(appointmentId);
-
 export default function ParentAppointmentsPage() {
   // useSearchParams (via useHighlightedAppointment) needs a boundary, or the
   // route drops out of static prerendering — same pattern as the login page.
@@ -73,11 +71,11 @@ export default function ParentAppointmentsPage() {
 }
 
 function ParentAppointmentsContent() {
+  const router = useRouter();
   const { dictionary: t } = useI18n();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [joiningId, setJoiningId] = useState<string | null>(null);
 
   // Reschedule dialog
   const [rescheduleAppt, setRescheduleAppt] = useState<Appointment | null>(null);
@@ -229,19 +227,9 @@ function ParentAppointmentsContent() {
               <Button
                 size="sm"
                 className="gap-1.5"
-                disabled={joiningId === appt.id}
-                onClick={async () => {
-                  setJoiningId(appt.id);
-                  const url = await getJoinUrl(appt.id);
-                  setJoiningId(null);
-                  if (url) window.open(url, "_blank", "noopener,noreferrer");
-                }}
+                onClick={() => router.push(`/appointments/${appt.id}/room`)}
               >
-                {joiningId === appt.id ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Video className="h-3.5 w-3.5" />
-                )}
+                <Video className="h-3.5 w-3.5" />
                 {t.appointments.join}
               </Button>
             )}

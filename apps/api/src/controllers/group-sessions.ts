@@ -58,6 +58,17 @@ async function resolveDoctor(
   return data ?? null;
 }
 
+/** Name shown to everyone else in the call; Daily labels a nameless token "Guest". */
+async function resolveDisplayName(userId: string, fallback: string): Promise<string> {
+  if (!supabaseAdmin) return fallback;
+  const { data } = await supabaseAdmin
+    .from("profiles")
+    .select("full_name")
+    .eq("id", userId)
+    .maybeSingle();
+  return data?.full_name || fallback;
+}
+
 function participantCount(
   registrations: Array<{ payment_status: string }>
 ): number {
@@ -523,7 +534,12 @@ export async function goLive(req: Request, res: Response): Promise<void> {
   let roomName: string;
   let roomUrl: string;
   try {
-    const room = await createRoom(String(id), expiryEpoch);
+    // A live session's room is still created on demand when the doctor goes
+    // live, so it is joinable from that moment until the expiry above.
+    const room = await createRoom(String(id), {
+      notBefore: Math.floor(Date.now() / 1000),
+      expiry: expiryEpoch,
+    });
     roomName = room.name;
     roomUrl = room.url;
   } catch (err) {
@@ -552,12 +568,13 @@ export async function goLive(req: Request, res: Response): Promise<void> {
   const tokenExpiry = expiryEpoch;
   let doctorToken: string | null = null;
   try {
-    doctorToken = await createMeetingToken(
+    doctorToken = await createMeetingToken({
       roomName,
-      req.userId!,
-      true,
-      tokenExpiry
-    );
+      userId: req.userId!,
+      userName: await resolveDisplayName(req.userId!, "Doctor"),
+      isOwner: true,
+      expiryEpoch: tokenExpiry,
+    });
   } catch {
     // Non-fatal — doctor can still join the room URL
   }
@@ -838,12 +855,13 @@ export async function joinSession(
 
   let token: string;
   try {
-    token = await createMeetingToken(
-      session.daily_room_name,
+    token = await createMeetingToken({
+      roomName: session.daily_room_name,
       userId,
-      isDoctorHost,
-      expiryEpoch
-    );
+      userName: await resolveDisplayName(userId, isDoctorHost ? "Doctor" : "Participant"),
+      isOwner: isDoctorHost,
+      expiryEpoch,
+    });
   } catch (err) {
     const message =
       err instanceof Error ? err.message : "Failed to create token";

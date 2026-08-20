@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
 import { DEFAULT_TIMEZONE, wallClockToInstant } from "./timezone";
-import { appointmentUrlFor } from "./booking-notifications";
+import { appointmentUrlFor, meetingUrlFor } from "./booking-notifications";
 
 /**
  * Mirrors confirmed appointments and published live sessions onto Google
@@ -855,8 +855,9 @@ export async function syncAppointmentCalendarEvent(appointmentId: string): Promi
             : `Join from your dashboard:\n${appointmentUrlFor("parent", appt.id)}`;
       return [
         `Pediatric video consultation (${appt.duration_minutes} min).`,
+        `Join the call:\n${meetingUrlFor(appt.id)}`,
         action,
-        "The video link becomes active when the doctor starts the session.",
+        "The room opens 15 minutes before the appointment.",
       ].join("\n\n");
     };
 
