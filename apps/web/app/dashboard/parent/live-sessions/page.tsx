@@ -111,7 +111,7 @@ function RegistrationCard({
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            {isLive && isConfirmed && (
+            {(isLive || session.status === "scheduled") && isConfirmed && (
               <Button
                 size="sm"
                 className="gap-1.5"

@@ -292,16 +292,25 @@ export default function SessionDetailPage() {
                       {t.liveSessions.sessionEnded}
                     </p>
                   )
-                ) : session.status === "live" && isRegistered ? (
-                  <Button
-                    className="w-full gap-2"
-                    onClick={() =>
-                      router.push(`/live-sessions/${params.id}/room`)
-                    }
-                  >
-                    <Radio className="h-4 w-4" />
-                    {t.liveSessions.joinRoom}
-                  </Button>
+                ) : isRegistered &&
+                  (session.status === "live" ||
+                    (session.status === "scheduled" &&
+                      !registrationClosed)) ? (
+                  <>
+                    <Button
+                      className="w-full gap-2"
+                      onClick={() =>
+                        router.push(`/live-sessions/${params.id}/room`)
+                      }
+                    >
+                      <Radio className="h-4 w-4" />
+                      {t.liveSessions.joinRoom}
+                    </Button>
+                    <p className="text-xs text-center text-muted-foreground">
+                      {t.liveSessions.scheduledFor}{" "}
+                      {formatTimeInTimezone(scheduledDate, viewerTimezone)}
+                    </p>
+                  </>
                 ) : isRegistered ? (
                   <div className="flex flex-col items-center gap-2 text-center">
                     <CheckCircle className="h-8 w-8 text-green-500" />

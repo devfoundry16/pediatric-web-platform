@@ -374,47 +374,48 @@ function SessionRow({
               </AlertDialog>
             )}
 
+            {(session.status === "scheduled" || session.status === "live") && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() =>
+                  router.push(`/live-sessions/${session.id}/room`)
+                }
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                {t.liveSessions.joinRoom}
+              </Button>
+            )}
+
             {session.status === "live" && (
-              <>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  onClick={() =>
-                    router.push(`/live-sessions/${session.id}/room`)
-                  }
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  {t.liveSessions.joinRoom}
-                </Button>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={actionLoading}
-                    >
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={actionLoading}
+                  >
+                    {t.liveSessions.endSession}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
                       {t.liveSessions.endSession}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>
-                        {t.liveSessions.endSession}
-                      </AlertDialogTitle>
-                      <AlertDialogDescription>
-                        {t.liveSessions.confirmEnd}
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
-                      <AlertDialogAction onClick={handleEnd}>
-                        {t.liveSessions.endSession}
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </>
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {t.liveSessions.confirmEnd}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleEnd}>
+                      {t.liveSessions.endSession}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
 
             {session.status === "scheduled" && (
