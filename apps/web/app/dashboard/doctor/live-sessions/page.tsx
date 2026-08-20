@@ -506,7 +506,11 @@ export default function DoctorLiveSessionsPage() {
       );
       toast.success(`${session.title} is now live!`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to go live";
+      // The API explains refusals (outside the go-live window, stale schedule)
+      // in the response body — err.message would only say "status code 400".
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data
+          ?.error ?? "Failed to go live";
       toast.error(msg);
     }
   }
