@@ -38,6 +38,7 @@ import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { useHighlightedAppointment } from "@/hooks/use-highlighted-appointment";
 import { cn } from "@/lib/utils";
+import { isUpcomingAppointment } from "@/lib/appointment-window";
 import {
   DEFAULT_TIMEZONE,
   calendarDayInTimezone,
@@ -145,28 +146,19 @@ function ParentAppointmentsContent() {
     }
   };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-
-  const upcoming = appointments.filter(
-    (a) =>
-      !["cancelled", "completed"].includes(a.status) &&
-      new Date(a.scheduled_date) >= today
-  );
-  const past = appointments.filter(
-    (a) =>
-      ["cancelled", "completed"].includes(a.status) ||
-      new Date(a.scheduled_date) < today
-  );
+  // Split on the join window, not the calendar day. Comparing bare dates put a
+  // consultation that was still joinable under "Past & Cancelled", and parsed
+  // scheduled_date as UTC midnight, which mis-sorted today's appointments for
+  // any viewer behind UTC.
+  const upcoming = appointments.filter((a) => isUpcomingAppointment(a));
+  const past = appointments.filter((a) => !isUpcomingAppointment(a));
 
   const renderAppointmentCard = (appt: Appointment) => {
     const typeLabel = getConsultationTypeLabel(t, appt.consultation_type);
     const childName = appt.child_profiles
       ? `${appt.child_profiles.first_name} ${appt.child_profiles.last_name}`
       : t.appointments.dash;
-    const isUpcoming =
-      !["cancelled", "completed"].includes(appt.status) &&
-      new Date(appt.scheduled_date) >= today;
+    const isUpcoming = isUpcomingAppointment(appt);
     const canReschedule = ["pending", "confirmed"].includes(appt.status) && isUpcoming;
     // Stored wall clock belongs to the doctor's zone; show it in the parent's.
     const shownAt = formatStoredAppointment(

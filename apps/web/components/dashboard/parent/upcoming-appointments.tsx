@@ -22,6 +22,7 @@ import { getAppointmentStatusLabel } from "@/lib/i18n/appointment-status";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { DEFAULT_TIMEZONE, formatStoredAppointment } from "@/lib/timezone";
+import { appointmentStartMs, isUpcomingAppointment } from "@/lib/appointment-window";
 
 export function UpcomingAppointments() {
   const { dictionary: t } = useI18n();
@@ -38,23 +39,14 @@ export function UpcomingAppointments() {
 
   // Extracted from the effect so the refresh control can call it too.
   const load = useCallback(() => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     return appointmentsApi
       .list()
       .then((all) => {
+        // Same rule as the full list: still joinable means still upcoming,
+        // and sorting uses the real start instant rather than the bare date.
         const upcoming = all
-          .filter(
-            (a) =>
-              !["cancelled", "completed"].includes(a.status) &&
-              new Date(a.scheduled_date) >= today
-          )
-          .sort(
-            (a, b) =>
-              new Date(a.scheduled_date).getTime() -
-              new Date(b.scheduled_date).getTime()
-          )
+          .filter((a) => isUpcomingAppointment(a))
+          .sort((a, b) => appointmentStartMs(a) - appointmentStartMs(b))
           .slice(0, 3);
         setAppointments(upcoming);
       })
