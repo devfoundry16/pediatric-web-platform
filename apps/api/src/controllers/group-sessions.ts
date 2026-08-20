@@ -655,7 +655,7 @@ export async function registerForSession(
   const { data: session, error: sessionError } = await supabaseAdmin
     .from("group_sessions")
     .select(
-      "id, title, price_aed, is_free, status, is_published, max_participants, scheduled_at, duration_minutes, session_registrations (payment_status)"
+      "id, title, price_aed, is_free, status, is_published, max_participants, scheduled_at, duration_minutes, doctor_id, session_registrations (payment_status)"
     )
     .eq("id", id)
     .eq("is_published", true)
@@ -675,6 +675,22 @@ export async function registerForSession(
     res
       .status(400)
       .json({ error: "Registration for this session has closed" });
+    return;
+  }
+
+  // Hosts join through the host path; a registration row for the host would also consume a seat.
+  // A doctors lookup failure must not fail open into checkout for the host.
+  const { data: hostDoctor, error: hostDoctorError } = await supabaseAdmin
+    .from("doctors")
+    .select("id")
+    .eq("profile_id", userId)
+    .maybeSingle();
+  if (hostDoctorError) {
+    res.status(500).json({ error: hostDoctorError.message });
+    return;
+  }
+  if (hostDoctor && session.doctor_id === hostDoctor.id) {
+    res.status(400).json({ error: "You are the host of this session" });
     return;
   }
 
