@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,31 +18,33 @@ import { PhoneInput, isValidPhoneNumber } from "@/components/ui/phone-input";
 import { Checkbox } from "@/components/ui/checkbox";
 import GoogleIcon from "./google-icon";
 
-const registerSchema = z
-  .object({
-    fullName: z.string().min(2, "Full name must be at least 2 characters"),
-    email: z
-      .string()
-      .min(1, "Email is required")
-      .pipe(z.email("Enter a valid email")),
-    phone: z
-      .string()
-      .min(1, "Phone number is required")
-      .refine((v) => isValidPhoneNumber(v), {
-        message: "Enter a valid phone number",
+function createRegisterSchema(t: Dictionary) {
+  return z
+    .object({
+      fullName: z.string().min(2, t.validation.fullNameMin),
+      email: z
+        .string()
+        .min(1, t.validation.emailRequired)
+        .pipe(z.email(t.validation.emailInvalid)),
+      phone: z
+        .string()
+        .min(1, t.validation.phoneRequired)
+        .refine((v) => isValidPhoneNumber(v), {
+          message: t.validation.phoneInvalid,
+        }),
+      password: z.string().min(6, t.validation.passwordMin6),
+      confirmPassword: z.string(),
+      terms: z.literal(true, {
+        message: t.validation.acceptTermsRequired,
       }),
-    password: z.string().min(6, "Password must be at least 6 characters"),
-    confirmPassword: z.string(),
-    terms: z.literal(true, {
-      message: "You must accept the terms",
-    }),
-  })
-  .refine((data) => data.password === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  });
+    })
+    .refine((data) => data.password === data.confirmPassword, {
+      message: t.validation.passwordsMismatch,
+      path: ["confirmPassword"],
+    });
+}
 
-type RegisterFormValues = z.infer<typeof registerSchema>;
+type RegisterFormValues = z.infer<ReturnType<typeof createRegisterSchema>>;
 
 export function RegisterForm() {
   const { dictionary: t } = useI18n();
@@ -50,6 +53,8 @@ export function RegisterForm() {
 
   const { signUp, signInWithGoogle, isLoading, error, clearError } =
     useAuthStore();
+
+  const registerSchema = useMemo(() => createRegisterSchema(t), [t]);
 
   const {
     register,

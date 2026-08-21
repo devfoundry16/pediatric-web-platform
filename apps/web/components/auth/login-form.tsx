@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -10,21 +10,24 @@ import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 import { ACCOUNT_DEACTIVATED, useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import GoogleIcon from "./google-icon";
 
-const loginSchema = z.object({
-  email: z
-    .string()
-    .min(1, "Email is required")
-    .pipe(z.email("Enter a valid email")),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
+function createLoginSchema(t: Dictionary) {
+  return z.object({
+    email: z
+      .string()
+      .min(1, t.validation.emailRequired)
+      .pipe(z.email(t.validation.emailInvalid)),
+    password: z.string().min(6, t.validation.passwordMin6),
+  });
+}
 
-type LoginFormValues = z.infer<typeof loginSchema>;
+type LoginFormValues = z.infer<ReturnType<typeof createLoginSchema>>;
 
 export function LoginForm() {
   const { dictionary: t } = useI18n();
@@ -43,6 +46,8 @@ export function LoginForm() {
   // an account that has since been deactivated.
   const deactivated =
     searchParams.get("deactivated") === "1" || error === ACCOUNT_DEACTIVATED;
+
+  const loginSchema = useMemo(() => createLoginSchema(t), [t]);
 
   const {
     register,

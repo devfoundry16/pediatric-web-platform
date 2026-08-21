@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,21 +8,29 @@ import { z } from "zod";
 import { Heart, Mail } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const schema = z.object({
-  email: z.string().min(1, "Email is required").pipe(z.email("Enter a valid email")),
-});
+function createSchema(t: Dictionary) {
+  return z.object({
+    email: z
+      .string()
+      .min(1, t.validation.emailRequired)
+      .pipe(z.email(t.validation.emailInvalid)),
+  });
+}
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = z.infer<ReturnType<typeof createSchema>>;
 
 export default function ForgotPasswordPage() {
   const { dictionary: t } = useI18n();
   const [sent, setSent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  const schema = useMemo(() => createSchema(t), [t]);
 
   const {
     register,

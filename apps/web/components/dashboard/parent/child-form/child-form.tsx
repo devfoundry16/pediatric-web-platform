@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
@@ -16,8 +16,8 @@ import { setZodErrors } from "@/lib/forms/set-zod-errors";
 import { childrenApi } from "@/lib/api/children";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import {
-  childProfileFormSchema,
-  childFormStepSchemas,
+  createChildProfileFormSchema,
+  createChildFormStepSchemas,
   formValuesToCreateInput,
   getDefaultChildFormValues,
   type ChildProfileFormValues,
@@ -43,8 +43,11 @@ export function ChildForm({
   const { dictionary: t } = useI18n();
   const [step, setStep] = useState(0);
 
+  const schema = useMemo(() => createChildProfileFormSchema(t), [t]);
+  const stepSchemas = useMemo(() => createChildFormStepSchemas(t), [t]);
+
   const form = useForm<ChildProfileFormValues>({
-    resolver: zodResolver(childProfileFormSchema),
+    resolver: zodResolver(schema),
     defaultValues: defaultValuesProp ?? getDefaultChildFormValues(),
     mode: "onTouched",
   });
@@ -63,8 +66,8 @@ export function ChildForm({
   ];
 
   const handleNext = () => {
-    const schema = childFormStepSchemas[step];
-    const parsed = schema.safeParse(form.getValues());
+    const stepSchema = stepSchemas[step];
+    const parsed = stepSchema.safeParse(form.getValues());
     if (!parsed.success) {
       setZodErrors(form.setError, parsed.error);
       return;
