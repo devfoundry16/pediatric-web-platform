@@ -19,6 +19,7 @@ import {
   createConsultationType,
   updateConsultationType,
   listPayments,
+  listUserPackages,
   listPatients,
   getPatient,
   listNotes,
@@ -70,6 +71,9 @@ router.patch("/consultation-types/:id", updateConsultationType);
 
 // Payments
 router.get("/payments", listPayments);
+
+// Purchased consultation packages
+router.get("/packages", listUserPackages);
 
 // Patients
 router.get("/patients", listPatients);

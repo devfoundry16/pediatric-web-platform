@@ -46,6 +46,7 @@ const STATUS_VARIANTS: Record<
   expired: "secondary",
   exhausted: "outline",
   cancelled: "destructive",
+  refunded: "destructive",
 };
 
 function statusLabel(t: Dictionary, status: UserPackage["status"]): string {
@@ -54,6 +55,7 @@ function statusLabel(t: Dictionary, status: UserPackage["status"]): string {
     expired: t.packages.statusExpired,
     exhausted: t.packages.statusExhausted,
     cancelled: t.packages.statusCancelled,
+    refunded: t.packages.statusRefunded,
   };
   return map[status] ?? status;
 }
