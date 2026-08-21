@@ -170,6 +170,12 @@ export async function stripeWebhook(
         return;
       }
 
+      // Deliberately NOT guarded on the pending state, unlike the appointment
+      // branch below. Nothing here announces anything — the only follow-up is a
+      // calendar sync, which reconciles and is safe to repeat — so a redelivery
+      // costs nothing. Add a registration-confirmation email to this path and
+      // that stops being true: it would need the same guard, or it reintroduces
+      // the duplicate-email bug in a handler that looks as though it was fixed.
       const { error: updateError } = await supabaseAdmin
         .from("session_registrations")
         .update({
@@ -205,9 +211,11 @@ export async function stripeWebhook(
         return;
       }
 
-      // Idempotent via the unique index on stripe_checkout_session_id
-      // (migration 013): a redelivered webhook simply re-writes the same values.
-      const { error: apptError } = await supabaseAdmin
+      // Guarded on the pending state, which makes the transition itself elect
+      // the notifier. Stripe delivers at-least-once and the /verify fallback
+      // runs the same update from the success page, so without this guard both
+      // paths "succeed" and both announce the same booking.
+      const { data: confirmed, error: apptError } = await supabaseAdmin
         .from("appointments")
         .update({
           payment_status: "paid",
@@ -216,7 +224,9 @@ export async function stripeWebhook(
           stripe_payment_intent: session.payment_intent,
           payment_reference: session.payment_intent,
         })
-        .eq("id", appointmentId);
+        .eq("id", appointmentId)
+        .eq("payment_status", "pending")
+        .select("id");
 
       if (apptError) {
         console.error(
@@ -227,12 +237,52 @@ export async function stripeWebhook(
         return;
       }
 
-      // The booking is confirmed only now for a paid consult, so this is where
-      // parent/doctor/admins are told. Deduped against the verify fallback, and
-      // never throws, so a redelivered webhook still returns 200.
-      void notifyBookingConfirmed(appointmentId);
-      void syncAppointmentCalendarEvent(appointmentId);
+      // A matched row means this call performed the transition, so this call
+      // announces it. Awaited rather than detached because a Vercel function is
+      // frozen once the response goes out (see lib/background-jobs.ts), and it
+      // never throws, so this still returns 200.
+      //
+      // No match is usually a redelivery or a verify that got there first. But
+      // there is no SELECT above, so this branch also absorbs a booking that was
+      // abandoned, cancelled or paid through a second session — all of which
+      // mean money was captured against something nobody will be told about, and
+      // all of which look identical from here. Read back enough to tell them
+      // apart, the way the rest of this handler reports trouble.
+      if (confirmed?.length) {
+        await notifyBookingConfirmed(appointmentId);
+      } else {
+        const { data: current } = await supabaseAdmin
+          .from("appointments")
+          .select("payment_status, status, stripe_checkout_session_id")
+          .eq("id", appointmentId)
+          .maybeSingle();
 
+        if (!current) {
+          console.error(
+            `[webhook] Payment ${session.payment_intent} settled for appointment ` +
+              `${appointmentId}, which no longer exists. Nothing was booked and ` +
+              `nobody was notified.`,
+          );
+        } else if (current.payment_status !== "paid") {
+          console.error(
+            `[webhook] Payment ${session.payment_intent} settled but appointment ` +
+              `${appointmentId} is ${current.payment_status}/${current.status}. ` +
+              `Not confirmed, nobody notified.`,
+          );
+        } else if (current.stripe_checkout_session_id !== session.id) {
+          console.error(
+            `[webhook] Appointment ${appointmentId} was already paid via checkout ` +
+              `session ${current.stripe_checkout_session_id}; session ${session.id} ` +
+              `is a second payment for the same booking.`,
+          );
+        }
+      }
+
+      // Reconciles rather than announces, so it runs either way — repeating it
+      // is harmless in a way that a second email is not.
+      await syncAppointmentCalendarEvent(appointmentId);
+
+      // Still 200 in every case: a retry cannot improve any of the above.
       res.json({ received: true });
       return;
     }

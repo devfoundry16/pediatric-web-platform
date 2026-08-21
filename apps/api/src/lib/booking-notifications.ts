@@ -45,11 +45,16 @@ export async function notifyBookingConfirmed(appointmentId: string): Promise<voi
   if (!supabaseAdmin) return;
 
   try {
+    // Checked first so a redundant call costs one query rather than two Daily
+    // round-trips. This read-then-write is advisory — nothing in email_logs
+    // enforces it — so it is a backstop, not the guard: what actually keeps the
+    // booking email to one copy is that only the caller that performs the
+    // pending → paid transition gets here at all.
+    if (await alreadySent(appointmentId, "booking_confirmation")) return;
+
     // Before anything is sent, so the confirmation carries a link that works.
     // Idempotent, and the join endpoint re-runs it if this ever fails.
     await ensureAppointmentRoom(appointmentId);
-
-    if (await alreadySent(appointmentId, "booking_confirmation")) return;
 
     const { data: appt } = await supabaseAdmin
       .from("appointments")
