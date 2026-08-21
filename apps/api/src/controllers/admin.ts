@@ -926,9 +926,69 @@ export async function updateConsultationType(req: Request, res: Response): Promi
   res.json({ consultationType: data });
 }
 
-// ─── Payments ─────────────────────────────────────────────────────────────────
+// ─── Packages ─────────────────────────────────────────────────────────────────
 
-export async function listPayments(req: Request, res: Response): Promise<void> {
+const USER_PACKAGE_STATUSES = ["active", "expired", "exhausted", "cancelled", "refunded"];
+
+/** The catalogue columns needed to name a purchase and price it. */
+const USER_PACKAGE_SELECT = `
+  id, user_id, credits_total, credits_remaining, expires_at, status, purchased_at,
+  stripe_checkout_session_id,
+  consultation_packages (id, slug, name, sessions, price_aed)
+`;
+
+interface UserPackageRow {
+  id: string;
+  user_id: string;
+  credits_total: number;
+  credits_remaining: number;
+  expires_at: string;
+  status: string;
+  purchased_at: string;
+  stripe_checkout_session_id: string | null;
+  consultation_packages: {
+    id: string;
+    slug: string;
+    name: string;
+    sessions: number;
+    price_aed: number;
+  } | null;
+}
+
+/**
+ * What the buyer actually paid.
+ *
+ * user_packages stores no price, so it has to be derived from the catalogue.
+ * Checkout grants N × the package's sessions (see the webhook in
+ * controllers/packages.ts), so the quantity bought is credits_total / sessions.
+ *
+ * This reads the CURRENT catalogue price: editing a package's price shifts the
+ * amounts shown for past purchases. Snapshotting the price at purchase time is
+ * the real fix, but that needs a schema change.
+ */
+function packageAmountAed(row: UserPackageRow): number {
+  const pkg = row.consultation_packages;
+  if (!pkg || !pkg.sessions) return 0;
+  return Number(pkg.price_aed) * (row.credits_total / pkg.sessions);
+}
+
+/**
+ * Flip packages whose validity has lapsed over to `expired`.
+ *
+ * Expiry is lazy — nothing sweeps these in the background — so the parent-facing
+ * getMyPackages does the same write before reading. Without it the admin list
+ * shows packages as `active` weeks after they stopped being usable.
+ */
+async function expireLapsedPackages(): Promise<void> {
+  if (!supabaseAdmin) return;
+  await supabaseAdmin
+    .from("user_packages")
+    .update({ status: "expired" })
+    .eq("status", "active")
+    .lt("expires_at", new Date().toISOString());
+}
+
+export async function listUserPackages(req: Request, res: Response): Promise<void> {
   if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
 
   const { page = "1", limit = "50", status } = req.query as Record<string, string>;
@@ -936,23 +996,160 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
   const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
+  await expireLapsedPackages();
+
   let query = supabaseAdmin
-    .from("appointments")
-    .select(`
-      id, price_aed, payment_status, payment_reference, created_at, scheduled_date,
-      parent_id,
-      doctors!appointments_doctor_id_fkey(full_name),
-      child_profiles!appointments_child_id_fkey(first_name, last_name)
-    `, { count: "exact" })
-    .gt("price_aed", 0)
-    .order("created_at", { ascending: false })
+    .from("user_packages")
+    .select(USER_PACKAGE_SELECT, { count: "exact" })
+    .order("purchased_at", { ascending: false })
     .range(offset, offset + limitNum - 1);
 
-  if (status) query = query.eq("payment_status", status);
+  if (status && USER_PACKAGE_STATUSES.includes(status)) query = query.eq("status", status);
 
   const { data, error, count } = await query;
   if (error) { res.status(500).json({ error: error.message }); return; }
-  res.json({ payments: data, total: count ?? 0, page: pageNum, limit: limitNum });
+
+  const rows = (data ?? []) as unknown as UserPackageRow[];
+  const names = await fetchParentNames([...new Set(rows.map((r) => r.user_id))]);
+  const packages = rows.map((row) => ({
+    ...row,
+    amount_aed: packageAmountAed(row),
+    buyer_name: names.get(row.user_id) ?? null,
+  }));
+
+  res.json({ packages, total: count ?? 0, page: pageNum, limit: limitNum });
+}
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+
+/** A consultation booking or a package sale, flattened into one transaction. */
+interface PaymentTransaction {
+  id: string;
+  kind: "consultation" | "package";
+  created_at: string;
+  amount_aed: number;
+  payment_status: string;
+  payment_reference: string | null;
+  doctors: { full_name: string } | null;
+  child_profiles: { first_name: string; last_name: string } | null;
+  package_name: string | null;
+  buyer_name: string | null;
+}
+
+/**
+ * Money taken, across both things the clinic sells.
+ *
+ * Consultations live in `appointments`, package sales in `user_packages`; there
+ * is no table holding both. Rather than add a union view (this codebase has no
+ * views), the two streams are merged here.
+ *
+ * Pagination is exact without fetching everything: to build page N of two
+ * date-descending streams, no row past the (offset + limit)th of either stream
+ * can appear on that page, so that prefix is all we need to read.
+ */
+export async function listPayments(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) { res.status(500).json({ error: "Server misconfigured" }); return; }
+
+  // Captured so the per-stream closures below keep the non-null narrowing.
+  const db = supabaseAdmin;
+
+  const { page = "1", limit = "50", status, type } = req.query as Record<string, string>;
+  const pageNum = Math.max(1, parseInt(page, 10));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
+  const offset = (pageNum - 1) * limitNum;
+  const prefix = offset + limitNum;
+
+  const wantConsultations = type !== "package";
+  const wantPackages = type !== "consultation";
+
+  // A package sale is only ever money in or money back — it has no equivalent of
+  // an appointment's `pending`/`package_credit`, so those filters exclude it.
+  const packageStatusMatches = !status || status === "paid" || status === "refunded";
+
+  const appointmentsQuery = async () => {
+    if (!wantConsultations) return { rows: [] as PaymentTransaction[], count: 0 };
+    let query = db
+      .from("appointments")
+      .select(`
+        id, price_aed, payment_status, payment_reference, created_at, scheduled_date,
+        parent_id,
+        doctors!appointments_doctor_id_fkey(full_name),
+        child_profiles!appointments_child_id_fkey(first_name, last_name)
+      `, { count: "exact" })
+      .gt("price_aed", 0)
+      .order("created_at", { ascending: false })
+      .limit(prefix);
+
+    if (status) query = query.eq("payment_status", status);
+
+    const { data, error, count } = await query;
+    if (error) throw new Error(error.message);
+
+    const rows = (data ?? []).map((a): PaymentTransaction => ({
+      id: a.id as string,
+      kind: "consultation",
+      created_at: a.created_at as string,
+      amount_aed: Number(a.price_aed),
+      payment_status: a.payment_status as string,
+      payment_reference: (a.payment_reference as string | null) ?? null,
+      doctors: (a.doctors as unknown as { full_name: string } | null) ?? null,
+      child_profiles:
+        (a.child_profiles as unknown as { first_name: string; last_name: string } | null) ?? null,
+      package_name: null,
+      buyer_name: null,
+    }));
+    return { rows, count: count ?? 0 };
+  };
+
+  const packagesQuery = async () => {
+    if (!wantPackages || !packageStatusMatches) return { rows: [] as PaymentTransaction[], count: 0 };
+    let query = db
+      .from("user_packages")
+      .select(USER_PACKAGE_SELECT, { count: "exact" })
+      .order("purchased_at", { ascending: false })
+      .limit(prefix);
+
+    // Refunds are the one package status that maps onto a payment status; every
+    // other state (active, expired, exhausted, cancelled) was still paid for.
+    if (status === "refunded") query = query.eq("status", "refunded");
+    else if (status === "paid") query = query.neq("status", "refunded");
+
+    const { data, error, count } = await query;
+    if (error) throw new Error(error.message);
+
+    const packageRows = (data ?? []) as unknown as UserPackageRow[];
+    const names = await fetchParentNames([...new Set(packageRows.map((r) => r.user_id))]);
+    const rows = packageRows.map((row): PaymentTransaction => ({
+      id: row.id,
+      kind: "package",
+      created_at: row.purchased_at,
+      amount_aed: packageAmountAed(row),
+      payment_status: row.status === "refunded" ? "refunded" : "paid",
+      payment_reference: row.stripe_checkout_session_id,
+      doctors: null,
+      child_profiles: null,
+      package_name: row.consultation_packages?.name ?? null,
+      buyer_name: names.get(row.user_id) ?? null,
+    }));
+    return { rows, count: count ?? 0 };
+  };
+
+  try {
+    const [appointments, packages] = await Promise.all([appointmentsQuery(), packagesQuery()]);
+
+    const payments = [...appointments.rows, ...packages.rows]
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))
+      .slice(offset, offset + limitNum);
+
+    res.json({
+      payments,
+      total: appointments.count + packages.count,
+      page: pageNum,
+      limit: limitNum,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to list payments" });
+  }
 }
 
 // ─── Patients ─────────────────────────────────────────────────────────────────
