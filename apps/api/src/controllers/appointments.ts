@@ -432,12 +432,16 @@ export async function verifyAppointmentPayment(req: Request, res: Response): Pro
     return;
   }
 
-  // Already settled (e.g. the webhook won the race) — nothing to update, but
-  // still hand off to the notifier. If the webhook's send failed (Resend down,
-  // migration not yet applied), this is the only other chance to deliver it;
-  // it dedupes on email_logs, so a successful send is not repeated.
+  // Already settled, which means the webhook (or an earlier verify) performed
+  // the pending → paid transition — and whichever path does that is the one
+  // that notifies. Announcing it again here is what sent the parent, the doctor
+  // and every admin a second copy of the booking email.
+  //
+  // The calendar sync stays, and stays detached: it reconciles rather than
+  // announces, so repeating it is harmless where a second email is not, and
+  // sweepMissedCalendarEvents re-runs it every five minutes anyway. Blocking
+  // the parent's success page on a Google round-trip buys nothing here.
   if (appt.payment_status === "paid") {
-    void notifyBookingConfirmed(id as string);
     void syncAppointmentCalendarEvent(id as string);
     res.json({ paymentStatus: "paid", status: appt.status });
     return;
@@ -463,7 +467,11 @@ export async function verifyAppointmentPayment(req: Request, res: Response): Pro
     return;
   }
 
-  const { error: updateError } = await supabaseAdmin
+  // Guarded on the pending state so the transition itself elects the notifier:
+  // the webhook runs the same update, and Postgres lets exactly one of them
+  // match. The read above can be stale by the time this lands — that race is
+  // precisely how both paths used to think they had confirmed the booking.
+  const { data: confirmed, error: updateError } = await supabaseAdmin
     .from("appointments")
     .update({
       payment_status: "paid",
@@ -473,18 +481,52 @@ export async function verifyAppointmentPayment(req: Request, res: Response): Pro
       payment_reference: session.payment_intent,
     })
     .eq("id", id)
-    .eq("parent_id", req.userId);
+    .eq("parent_id", req.userId)
+    .eq("payment_status", "pending")
+    .select("id");
 
   if (updateError) {
     res.status(500).json({ error: updateError.message });
     return;
   }
 
-  // Fallback for a delayed or unreachable webhook: whichever path confirms the
-  // booking first sends the notifications. Deduped against the webhook via
-  // email_logs.
-  void notifyBookingConfirmed(id as string);
-  void syncAppointmentCalendarEvent(id as string);
+  // Nothing matched. Usually that means the webhook performed the transition
+  // first and is doing the announcing — but "no longer pending" also covers a
+  // booking that was cancelled or refunded while its checkout session stayed
+  // live, so read back what the row actually says instead of asserting it. The
+  // success page believes this answer, and hard-coding paid/confirmed here was
+  // only ever true because the update above used to be unguarded.
+  if (!confirmed?.length) {
+    const { data: settled } = await supabaseAdmin
+      .from("appointments")
+      .select("payment_status, status")
+      .eq("id", id)
+      .eq("parent_id", req.userId)
+      .single();
+
+    if (settled?.payment_status !== "paid") {
+      console.error(
+        `[verify] Stripe reports session ${session.id} paid, but appointment ${id} is ` +
+          `${settled?.payment_status ?? "missing"}/${settled?.status ?? "-"}. Payment was ` +
+          `captured against a booking that is not awaiting payment; nobody was notified.`
+      );
+    }
+
+    await syncAppointmentCalendarEvent(id as string);
+    res.json({
+      paymentStatus: settled?.payment_status ?? appt.payment_status,
+      status: settled?.status ?? appt.status,
+    });
+    return;
+  }
+
+  // This call performed the transition, so this call announces it. Both are
+  // awaited rather than fired and forgotten: the deployed API is a Vercel
+  // function that is frozen once the response goes out (see
+  // lib/background-jobs.ts), so detached work here can be cut off mid-send.
+  // Neither call throws.
+  await notifyBookingConfirmed(id as string);
+  await syncAppointmentCalendarEvent(id as string);
 
   res.json({ paymentStatus: "paid", status: "confirmed" });
 }
