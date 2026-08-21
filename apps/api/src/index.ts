@@ -14,6 +14,7 @@ import groupSessionsRouter from "./routes/group-sessions";
 import featureFlagsRouter from "./routes/feature-flags";
 import adminRouter from "./routes/admin";
 import googleCalendarRouter from "./routes/google-calendar";
+import cronRouter from "./routes/cron";
 import { stripeWebhook } from "./controllers/packages";
 import { startReminderScheduler } from "./lib/reminder-scheduler";
 import { startCalendarSweep } from "./lib/calendar-sweep";
@@ -71,6 +72,10 @@ app.use("/api/live-sessions", groupSessionsRouter);
 app.use("/api/feature-flags", featureFlagsRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/google-calendar", googleCalendarRouter);
+
+// Scheduled sweeps, for a deployment that cannot hold a timer of its own.
+// Guarded by CRON_SECRET rather than a user session — see middleware/cron.ts.
+app.use("/api/cron", cronRouter);
 
 // 404 for unknown API routes
 app.use("/api", (_req, res) => {
