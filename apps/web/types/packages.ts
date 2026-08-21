@@ -12,7 +12,14 @@ export interface ConsultationPackage {
   created_at: string;
 }
 
-export type UserPackageStatus = "active" | "expired" | "exhausted" | "cancelled";
+// `refunded` is written by the Stripe refund/dispute webhook, which zeroes the
+// remaining credits.
+export type UserPackageStatus =
+  | "active"
+  | "expired"
+  | "exhausted"
+  | "cancelled"
+  | "refunded";
 
 export interface UserPackage {
   id: string;

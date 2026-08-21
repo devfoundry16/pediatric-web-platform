@@ -669,6 +669,7 @@
     "statusExpired": "منتهية",
     "statusExhausted": "مستهلكة",
     "statusCancelled": "ملغاة",
+    "statusRefunded": "مُسترد",
     "sessionsRemainingOf": "متبقٍ {remaining} من {total} جلسات",
     "expiresInOneDay": "تنتهي خلال يوم واحد — استخدمها قريباً!",
     "expiresInDays": "تنتهي خلال {days} أيام — استخدمها قريباً!",
@@ -880,6 +881,7 @@
       "availability": "أوقات التوفر",
       "consultationTypes": "أنواع الاستشارات",
       "payments": "المدفوعات",
+      "packages": "الباقات",
       "patients": "المرضى",
       "notes": "الملاحظات الطبية",
       "notifications": "الإشعارات",
@@ -1027,7 +1029,23 @@
       "packageCredits": "أرصدة الباقات",
       "listTitle": "المعاملات ({count})",
       "empty": "لا توجد مدفوعات.",
-      "colReference": "المرجع"
+      "colReference": "المرجع",
+      "typeConsultation": "استشارة"
+    },
+    "packages": {
+      "title": "الباقات",
+      "subtitle": "باقات الاستشارات التي اشتراها المستخدمون",
+      "totalPurchases": "إجمالي المشتريات",
+      "activePackages": "الباقات النشطة",
+      "creditsRemaining": "الأرصدة المتبقية",
+      "listTitle": "المشتريات ({count})",
+      "empty": "لا توجد باقات مشتراة بعد.",
+      "colPurchased": "تاريخ الشراء",
+      "colBuyer": "المشتري",
+      "colPackage": "الباقة",
+      "colCredits": "الأرصدة",
+      "colExpires": "تنتهي في",
+      "creditsOf": "{remaining} من {total}"
     },
     "patients": {
       "title": "المرضى",

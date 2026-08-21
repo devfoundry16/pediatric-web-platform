@@ -669,6 +669,7 @@
     "statusExpired": "Expired",
     "statusExhausted": "Used up",
     "statusCancelled": "Cancelled",
+    "statusRefunded": "Refunded",
     "sessionsRemainingOf": "{remaining} of {total} sessions remaining",
     "expiresInOneDay": "Expires in 1 day — use soon!",
     "expiresInDays": "Expires in {days} days — use soon!",
@@ -880,6 +881,7 @@
       "availability": "Availability",
       "consultationTypes": "Consultation Types",
       "payments": "Payments",
+      "packages": "Packages",
       "patients": "Patients",
       "notes": "Medical Notes",
       "notifications": "Notifications",
@@ -1027,7 +1029,23 @@
       "packageCredits": "Package credits",
       "listTitle": "Transactions ({count})",
       "empty": "No payments found.",
-      "colReference": "Reference"
+      "colReference": "Reference",
+      "typeConsultation": "Consultation"
+    },
+    "packages": {
+      "title": "Packages",
+      "subtitle": "Consultation packages purchased by users",
+      "totalPurchases": "Total purchases",
+      "activePackages": "Active packages",
+      "creditsRemaining": "Credits remaining",
+      "listTitle": "Purchases ({count})",
+      "empty": "No packages purchased yet.",
+      "colPurchased": "Purchased",
+      "colBuyer": "Buyer",
+      "colPackage": "Package",
+      "colCredits": "Credits",
+      "colExpires": "Expires",
+      "creditsOf": "{remaining} of {total}"
     },
     "patients": {
       "title": "Patients",
