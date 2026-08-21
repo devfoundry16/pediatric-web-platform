@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { supabaseAdmin } from "./supabase";
 import { DEFAULT_TIMEZONE, wallClockToInstant } from "./timezone";
 import { appointmentUrlFor, meetingUrlFor } from "./booking-notifications";
+import { frontendUrl } from "./app-url";
 
 /**
  * Mirrors confirmed appointments and published live sessions onto Google
@@ -41,10 +42,6 @@ const EVENTS_URL = "https://www.googleapis.com/calendar/v3/calendars/primary/eve
 const OAUTH_SCOPE = "openid email https://www.googleapis.com/auth/calendar.events";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
-
-function frontendUrl(): string {
-  return process.env.FRONTEND_URL ?? "http://localhost:3333";
-}
 
 interface OAuthConfig {
   clientId: string;

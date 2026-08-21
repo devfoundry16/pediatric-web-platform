@@ -8,10 +8,7 @@ import {
 import { activeAdminRecipients } from "./recipients";
 import { DEFAULT_TIMEZONE } from "./timezone";
 import { ensureAppointmentRoom } from "./appointment-room";
-
-function frontendUrl(): string {
-  return process.env.FRONTEND_URL ?? "http://localhost:3333";
-}
+import { frontendUrl } from "./app-url";
 
 /**
  * Where each audience manages the appointment (reschedule, cancel, history).

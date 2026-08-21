@@ -2,10 +2,7 @@ import { supabaseAdmin } from "./supabase";
 import { alreadySent, recordEmailFailure, sendPackagePurchase } from "./resend";
 import { activeAdminRecipients } from "./recipients";
 import { DEFAULT_TIMEZONE } from "./timezone";
-
-function frontendUrl(): string {
-  return process.env.FRONTEND_URL ?? "http://localhost:3333";
-}
+import { frontendUrl } from "./app-url";
 
 /** Expiry shown as a plain clinic-local date rather than a raw timestamp. */
 function formatExpiry(iso: string): string {

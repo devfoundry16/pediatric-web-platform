@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
 import { createMeetingToken } from "../lib/daily";
 import { syncGroupSessionCalendarEvent } from "../lib/google-calendar";
+import { frontendUrl } from "../lib/app-url";
 import {
   deleteGroupSessionRoom,
   ensureGroupSessionRoom,
@@ -747,7 +748,7 @@ export async function registerForSession(
     return;
   }
 
-  const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3333";
+  const baseUrl = frontendUrl();
 
   const { error: pendingError } = await supabaseAdmin
     .from("session_registrations")
@@ -781,8 +782,8 @@ export async function registerForSession(
       sessionId: String(id),
       userId,
     },
-    success_url: `${frontendUrl}/live-sessions/${id}?registered=1&stripe_session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${frontendUrl}/live-sessions/${id}?cancelled=1`,
+    success_url: `${baseUrl}/live-sessions/${id}?registered=1&stripe_session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${baseUrl}/live-sessions/${id}?cancelled=1`,
   });
 
   res.json({ checkoutUrl: checkoutSession.url });
