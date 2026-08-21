@@ -21,6 +21,8 @@ import { formatDateInTimezone } from "@/lib/timezone";
 
 const PAYMENT_STATUSES = ["", "paid", "package_credit", "refunded", "pending"] as const;
 
+const PAYMENT_TYPES = ["", "consultation", "package"] as const;
+
 const STATUS_COLORS: Record<string, string> = {
   paid: "bg-green-100 text-green-700",
   package_credit: "bg-purple-100 text-purple-700",
@@ -36,20 +38,26 @@ export default function AdminPaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState("");
+  const [filterType, setFilterType] = useState("");
   const LIMIT = 50;
 
   const load = useCallback((silent = false) => {
     // Skip the skeleton swap on a manual refresh — see RefreshButton.
     if (!silent) setLoading(true);
-    adminApi.listPayments({ status: filterStatus || undefined, page, limit: LIMIT })
+    adminApi.listPayments({
+      status: filterStatus || undefined,
+      type: filterType || undefined,
+      page,
+      limit: LIMIT,
+    })
       .then(({ payments: p, total: t }) => { setPayments(p); setTotal(t); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [filterStatus, page]);
+  }, [filterStatus, filterType, page]);
 
   useEffect(() => { load(); }, [load]);
 
-  const totalRevenue = payments.filter((p) => p.payment_status === "paid").reduce((s, p) => s + Number(p.price_aed), 0);
+  const totalRevenue = payments.filter((p) => p.payment_status === "paid").reduce((s, p) => s + Number(p.amount_aed), 0);
   const totalPages = Math.ceil(total / LIMIT);
 
   return (
@@ -98,6 +106,23 @@ export default function AdminPaymentsPage() {
             ))}
           </SelectContent>
         </Select>
+
+        <Select value={filterType || "all"} onValueChange={(v) => { setFilterType(v === "all" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder={t.admin.common.allTypes} />
+          </SelectTrigger>
+          <SelectContent>
+            {PAYMENT_TYPES.map((ty) => (
+              <SelectItem key={ty || "all"} value={ty || "all"}>
+                {ty === "consultation"
+                  ? t.admin.payments.typeConsultation
+                  : ty === "package"
+                    ? t.admin.common.package
+                    : t.admin.common.allTypes}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       <Card>
@@ -117,6 +142,7 @@ export default function AdminPaymentsPage() {
                 <thead>
                   <tr className="border-b border-border">
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.date}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.type}</th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.patient}</th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.doctor}</th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.amount}</th>
@@ -130,12 +156,26 @@ export default function AdminPaymentsPage() {
                       <td className="px-4 py-3 text-muted-foreground">
                         {formatDateInTimezone(p.created_at, timezone, dateLocale)}
                       </td>
-                      <td className="px-4 py-3 text-foreground">
-                        {p.child_profiles ? `${p.child_profiles.first_name} ${p.child_profiles.last_name}` : "—"}
+                      <td className="px-4 py-3">
+                        <Badge variant="outline" className="text-xs">
+                          {p.kind === "package" ? t.admin.common.package : t.admin.payments.typeConsultation}
+                        </Badge>
                       </td>
-                      <td className="px-4 py-3 text-foreground">{p.doctors?.full_name ?? "—"}</td>
+                      {/* Both columns carry the package equivalent on a package
+                          row: the buyer stands in for the patient, and the
+                          package bought for the doctor seen. */}
+                      <td className="px-4 py-3 text-foreground">
+                        {p.kind === "package"
+                          ? p.buyer_name ?? "—"
+                          : p.child_profiles
+                            ? `${p.child_profiles.first_name} ${p.child_profiles.last_name}`
+                            : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-foreground">
+                        {p.kind === "package" ? p.package_name ?? "—" : p.doctors?.full_name ?? "—"}
+                      </td>
                       <td className="px-4 py-3 font-medium text-foreground">
-                        {p.price_aed > 0 ? t.admin.common.amountAed.replace("{amount}", String(p.price_aed)) : <Badge variant="outline" className="text-xs">{t.admin.common.package}</Badge>}
+                        {t.admin.common.amountAed.replace("{amount}", p.amount_aed.toFixed(0))}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[p.payment_status] ?? "bg-gray-100 text-gray-600"}`}>

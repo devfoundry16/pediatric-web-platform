@@ -1,6 +1,7 @@
 import axios from "axios";
 import { createClient } from "@/lib/supabase/client";
 import { getApiBaseUrl } from "./config";
+import type { UserPackageStatus } from "@/types/packages";
 
 function getBaseUrl(): string {
   return getApiBaseUrl();
@@ -131,16 +132,55 @@ export interface ConsultationType {
   updated_at: string;
 }
 
-export interface Payment {
+/**
+ * A raw appointment row from the overview stats endpoint.
+ *
+ * Distinct from `Payment`: /admin/stats reports recent consultation bookings
+ * only, while /admin/payments merges bookings with package sales.
+ */
+export interface RecentPayment {
   id: string;
   price_aed: number;
   payment_status: string;
   payment_reference: string | null;
-  created_at: string;
   scheduled_date: string;
-  parent_id: string;
+  scheduled_time: string;
+  created_at: string;
+}
+
+/** A consultation booking or a package sale, flattened into one transaction. */
+export interface Payment {
+  id: string;
+  kind: "consultation" | "package";
+  created_at: string;
+  amount_aed: number;
+  payment_status: string;
+  payment_reference: string | null;
   doctors: { full_name: string } | null;
   child_profiles: { first_name: string; last_name: string } | null;
+  package_name: string | null;
+  buyer_name: string | null;
+}
+
+/** A package a user bought, as listed on the admin packages page. */
+export interface AdminUserPackage {
+  id: string;
+  user_id: string;
+  credits_total: number;
+  credits_remaining: number;
+  expires_at: string;
+  status: UserPackageStatus;
+  purchased_at: string;
+  stripe_checkout_session_id: string | null;
+  amount_aed: number;
+  buyer_name: string | null;
+  consultation_packages: {
+    id: string;
+    slug: string;
+    name: string;
+    sessions: number;
+    price_aed: number;
+  } | null;
 }
 
 export interface ChildProfile {
@@ -205,7 +245,7 @@ export interface CalendarEventLog {
 export interface AdminStats {
   totalBookings: number | null;
   todayAppointments: number | null;
-  recentPayments: Payment[];
+  recentPayments: RecentPayment[];
   newUsers: number | null;
   recentAppointments: AdminAppointment[];
 }
@@ -285,9 +325,13 @@ export const adminApi = {
   updateConsultationType: (id: string, data: Partial<ConsultationType>) =>
     patch<{ consultationType: ConsultationType }>(`/consultation-types/${id}`, data),
 
-  // Payments
-  listPayments: (params?: { status?: string; page?: number; limit?: number }) =>
+  // Payments — `type` narrows to one revenue stream; omitted means both.
+  listPayments: (params?: { status?: string; type?: string; page?: number; limit?: number }) =>
     get<{ payments: Payment[]; total: number; page: number; limit: number }>("/payments", params as Record<string, string | number | undefined>),
+
+  // Purchased packages
+  listUserPackages: (params?: { status?: string; page?: number; limit?: number }) =>
+    get<{ packages: AdminUserPackage[]; total: number; page: number; limit: number }>("/packages", params as Record<string, string | number | undefined>),
 
   // Patients
   listPatients: (params?: { search?: string; page?: number; limit?: number }) =>
