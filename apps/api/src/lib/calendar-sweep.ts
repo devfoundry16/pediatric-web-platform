@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { isCalendarConfigured, sweepMissedCalendarEvents } from "./google-calendar";
+import { schedulersEnabled } from "./background-jobs";
 
 /**
  * How often to retry calendar events that should exist but don't (see
@@ -13,13 +14,21 @@ let running = false;
 
 /**
  * Start the calendar retry sweep. Same in-process model as the reminder
- * scheduler, with the same caveats: nothing runs while the API is down, and
- * multiple API instances each get a timer — harmless here, because the sync is
- * a reconciler (deterministic event ids make concurrent runs converge).
+ * scheduler, and gated the same way: only a host that stays running can hold a
+ * timer, and only one that opts in should act on the production database. In
+ * production GET /api/cron/calendar-sweep drives this instead.
+ *
+ * The same caveats apply: nothing runs while the host is down, and multiple
+ * instances each get a timer — harmless here, because the sync is a reconciler
+ * (deterministic event ids make concurrent runs converge).
  */
 export function startCalendarSweep(): void {
   if (timer) return;
 
+  if (!schedulersEnabled()) {
+    console.warn("[calendar] Sweep not started: ENABLE_SCHEDULERS is not true");
+    return;
+  }
   if (!supabaseAdmin) {
     console.warn("[calendar] Sweep not started: Supabase is not configured");
     return;

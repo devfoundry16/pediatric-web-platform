@@ -12,10 +12,7 @@ import {
   signState,
   verifyState,
 } from "../lib/google-calendar";
-
-function frontendUrl(): string {
-  return process.env.FRONTEND_URL ?? "http://localhost:3333";
-}
+import { frontendUrl } from "../lib/app-url";
 
 /** Where the browser lands after consent — admins manage this on Integrations. */
 async function returnPathFor(userId: string): Promise<string> {

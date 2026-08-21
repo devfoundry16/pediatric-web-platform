@@ -9,6 +9,7 @@ import type {
 } from "../lib/stripe";
 import { notifyBookingConfirmed } from "../lib/booking-notifications";
 import { notifyPackagePurchased } from "../lib/package-notifications";
+import { frontendUrl } from "../lib/app-url";
 import {
   syncAppointmentCalendarEvent,
   syncGroupSessionCalendarEvent,
@@ -79,17 +80,17 @@ export async function createCheckoutSession(
     return;
   }
 
-  const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3333";
+  const baseUrl = frontendUrl();
 
   // A booking-initiated purchase returns into the booking flow to pick a time;
   // the standalone packages page uses its own success/cancel pages.
   const isBooking = source === "booking";
   const successUrl = isBooking
-    ? `${frontendUrl}/booking?resume=1&plan=${encodeURIComponent(pkg.slug)}${childId ? `&childId=${encodeURIComponent(String(childId))}` : ""}`
-    : `${frontendUrl}/dashboard/parent/packages/success?session_id={CHECKOUT_SESSION_ID}`;
+    ? `${baseUrl}/booking?resume=1&plan=${encodeURIComponent(pkg.slug)}${childId ? `&childId=${encodeURIComponent(String(childId))}` : ""}`
+    : `${baseUrl}/dashboard/parent/packages/success?session_id={CHECKOUT_SESSION_ID}`;
   const cancelUrl = isBooking
-    ? `${frontendUrl}/booking?cancelled=package`
-    : `${frontendUrl}/dashboard/parent/packages?cancelled=1`;
+    ? `${baseUrl}/booking?cancelled=package`
+    : `${baseUrl}/dashboard/parent/packages?cancelled=1`;
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",

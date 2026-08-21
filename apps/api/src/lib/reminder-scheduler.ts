@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "./supabase";
 import { sendDueReminders } from "./reminder-notifications";
+import { schedulersEnabled } from "./background-jobs";
 
 /**
  * How often the pending window is re-checked. Anything up to the lead time
@@ -11,21 +12,27 @@ let timer: NodeJS.Timeout | null = null;
 let running = false;
 
 /**
- * Start the reminder timer.
+ * Start the reminder timer, on a host that has opted into background work.
  *
- * This is the only scheduled work in the API; everything else sends mail inline
- * from the request that caused it. It lives in-process because the API is a
- * long-running server, which keeps the schedule next to the templates and needs
- * no infrastructure to hold it.
+ * The timer only makes sense where the process stays running. The deployed API
+ * is a Vercel serverless function, frozen between requests, so it never ran
+ * there — GET /api/cron/reminders is what drives the sweep in production. What
+ * did run it was every local `pnpm dev`, against the production database and
+ * the live Resend key, which is how real parents received reminders pointing at
+ * http://localhost:3333. Hence ENABLE_SCHEDULERS: opt in, never on by default.
  *
- * Two consequences worth knowing: reminders do not go out while the API is
- * down, and if the API is ever run as more than one instance each copy will
- * have its own timer — the per-recipient dedupe in email_logs narrows that race
- * but does not close it.
+ * Two consequences worth knowing: reminders do not go out while the host is
+ * down, and if it is ever run as more than one instance each copy will have its
+ * own timer — the per-recipient dedupe in email_logs narrows that race but does
+ * not close it.
  */
 export function startReminderScheduler(): void {
   if (timer) return;
 
+  if (!schedulersEnabled()) {
+    console.warn("[reminders] Not started: ENABLE_SCHEDULERS is not true");
+    return;
+  }
   if (!supabaseAdmin) {
     console.warn("[reminders] Not started: Supabase is not configured");
     return;

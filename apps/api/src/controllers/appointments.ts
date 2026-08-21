@@ -8,6 +8,7 @@ import {
 } from "../lib/resend";
 import { notifyBookingConfirmed } from "../lib/booking-notifications";
 import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
+import { frontendUrl } from "../lib/app-url";
 import {
   appointmentJoinWindow,
   appointmentRoomName,
@@ -376,7 +377,7 @@ export async function createAppointmentCheckout(req: Request, res: Response): Pr
     return;
   }
 
-  const frontendUrl = process.env.FRONTEND_URL ?? "http://localhost:3333";
+  const baseUrl = frontendUrl();
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
@@ -399,8 +400,8 @@ export async function createAppointmentCheckout(req: Request, res: Response): Pr
       appointmentId: appt.id,
       userId: req.userId!,
     },
-    success_url: `${frontendUrl}/booking/success?appointment=${appt.id}&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${frontendUrl}/booking?cancelled=${appt.id}`,
+    success_url: `${baseUrl}/booking/success?appointment=${appt.id}&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${baseUrl}/booking?cancelled=${appt.id}`,
   });
 
   res.json({ url: session.url });
@@ -840,7 +841,7 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
       parentEmail: parent.email,
       parentName: parent.name,
       parentUserId: req.userId,
-      appointmentUrl: `${process.env.FRONTEND_URL ?? "http://localhost:3333"}/dashboard/parent/appointments?appointment=${id}`,
+      appointmentUrl: `${frontendUrl()}/dashboard/parent/appointments?appointment=${id}`,
       doctorName: docRow?.full_name ?? "Your doctor",
       scheduledDate: newDate as string,
       scheduledTime: newTime as string,
