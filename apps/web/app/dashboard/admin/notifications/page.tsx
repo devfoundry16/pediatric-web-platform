@@ -15,23 +15,29 @@ import {
 } from "@/components/ui/select";
 import { CheckCircle, XCircle, Mail } from "lucide-react";
 import { adminApi, type EmailLog } from "@/lib/api/admin";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
 
 // Every type the API can write to email_logs — keep in step with the EmailType
 // union in apps/api/src/lib/resend.ts. A type missing here is not filterable,
-// though its rows still show under "All types".
-const EMAIL_TYPES = [
-  { value: "", label: "All types" },
-  { value: "booking_confirmation", label: "Booking confirmation" },
-  { value: "booking_notification", label: "Booking notification" },
-  { value: "package_purchase", label: "Package purchase" },
-  { value: "appointment_reminder", label: "Appointment reminder" },
-  { value: "session_reminder", label: "Session reminder" },
-  { value: "cancellation", label: "Cancellation" },
-  { value: "reschedule", label: "Reschedule" },
-  { value: "other", label: "Other" },
-];
+// though its rows still show under "All types". Labels resolve through
+// emailTypeLabel below.
+const EMAIL_TYPE_VALUES = [
+  "",
+  "booking_confirmation",
+  "booking_notification",
+  "package_purchase",
+  "appointment_reminder",
+  "session_reminder",
+  "cancellation",
+  "reschedule",
+  "other",
+] as const;
 
 export default function AdminNotificationsPage() {
+  const { dictionary: t, dateLocale } = useI18n();
+  const { timezone } = useViewerTimezone();
   const [logs, setLogs] = useState<EmailLog[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -60,12 +66,37 @@ export default function AdminNotificationsPage() {
   const sentCount = logs.filter((l) => l.status === "sent").length;
   const failedCount = logs.filter((l) => l.status === "failed").length;
 
+  const emailTypeLabel = (value: string): string => {
+    switch (value) {
+      case "":
+        return t.admin.common.allTypes;
+      case "booking_confirmation":
+        return t.admin.notifications.typeBookingConfirmation;
+      case "booking_notification":
+        return t.admin.notifications.typeBookingNotification;
+      case "package_purchase":
+        return t.admin.notifications.typePackagePurchase;
+      case "appointment_reminder":
+        return t.admin.notifications.typeAppointmentReminder;
+      case "session_reminder":
+        return t.admin.notifications.typeSessionReminder;
+      case "cancellation":
+        return t.admin.notifications.typeCancellation;
+      case "reschedule":
+        return t.admin.notifications.typeReschedule;
+      case "other":
+        return t.admin.notifications.typeOther;
+      default:
+        return value.replace(/_/g, " ");
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
-          <p className="text-sm text-muted-foreground">Monitor outbound email status and delivery</p>
+          <h1 className="text-2xl font-bold text-foreground">{t.admin.notifications.title}</h1>
+          <p className="text-sm text-muted-foreground">{t.admin.notifications.subtitle}</p>
         </div>
         <RefreshButton onRefresh={() => load(true)} />
       </div>
@@ -76,7 +107,7 @@ export default function AdminNotificationsPage() {
           <CardContent className="flex items-center gap-3 p-5">
             <Mail className="h-8 w-8 text-primary" />
             <div>
-              <p className="text-sm text-muted-foreground">Total emails (shown)</p>
+              <p className="text-sm text-muted-foreground">{t.admin.notifications.totalEmails}</p>
               <p className="text-2xl font-bold text-foreground">{total}</p>
             </div>
           </CardContent>
@@ -85,7 +116,7 @@ export default function AdminNotificationsPage() {
           <CardContent className="flex items-center gap-3 p-5">
             <CheckCircle className="h-8 w-8 text-green-600" />
             <div>
-              <p className="text-sm text-muted-foreground">Delivered</p>
+              <p className="text-sm text-muted-foreground">{t.admin.notifications.delivered}</p>
               <p className="text-2xl font-bold text-foreground">{sentCount}</p>
             </div>
           </CardContent>
@@ -94,7 +125,7 @@ export default function AdminNotificationsPage() {
           <CardContent className="flex items-center gap-3 p-5">
             <XCircle className="h-8 w-8 text-destructive" />
             <div>
-              <p className="text-sm text-muted-foreground">Failed</p>
+              <p className="text-sm text-muted-foreground">{t.admin.common.failed}</p>
               <p className="text-2xl font-bold text-foreground">{failedCount}</p>
             </div>
           </CardContent>
@@ -105,21 +136,21 @@ export default function AdminNotificationsPage() {
       <div className="flex flex-wrap gap-3">
         <Select value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder={t.admin.common.allStatuses} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="sent">Sent</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
+            <SelectItem value="all">{t.admin.common.allStatuses}</SelectItem>
+            <SelectItem value="sent">{t.admin.common.sent}</SelectItem>
+            <SelectItem value="failed">{t.admin.common.failed}</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filterType || "all"} onValueChange={(v) => { setFilterType(v === "all" ? "" : v); setPage(1); }}>
           <SelectTrigger className="w-52">
-            <SelectValue placeholder="All types" />
+            <SelectValue placeholder={t.admin.common.allTypes} />
           </SelectTrigger>
           <SelectContent>
-            {EMAIL_TYPES.map((t) => (
-              <SelectItem key={t.value || "all"} value={t.value || "all"}>{t.label}</SelectItem>
+            {EMAIL_TYPE_VALUES.map((value) => (
+              <SelectItem key={value || "all"} value={value || "all"}>{emailTypeLabel(value)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -127,7 +158,7 @@ export default function AdminNotificationsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Email Logs ({total})</CardTitle>
+          <CardTitle className="text-base">{t.admin.notifications.listTitle.replace("{count}", String(total))}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -135,17 +166,17 @@ export default function AdminNotificationsPage() {
               {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : logs.length === 0 ? (
-            <p className="px-6 py-8 text-center text-sm text-muted-foreground">No email logs yet.</p>
+            <p className="px-6 py-8 text-center text-sm text-muted-foreground">{t.admin.notifications.empty}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Recipient</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Type</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Sent at</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Resend ID</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.notifications.colRecipient}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.type}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.notifications.colSentAt}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.notifications.colResendId}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -154,21 +185,21 @@ export default function AdminNotificationsPage() {
                       <td className="px-4 py-3 text-foreground">{l.recipient_email}</td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="text-xs capitalize">
-                          {l.email_type.replace(/_/g, " ")}
+                          {emailTypeLabel(l.email_type)}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${l.status === "sent" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
                           {l.status === "sent" ? <CheckCircle className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                          {l.status}
+                          {l.status === "sent" ? t.admin.common.sent : t.admin.common.failed}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {new Date(l.created_at).toLocaleString()}
+                        {formatDateInTimezone(l.created_at, timezone, dateLocale)} {formatTimeInTimezone(l.created_at, timezone, dateLocale)}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                         {l.resend_id ? l.resend_id.slice(0, 12) + "…" : l.error_message ? (
-                          <span className="text-destructive" title={l.error_message ?? ""}>Error</span>
+                          <span className="text-destructive" title={l.error_message ?? ""}>{t.admin.notifications.error}</span>
                         ) : "—"}
                       </td>
                     </tr>
@@ -182,10 +213,10 @@ export default function AdminNotificationsPage() {
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>Page {page} of {totalPages}</span>
+          <span>{t.admin.common.pageOf.replace("{page}", String(page)).replace("{total}", String(totalPages))}</span>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>{t.common.previous}</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>{t.common.next}</Button>
           </div>
         </div>
       )}

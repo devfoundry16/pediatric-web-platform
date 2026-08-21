@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/stores/auth-store";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 import { cn } from "@/lib/utils";
 import {
   Heart,
@@ -24,28 +26,29 @@ import type { LucideIcon } from "lucide-react";
 
 interface NavItem {
   href: string;
-  label: string;
+  labelKey: keyof Dictionary["admin"]["nav"];
   icon: LucideIcon;
 }
 
 const adminNav: NavItem[] = [
-  { href: "/dashboard/admin", label: "Overview", icon: LayoutDashboard },
-  { href: "/dashboard/admin/users", label: "Users", icon: Users },
-  { href: "/dashboard/admin/appointments", label: "Appointments", icon: CalendarDays },
-  { href: "/dashboard/admin/doctors", label: "Doctors", icon: UserRoundCog },
-  { href: "/dashboard/admin/availability", label: "Availability", icon: Clock },
-  { href: "/dashboard/admin/consultation-types", label: "Consultation Types", icon: Stethoscope },
-  { href: "/dashboard/admin/payments", label: "Payments", icon: CreditCard },
-  { href: "/dashboard/admin/patients", label: "Patients", icon: Baby },
-  { href: "/dashboard/admin/notes", label: "Medical Notes", icon: ClipboardList },
-  { href: "/dashboard/admin/notifications", label: "Notifications", icon: Bell },
-  { href: "/dashboard/admin/integrations", label: "Integrations", icon: Plug },
-  { href: "/dashboard/admin/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard/admin", labelKey: "overview", icon: LayoutDashboard },
+  { href: "/dashboard/admin/users", labelKey: "users", icon: Users },
+  { href: "/dashboard/admin/appointments", labelKey: "appointments", icon: CalendarDays },
+  { href: "/dashboard/admin/doctors", labelKey: "doctors", icon: UserRoundCog },
+  { href: "/dashboard/admin/availability", labelKey: "availability", icon: Clock },
+  { href: "/dashboard/admin/consultation-types", labelKey: "consultationTypes", icon: Stethoscope },
+  { href: "/dashboard/admin/payments", labelKey: "payments", icon: CreditCard },
+  { href: "/dashboard/admin/patients", labelKey: "patients", icon: Baby },
+  { href: "/dashboard/admin/notes", labelKey: "notes", icon: ClipboardList },
+  { href: "/dashboard/admin/notifications", labelKey: "notifications", icon: Bell },
+  { href: "/dashboard/admin/integrations", labelKey: "integrations", icon: Plug },
+  { href: "/dashboard/admin/settings", labelKey: "settings", icon: Settings },
 ];
 
 export function AdminSidebar() {
   const pathname = usePathname();
   const router = useRouter();
+  const { dictionary: t } = useI18n();
   const signOut = useAuthStore((s) => s.signOut);
   const isSigningOut = useAuthStore((s) => s.isLoading);
 
@@ -65,8 +68,8 @@ export function AdminSidebar() {
             <Heart className="h-4 w-4 text-primary-foreground" />
           </div>
           <div className="flex flex-col">
-            <span className="text-base font-bold leading-tight text-foreground">LittleCare</span>
-            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Admin</span>
+            <span className="text-base font-bold leading-tight text-foreground">{t.common.appName}</span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{t.admin.nav.adminBadge}</span>
           </div>
         </Link>
       </div>
@@ -90,7 +93,7 @@ export function AdminSidebar() {
                   )}
                 >
                   <item.icon className="h-4 w-4 shrink-0" />
-                  {item.label}
+                  {t.admin.nav[item.labelKey]}
                 </Link>
               </li>
             );
@@ -106,7 +109,7 @@ export function AdminSidebar() {
           className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
         >
           <LogOut className="h-4 w-4 shrink-0" />
-          {isSigningOut ? "Signing out…" : "Sign out"}
+          {isSigningOut ? t.admin.nav.signingOut : t.admin.nav.signOut}
         </button>
       </div>
     </aside>

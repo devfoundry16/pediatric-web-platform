@@ -8,25 +8,27 @@ import { GraduationCap, AlertCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { featureFlagsApi, type FeatureFlagKey } from "@/lib/api/feature-flags";
 import { useFeatureFlags } from "@/lib/feature-flags/feature-flags-context";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 
 interface Section {
   key: FeatureFlagKey;
-  label: string;
-  description: string;
+  labelKey: keyof Dictionary["common"];
+  descriptionKey: keyof Dictionary["admin"]["settings"];
   icon: LucideIcon;
 }
 
 const SECTIONS: Section[] = [
   {
     key: "courses",
-    label: "Courses",
-    description:
-      "The course catalog for parents and the course builder for doctors. While this is off, both roles see a “coming soon” panel instead, and Courses disappears from their navigation.",
+    labelKey: "courses",
+    descriptionKey: "coursesDescription",
     icon: GraduationCap,
   },
 ];
 
 export default function AdminSettingsPage() {
+  const { dictionary: t } = useI18n();
   const { flags, isEnabled, refresh } = useFeatureFlags();
   const [savingKey, setSavingKey] = useState<FeatureFlagKey | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +41,7 @@ export default function AdminSettingsPage() {
       // Pull the saved value back so the switch reflects the server, not the click.
       await refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to save the change.");
+      setError(err instanceof Error ? err.message : t.admin.settings.saveError);
     } finally {
       setSavingKey(null);
     }
@@ -48,9 +50,9 @@ export default function AdminSettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Settings</h1>
+        <h1 className="text-2xl font-bold text-foreground">{t.admin.settings.title}</h1>
         <p className="text-sm text-muted-foreground">
-          Mark a section as coming soon to hide it from parents and doctors
+          {t.admin.settings.subtitle}
         </p>
       </div>
 
@@ -63,11 +65,12 @@ export default function AdminSettingsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Sections</CardTitle>
+          <CardTitle className="text-base">{t.admin.settings.sectionsTitle}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-1 p-0">
           {SECTIONS.map((section) => {
             const enabled = isEnabled(section.key);
+            const label = t.common[section.labelKey];
             return (
               <div
                 key={section.key}
@@ -79,11 +82,11 @@ export default function AdminSettingsPage() {
                   </div>
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
-                      <span className="font-medium text-foreground">{section.label}</span>
-                      {!enabled && <Badge variant="secondary">Coming soon</Badge>}
+                      <span className="font-medium text-foreground">{label}</span>
+                      {!enabled && <Badge variant="secondary">{t.common.comingSoon}</Badge>}
                     </div>
                     <p className="text-sm leading-relaxed text-muted-foreground">
-                      {section.description}
+                      {t.admin.settings[section.descriptionKey]}
                     </p>
                   </div>
                 </div>
@@ -92,7 +95,7 @@ export default function AdminSettingsPage() {
                   checked={enabled}
                   disabled={savingKey === section.key}
                   onCheckedChange={(checked) => handleToggle(section.key, checked)}
-                  aria-label={`${section.label} live`}
+                  aria-label={t.admin.settings.sectionLiveAria.replace("{section}", label)}
                 />
               </div>
             );
@@ -102,8 +105,8 @@ export default function AdminSettingsPage() {
 
       <p className="text-xs text-muted-foreground">
         {Object.keys(flags).length === 0
-          ? "Could not read the current settings — the API may be unreachable. Sections are hidden until it responds."
-          : "Changes take effect the next time a page loads."}
+          ? t.admin.settings.flagsUnreachable
+          : t.admin.settings.effectNote}
       </p>
     </div>
   );

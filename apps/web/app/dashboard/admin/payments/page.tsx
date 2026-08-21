@@ -14,6 +14,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { adminApi, type Payment } from "@/lib/api/admin";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { getPaymentStatusLabel } from "@/lib/i18n/payment-status";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatDateInTimezone } from "@/lib/timezone";
 
 const PAYMENT_STATUSES = ["", "paid", "package_credit", "refunded", "pending"] as const;
 
@@ -25,6 +29,8 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export default function AdminPaymentsPage() {
+  const { dictionary: t, dateLocale } = useI18n();
+  const { timezone } = useViewerTimezone();
   const [payments, setPayments] = useState<Payment[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -50,8 +56,8 @@ export default function AdminPaymentsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Payments</h1>
-          <p className="text-sm text-muted-foreground">Monitor all payment transactions</p>
+          <h1 className="text-2xl font-bold text-foreground">{t.admin.payments.title}</h1>
+          <p className="text-sm text-muted-foreground">{t.admin.payments.subtitle}</p>
         </div>
         <RefreshButton onRefresh={() => load(true)} />
       </div>
@@ -60,19 +66,19 @@ export default function AdminPaymentsPage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Card>
           <CardContent className="p-5">
-            <p className="text-sm text-muted-foreground">Showing revenue</p>
-            <p className="mt-1 text-2xl font-bold text-foreground">AED {totalRevenue.toFixed(0)}</p>
+            <p className="text-sm text-muted-foreground">{t.admin.payments.showingRevenue}</p>
+            <p className="mt-1 text-2xl font-bold text-foreground">{t.admin.common.amountAed.replace("{amount}", totalRevenue.toFixed(0))}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
-            <p className="text-sm text-muted-foreground">Total transactions</p>
+            <p className="text-sm text-muted-foreground">{t.admin.payments.totalTransactions}</p>
             <p className="mt-1 text-2xl font-bold text-foreground">{total}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
-            <p className="text-sm text-muted-foreground">Package credits</p>
+            <p className="text-sm text-muted-foreground">{t.admin.payments.packageCredits}</p>
             <p className="mt-1 text-2xl font-bold text-foreground">
               {payments.filter((p) => p.payment_status === "package_credit").length}
             </p>
@@ -84,11 +90,11 @@ export default function AdminPaymentsPage() {
       <div className="flex gap-3">
         <Select value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder={t.admin.common.allStatuses} />
           </SelectTrigger>
           <SelectContent>
             {PAYMENT_STATUSES.map((s) => (
-              <SelectItem key={s || "all"} value={s || "all"}>{s || "All statuses"}</SelectItem>
+              <SelectItem key={s || "all"} value={s || "all"}>{s ? getPaymentStatusLabel(t, s) : t.admin.common.allStatuses}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -96,7 +102,7 @@ export default function AdminPaymentsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Transactions ({total})</CardTitle>
+          <CardTitle className="text-base">{t.admin.payments.listTitle.replace("{count}", String(total))}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -104,36 +110,36 @@ export default function AdminPaymentsPage() {
               {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : payments.length === 0 ? (
-            <p className="px-6 py-8 text-center text-sm text-muted-foreground">No payments found.</p>
+            <p className="px-6 py-8 text-center text-sm text-muted-foreground">{t.admin.payments.empty}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Patient</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Doctor</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Amount</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Reference</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.date}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.patient}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.doctor}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.amount}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.payments.colReference}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {payments.map((p) => (
                     <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30">
                       <td className="px-4 py-3 text-muted-foreground">
-                        {new Date(p.created_at).toLocaleDateString()}
+                        {formatDateInTimezone(p.created_at, timezone, dateLocale)}
                       </td>
                       <td className="px-4 py-3 text-foreground">
                         {p.child_profiles ? `${p.child_profiles.first_name} ${p.child_profiles.last_name}` : "—"}
                       </td>
                       <td className="px-4 py-3 text-foreground">{p.doctors?.full_name ?? "—"}</td>
                       <td className="px-4 py-3 font-medium text-foreground">
-                        {p.price_aed > 0 ? `AED ${p.price_aed}` : <Badge variant="outline" className="text-xs">Package</Badge>}
+                        {p.price_aed > 0 ? t.admin.common.amountAed.replace("{amount}", String(p.price_aed)) : <Badge variant="outline" className="text-xs">{t.admin.common.package}</Badge>}
                       </td>
                       <td className="px-4 py-3">
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[p.payment_status] ?? "bg-gray-100 text-gray-600"}`}>
-                          {p.payment_status}
+                          {getPaymentStatusLabel(t, p.payment_status)}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground truncate max-w-32">
@@ -150,10 +156,10 @@ export default function AdminPaymentsPage() {
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>Page {page} of {totalPages}</span>
+          <span>{t.admin.common.pageOf.replace("{page}", String(page)).replace("{total}", String(totalPages))}</span>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>{t.common.previous}</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>{t.common.next}</Button>
           </div>
         </div>
       )}

@@ -38,6 +38,9 @@ import {
   Loader2,
 } from "lucide-react";
 import { adminApi, type AdminUser } from "@/lib/api/admin";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatDateInTimezone } from "@/lib/timezone";
 
 const ROLE_TABS = ["all", "parent", "doctor", "admin"] as const;
 type RoleTab = (typeof ROLE_TABS)[number];
@@ -53,6 +56,8 @@ function extractError(e: unknown, fallback: string): string {
 }
 
 export default function AdminUsersPage() {
+  const { dictionary: t, dateLocale } = useI18n();
+  const { timezone } = useViewerTimezone();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -96,12 +101,24 @@ export default function AdminUsersPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  const roleLabel = (role: string) =>
+    role === "parent" ? t.admin.common.roleParent
+      : role === "doctor" ? t.admin.common.roleDoctor
+      : role === "admin" ? t.admin.common.roleAdmin
+      : role;
+
+  // These sentences embed styled words ({admin}/{doctor} role names, the user
+  // being deleted); splitting on the placeholders keeps the <span> styling
+  // while leaving the translation free to reorder around them.
+  const roleHintParts = t.admin.users.roleHint.split(/\{admin\}|\{doctor\}/);
+  const deleteBodyParts = t.admin.users.deleteBody.split("{name}");
+
   const handleToggleActive = async (user: AdminUser) => {
     try {
       await adminApi.updateUser(user.id, { is_active: !user.is_active });
       load();
     } catch (e) {
-      toast.error(extractError(e, "Failed to update user."));
+      toast.error(extractError(e, t.admin.users.updateError));
     }
   };
 
@@ -121,7 +138,7 @@ export default function AdminUsersPage() {
         phone: editPhone,
         role: editRole,
       });
-      toast.success("User updated.");
+      toast.success(t.admin.users.updateSuccess);
       // A role change can create or retire their doctor record; say so rather
       // than leaving the admin to discover it under Doctors.
       if (notice) {
@@ -130,7 +147,7 @@ export default function AdminUsersPage() {
       setEditing(null);
       load();
     } catch (e) {
-      toast.error(extractError(e, "Failed to update user."));
+      toast.error(extractError(e, t.admin.users.updateError));
     } finally {
       setIsSaving(false);
     }
@@ -155,14 +172,14 @@ export default function AdminUsersPage() {
         phone: createPhone.trim() || undefined,
         role: createRole,
       });
-      toast.success("User created.");
+      toast.success(t.admin.users.createSuccess);
       if (notice) {
         toast[notice.ok ? "info" : "warning"](notice.text, { duration: 10000 });
       }
       setCreating(false);
       load();
     } catch (e) {
-      toast.error(extractError(e, "Failed to create user."));
+      toast.error(extractError(e, t.admin.users.createError));
     } finally {
       setIsCreating(false);
     }
@@ -173,11 +190,11 @@ export default function AdminUsersPage() {
     setIsDeleting(true);
     try {
       await adminApi.deleteUser(deleting.id);
-      toast.success("User deleted.");
+      toast.success(t.admin.users.deleteSuccess);
       setDeleting(null);
       load();
     } catch (e) {
-      toast.error(extractError(e, "Failed to delete user."));
+      toast.error(extractError(e, t.admin.users.deleteError));
     } finally {
       setIsDeleting(false);
     }
@@ -190,12 +207,12 @@ export default function AdminUsersPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-          <p className="text-sm text-muted-foreground">View and manage parents, doctors, and admins</p>
+          <h1 className="text-2xl font-bold text-foreground">{t.admin.users.title}</h1>
+          <p className="text-sm text-muted-foreground">{t.admin.users.subtitle}</p>
         </div>
         <Button onClick={openCreate} className="gap-2">
           <UserPlus className="h-4 w-4" />
-          Create User
+          {t.admin.users.createUser}
         </Button>
       </div>
 
@@ -208,14 +225,14 @@ export default function AdminUsersPage() {
               onClick={() => { setActiveTab(tab); setPage(1); }}
               className={`rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors ${activeTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
-              {tab}
+              {tab === "all" ? t.admin.common.all : roleLabel(tab)}
             </button>
           ))}
         </div>
         <div className="relative max-w-xs flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search by name…"
+            placeholder={t.admin.common.searchByName}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
             className="pl-9"
@@ -225,7 +242,7 @@ export default function AdminUsersPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Users ({total})</CardTitle>
+          <CardTitle className="text-base">{t.admin.users.listTitle.replace("{count}", String(total))}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -233,17 +250,17 @@ export default function AdminUsersPage() {
               {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
             </div>
           ) : users.length === 0 ? (
-            <p className="px-6 py-8 text-center text-sm text-muted-foreground">No users found.</p>
+            <p className="px-6 py-8 text-center text-sm text-muted-foreground">{t.admin.users.empty}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Name</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Email</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Role</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Joined</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.name}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.email}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.role}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.users.colJoined}</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
@@ -253,15 +270,15 @@ export default function AdminUsersPage() {
                       <td className="px-4 py-3 font-medium text-foreground">{u.full_name ?? "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{u.email ?? "—"}</td>
                       <td className="px-4 py-3">
-                        <Badge variant={u.role === "admin" ? "default" : "outline"} className="capitalize">{u.role}</Badge>
+                        <Badge variant={u.role === "admin" ? "default" : "outline"} className="capitalize">{roleLabel(u.role)}</Badge>
                       </td>
                       <td className="px-4 py-3">
                         <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${u.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
-                          {u.is_active ? "Active" : "Inactive"}
+                          {u.is_active ? t.admin.common.active : t.admin.common.inactive}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {new Date(u.created_at).toLocaleDateString()}
+                        {formatDateInTimezone(u.created_at, timezone, dateLocale)}
                       </td>
                       <td className="px-4 py-3">
                         <DropdownMenu>
@@ -272,20 +289,20 @@ export default function AdminUsersPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openEdit(u)}>
-                              <Pencil className="mr-2 h-4 w-4" /> Edit info
+                              <Pencil className="mr-2 h-4 w-4" /> {t.admin.users.editInfo}
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleToggleActive(u)}>
                               {u.is_active ? (
-                                <><UserX className="mr-2 h-4 w-4" /> Deactivate</>
+                                <><UserX className="mr-2 h-4 w-4" /> {t.admin.users.deactivate}</>
                               ) : (
-                                <><UserCheck className="mr-2 h-4 w-4" /> Activate</>
+                                <><UserCheck className="mr-2 h-4 w-4" /> {t.admin.users.activate}</>
                               )}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => setDeleting(u)}
                               className="text-destructive focus:text-destructive"
                             >
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                              <Trash2 className="mr-2 h-4 w-4" /> {t.admin.users.delete}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -302,13 +319,13 @@ export default function AdminUsersPage() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>Page {page} of {totalPages}</span>
+          <span>{t.admin.common.pageOf.replace("{page}", String(page)).replace("{total}", String(totalPages))}</span>
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
-              Previous
+              {t.common.previous}
             </Button>
             <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-              Next
+              {t.common.next}
             </Button>
           </div>
         </div>
@@ -318,41 +335,41 @@ export default function AdminUsersPage() {
       <Dialog open={!!editing} onOpenChange={() => setEditing(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>{t.admin.users.editTitle}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">Full name</label>
+              <label className="text-sm font-medium text-foreground">{t.admin.common.fullName}</label>
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">Phone</label>
+              <label className="text-sm font-medium text-foreground">{t.common.phone}</label>
               <Input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">Role</label>
+              <label className="text-sm font-medium text-foreground">{t.admin.common.role}</label>
               <Select value={editRole} onValueChange={(v) => setEditRole(v as Role)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {ROLES.map((r) => (
-                    <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
+                    <SelectItem key={r} value={r} className="capitalize">{roleLabel(r)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Set to <span className="font-medium">admin</span> to grant admin access, or change away to remove it.
-                Choosing <span className="font-medium">doctor</span> also creates their doctor
-                record — finish it under Doctors to make them bookable.
+                {roleHintParts[0]}<span className="font-medium">{t.admin.common.roleAdmin}</span>
+                {roleHintParts[1]}<span className="font-medium">{t.admin.common.roleDoctor}</span>
+                {roleHintParts[2]}
               </p>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setEditing(null)}>{t.common.cancel}</Button>
             <Button onClick={handleSave} disabled={isSaving} className="gap-2">
               {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-              Save
+              {t.common.save}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -362,44 +379,44 @@ export default function AdminUsersPage() {
       <Dialog open={creating} onOpenChange={setCreating}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Create User</DialogTitle>
+            <DialogTitle>{t.admin.users.createUser}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">Email</label>
-              <Input type="email" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} placeholder="name@example.com" />
+              <label className="text-sm font-medium text-foreground">{t.common.email}</label>
+              <Input type="email" value={createEmail} onChange={(e) => setCreateEmail(e.target.value)} placeholder={t.admin.users.emailPlaceholder} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">Temporary password</label>
-              <Input type="password" value={createPassword} onChange={(e) => setCreatePassword(e.target.value)} placeholder="At least 6 characters" />
+              <label className="text-sm font-medium text-foreground">{t.admin.common.tempPassword}</label>
+              <Input type="password" value={createPassword} onChange={(e) => setCreatePassword(e.target.value)} placeholder={t.admin.users.tempPasswordPlaceholder} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">Full name</label>
+              <label className="text-sm font-medium text-foreground">{t.admin.common.fullName}</label>
               <Input value={createName} onChange={(e) => setCreateName(e.target.value)} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">Phone</label>
+              <label className="text-sm font-medium text-foreground">{t.common.phone}</label>
               <Input value={createPhone} onChange={(e) => setCreatePhone(e.target.value)} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">Role</label>
+              <label className="text-sm font-medium text-foreground">{t.admin.common.role}</label>
               <Select value={createRole} onValueChange={(v) => setCreateRole(v as Role)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {ROLES.map((r) => (
-                    <SelectItem key={r} value={r} className="capitalize">{r}</SelectItem>
+                    <SelectItem key={r} value={r} className="capitalize">{roleLabel(r)}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreating(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setCreating(false)}>{t.common.cancel}</Button>
             <Button onClick={handleCreate} disabled={!createValid || isCreating} className="gap-2">
               {isCreating && <Loader2 className="h-4 w-4 animate-spin" />}
-              Create
+              {t.admin.common.create}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -409,20 +426,20 @@ export default function AdminUsersPage() {
       <Dialog open={!!deleting} onOpenChange={() => setDeleting(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete User</DialogTitle>
+            <DialogTitle>{t.admin.users.deleteTitle}</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Permanently delete{" "}
+            {deleteBodyParts[0]}
             <span className="font-medium text-foreground">
-              {deleting?.full_name ?? deleting?.email ?? "this user"}
+              {deleting?.full_name ?? deleting?.email ?? t.admin.users.deleteFallbackName}
             </span>
-            ? This removes their account and associated data and cannot be undone.
+            {deleteBodyParts[1]}
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleting(null)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setDeleting(null)}>{t.common.cancel}</Button>
             <Button variant="destructive" onClick={handleDelete} disabled={isDeleting} className="gap-2">
               {isDeleting && <Loader2 className="h-4 w-4 animate-spin" />}
-              Delete
+              {t.admin.users.delete}
             </Button>
           </DialogFooter>
         </DialogContent>
