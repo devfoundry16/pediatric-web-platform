@@ -153,7 +153,7 @@ function ProfessionalInfoCard() {
             <Input
               id="doctor-email"
               type="email"
-              placeholder="doctor@clinic.ae"
+              placeholder={t.doctorDashboard.emailPlaceholder}
               {...form.register("email")}
             />
             <p className="text-xs text-muted-foreground">

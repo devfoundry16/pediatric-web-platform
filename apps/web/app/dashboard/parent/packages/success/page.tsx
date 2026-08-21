@@ -10,8 +10,10 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CheckCircle, Package, CalendarDays, ArrowRight } from "lucide-react";
 import { packagesApi } from "@/lib/api/packages";
 import type { UserPackage } from "@/types/packages";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 export default function PackageSuccessPage() {
+  const { dictionary: t } = useI18n();
   const router = useRouter();
   const [latestPackage, setLatestPackage] = useState<UserPackage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,9 +46,11 @@ export default function PackageSuccessPage() {
             </div>
 
             <div className="flex flex-col gap-1">
-              <h1 className="text-xl font-bold text-foreground">Payment Successful!</h1>
+              <h1 className="text-xl font-bold text-foreground">
+                {t.packages.successTitle}
+              </h1>
               <p className="text-sm text-muted-foreground">
-                Your package has been activated. Credits are ready to use.
+                {t.packages.successSubtitle}
               </p>
             </div>
 
@@ -61,8 +65,10 @@ export default function PackageSuccessPage() {
                       {latestPackage.consultation_packages.name}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {latestPackage.credits_remaining} session
-                      {latestPackage.credits_remaining !== 1 ? "s" : ""} available
+                      {t.packages.sessionsAvailable.replace(
+                        "{count}",
+                        String(latestPackage.credits_remaining)
+                      )}
                     </p>
                   </div>
                 </div>
@@ -73,13 +79,13 @@ export default function PackageSuccessPage() {
               <Button asChild className="w-full">
                 <Link href="/booking">
                   <CalendarDays className="mr-2 h-4 w-4" />
-                  Book a Consultation
+                  {t.booking.title}
                 </Link>
               </Button>
               <Button variant="outline" asChild className="w-full">
                 <Link href="/dashboard/parent/packages">
                   <ArrowRight className="mr-2 h-4 w-4" />
-                  View My Packages
+                  {t.packages.viewMyPackages}
                 </Link>
               </Button>
             </div>

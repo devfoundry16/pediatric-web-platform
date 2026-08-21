@@ -45,7 +45,7 @@ export default function NewCoursePage() {
       toast.success(tc.courseCreated);
       router.push(`/dashboard/doctor/courses/${course.id}`);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to create course.";
+      const message = err instanceof Error ? err.message : tc.createError;
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -66,7 +66,7 @@ export default function NewCoursePage() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">{tc.createCourse}</h1>
           <p className="mt-1 text-muted-foreground">
-            Fill in the details below to create a new course. You can add lessons after saving.
+            {tc.createSubtitle}
           </p>
         </div>
 
@@ -89,7 +89,7 @@ export default function NewCoursePage() {
                   id="title"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Newborn Care Essentials"
+                  placeholder={tc.courseTitlePlaceholder}
                   required
                 />
               </div>
@@ -100,7 +100,7 @@ export default function NewCoursePage() {
                   id="description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Describe what parents will learn in this course..."
+                  placeholder={tc.courseDescriptionPlaceholder}
                   rows={4}
                 />
               </div>
@@ -112,7 +112,7 @@ export default function NewCoursePage() {
                   type="url"
                   value={thumbnailUrl}
                   onChange={(e) => setThumbnailUrl(e.target.value)}
-                  placeholder="https://example.com/thumbnail.jpg"
+                  placeholder={tc.thumbnailUrlPlaceholder}
                 />
               </div>
 
@@ -120,7 +120,7 @@ export default function NewCoursePage() {
                 <div>
                   <p className="text-sm font-medium">{tc.isFree}</p>
                   <p className="text-xs text-muted-foreground">
-                    Parents can enroll without any payment
+                    {tc.isFreeHint}
                   </p>
                 </div>
                 <Switch checked={isFree} onCheckedChange={setIsFree} />

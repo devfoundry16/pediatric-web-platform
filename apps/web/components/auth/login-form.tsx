@@ -97,7 +97,7 @@ export function LoginForm() {
         <Input
           id="email"
           type="email"
-          placeholder="name@example.com"
+          placeholder={t.auth.emailPlaceholder}
           autoComplete="email"
           {...register("email")}
         />

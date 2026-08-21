@@ -13,15 +13,20 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronRight, Users } from "lucide-react";
 import { doctorApi, type DoctorPatient } from "@/lib/api/doctor";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 
-function calcAge(dob: string): string {
+function calcAge(t: Dictionary, dob: string): string {
   const birth = new Date(dob);
   const now = new Date();
   const months =
     (now.getFullYear() - birth.getFullYear()) * 12 +
     (now.getMonth() - birth.getMonth());
-  if (months < 24) return `${months} mo`;
-  return `${Math.floor(months / 12)} yrs`;
+  if (months < 24)
+    return t.doctorDashboard.ageMonthsShort.replace("{count}", String(months));
+  return t.doctorDashboard.ageYearsShort.replace(
+    "{count}",
+    String(Math.floor(months / 12))
+  );
 }
 
 function initials(first: string, last: string): string {
@@ -61,8 +66,10 @@ export function RecentPatients() {
             const child = patient.child;
             const name = child
               ? `${child.first_name} ${child.last_name}`
-              : "Unknown";
-            const age = child?.date_of_birth ? calcAge(child.date_of_birth) : "—";
+              : t.doctorDashboard.unknownPatient;
+            const age = child?.date_of_birth
+              ? calcAge(t, child.date_of_birth)
+              : t.appointments.dash;
             const abbr = child
               ? initials(child.first_name, child.last_name)
               : "?";

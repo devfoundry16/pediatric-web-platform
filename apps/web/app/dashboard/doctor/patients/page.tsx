@@ -13,17 +13,22 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Users, Search } from "lucide-react";
 import { doctorApi, type DoctorPatient } from "@/lib/api/doctor";
 import { formatDateDisplayDubai } from "@/lib/timezone";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function calcAge(dob: string): string {
+function calcAge(t: Dictionary, dob: string): string {
   const birth = new Date(dob);
   const now = new Date();
   const months =
     (now.getFullYear() - birth.getFullYear()) * 12 +
     (now.getMonth() - birth.getMonth());
-  if (months < 24) return `${months} mo`;
-  return `${Math.floor(months / 12)} yrs`;
+  if (months < 24)
+    return t.doctorDashboard.ageMonthsShort.replace("{count}", String(months));
+  return t.doctorDashboard.ageYearsShort.replace(
+    "{count}",
+    String(Math.floor(months / 12))
+  );
 }
 
 function initials(first: string, last: string): string {
@@ -33,7 +38,7 @@ function initials(first: string, last: string): string {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function DoctorPatientsPage() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const [patients, setPatients] = useState<DoctorPatient[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -64,7 +69,12 @@ export default function DoctorPatientsPage() {
             {t.doctorDashboard.patients}
           </h1>
           <p className="text-muted-foreground">
-            {!loading && !error && `${patients.length} ${t.doctorDashboard.totalAppointments === "Total Appointments" ? "patients" : ""}`}
+            {!loading &&
+              !error &&
+              t.doctorDashboard.patientsCount.replace(
+                "{count}",
+                String(patients.length)
+              )}
           </p>
         </div>
 
@@ -117,10 +127,10 @@ export default function DoctorPatientsPage() {
               const child = patient.child;
               const name = child
                 ? `${child.first_name} ${child.last_name}`
-                : "Unknown";
+                : t.doctorDashboard.unknownPatient;
               const age = child?.date_of_birth
-                ? calcAge(child.date_of_birth)
-                : "—";
+                ? calcAge(t, child.date_of_birth)
+                : t.appointments.dash;
               const abbr = child
                 ? initials(child.first_name, child.last_name)
                 : "?";
@@ -159,7 +169,7 @@ export default function DoctorPatientsPage() {
                           {t.doctorDashboard.lastVisit}
                         </p>
                         <p className="font-medium text-foreground">
-                          {formatDateDisplayDubai(patient.last_visit)}
+                          {formatDateDisplayDubai(patient.last_visit, dateLocale)}
                         </p>
                       </div>
                       <div>

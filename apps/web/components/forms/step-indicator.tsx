@@ -2,6 +2,7 @@
 
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 export interface StepItem {
   id: string;
@@ -19,8 +20,9 @@ export function StepIndicator({
   currentStep,
   className,
 }: StepIndicatorProps) {
+  const { dictionary: t } = useI18n();
   return (
-    <nav aria-label="Progress" className={cn("w-full", className)}>
+    <nav aria-label={t.common.progress} className={cn("w-full", className)}>
       <ol className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-2">
         {steps.map((step, index) => {
           const isComplete = index < currentStep;

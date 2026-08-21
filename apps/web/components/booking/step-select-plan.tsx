@@ -207,7 +207,7 @@ export function StepSelectPlan({
                             size="icon-sm"
                             onClick={() => setQty(pkg.id, qty - 1)}
                             disabled={qty <= 1}
-                            aria-label="Decrease quantity"
+                            aria-label={t.booking.decreaseQuantity}
                           >
                             <Minus className="h-3.5 w-3.5" />
                           </Button>
@@ -220,7 +220,7 @@ export function StepSelectPlan({
                             size="icon-sm"
                             onClick={() => setQty(pkg.id, qty + 1)}
                             disabled={qty >= MAX_QTY}
-                            aria-label="Increase quantity"
+                            aria-label={t.booking.increaseQuantity}
                           >
                             <Plus className="h-3.5 w-3.5" />
                           </Button>

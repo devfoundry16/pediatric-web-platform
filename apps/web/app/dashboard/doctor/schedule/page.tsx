@@ -220,7 +220,7 @@ function HolidaysCard({
   onAdd: (date: string, reason: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const d = t.doctorDashboard;
 
   const [date, setDate] = useState("");
@@ -313,7 +313,7 @@ function HolidaysCard({
               >
                 <div className="flex flex-col gap-0.5">
                   <p className="text-sm font-medium text-foreground">
-                    {formatHolidayDateDubai(h.holiday_date)}
+                    {formatHolidayDateDubai(h.holiday_date, dateLocale)}
                   </p>
                   {h.reason && (
                     <p className="text-xs text-muted-foreground">{h.reason}</p>

@@ -20,7 +20,7 @@ export function ParentOverview() {
   const coursesEnabled = useFeatureFlag("courses");
   const displayName =
     (user?.user_metadata?.full_name as string | undefined)?.split(" ")[0] ??
-    "Parent";
+    t.parentDashboard.parentFallback;
 
   const [childrenCount, setChildrenCount] = useState<number | null>(null);
   const [appointmentCount, setAppointmentCount] = useState<number | null>(null);

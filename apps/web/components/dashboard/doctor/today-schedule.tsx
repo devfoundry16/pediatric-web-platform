@@ -4,7 +4,11 @@ import { RefreshButton } from "@/components/ui/refresh-button";
 import { useRouter } from "next/navigation";
 
 import { useEffect, useState, useCallback } from "react";
-import { DEFAULT_TIMEZONE, wallClockToInstant } from "@/lib/timezone";
+import {
+  DEFAULT_TIMEZONE,
+  formatStoredAppointment,
+  wallClockToInstant,
+} from "@/lib/timezone";
 import {
   appointmentOpensAt,
   appointmentStartMs,
@@ -12,6 +16,8 @@ import {
   joinOpensAtLabel,
 } from "@/lib/appointment-window";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
+import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,17 +30,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Clock, Video, FileText, CheckCircle, CalendarX } from "lucide-react";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { doctorApi, type DoctorAppointment } from "@/lib/api/doctor";
-
-function formatTime(time: string): string {
-  const [h, m] = time.split(":").map(Number);
-  const suffix = h >= 12 ? "PM" : "AM";
-  const hour = h % 12 || 12;
-  return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
-}
-
-function consultationLabel(type: string): string {
-  return type.charAt(0).toUpperCase() + type.slice(1);
-}
 
 /**
  * Whether the consultation's slot is happening now.
@@ -55,31 +50,35 @@ function isUnderway(
   return now >= start.getTime() && now <= end;
 }
 
-function getStatusDisplay(apt: DoctorAppointment, timezone: string): {
+function getStatusDisplay(
+  t: Dictionary,
+  apt: DoctorAppointment,
+  timezone: string
+): {
   label: string;
   className: string;
   inProgress: boolean;
 } {
   if (apt.status === "completed")
     return {
-      label: "Completed",
+      label: t.doctorDashboard.statusCompleted,
       className: "bg-gray-100 text-gray-700",
       inProgress: false,
     };
   if (apt.status === "cancelled")
     return {
-      label: "Cancelled",
+      label: t.doctorDashboard.statusCancelled,
       className: "bg-red-100 text-red-700",
       inProgress: false,
     };
   if (apt.status === "confirmed" && isUnderway(apt, timezone))
     return {
-      label: "In Progress",
+      label: t.doctorDashboard.statusInProgress,
       className: "bg-green-100 text-green-800",
       inProgress: true,
     };
   return {
-    label: "Upcoming",
+    label: t.doctorDashboard.statusUpcoming,
     className: "bg-blue-100 text-blue-800",
     inProgress: false,
   };
@@ -160,10 +159,17 @@ export function TodaySchedule() {
           </div>
         ) : (
           appointments.map((apt) => {
-            const display = getStatusDisplay(apt, doctorTimezone);
+            const display = getStatusDisplay(t, apt, doctorTimezone);
+            const shownAt = formatStoredAppointment(
+              apt.scheduled_date,
+              apt.scheduled_time,
+              doctorTimezone,
+              doctorTimezone,
+              dateLocale
+            );
             const childName = apt.child_profiles
               ? `${apt.child_profiles.first_name} ${apt.child_profiles.last_name}`
-              : "—";
+              : t.appointments.dash;
             // Start confirms a pending booking; a confirmed one is simply
             // joined. Neither depends on meeting_url any more, which is filled
             // in asynchronously once the booking is confirmed.
@@ -197,19 +203,19 @@ export function TodaySchedule() {
                     {childName}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {apt.parent_name ?? "—"}
+                    {apt.parent_name ?? t.appointments.dash}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" />
-                      {formatTime(apt.scheduled_time)}
+                      {shownAt.time}
                     </span>
                     <TimezoneNotice timezone={doctorTimezone} variant="compact" />
                     <span>
                       {apt.duration_minutes} {t.common.minutes}
                     </span>
                     <Badge variant="secondary" className="text-xs">
-                      {consultationLabel(apt.consultation_type)}
+                      {getConsultationTypeLabel(t, apt.consultation_type)}
                     </Badge>
                   </div>
                 </div>

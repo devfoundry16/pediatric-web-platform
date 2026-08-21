@@ -106,7 +106,7 @@ export default function ForgotPasswordPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="name@example.com"
+                    placeholder={t.auth.emailPlaceholder}
                     autoComplete="email"
                     {...register("email")}
                   />

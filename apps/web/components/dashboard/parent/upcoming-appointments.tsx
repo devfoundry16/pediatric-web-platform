@@ -109,7 +109,8 @@ export function UpcomingAppointments() {
               appt.scheduled_date,
               appt.scheduled_time,
               appt.timezone ?? DEFAULT_TIMEZONE,
-              viewerTimezone
+              viewerTimezone,
+              dateLocale
             );
 
             // Announced only while still ahead — once the window is open the

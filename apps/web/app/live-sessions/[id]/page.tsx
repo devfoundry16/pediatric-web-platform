@@ -102,7 +102,7 @@ export default function SessionDetailPage() {
           }
         }
       } catch {
-        setError("Session not found");
+        setError(t.liveSessions.notFound);
       } finally {
         setLoading(false);
       }
@@ -155,7 +155,7 @@ export default function SessionDetailPage() {
       }
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "Registration failed";
+        err instanceof Error ? err.message : t.liveSessions.registrationFailed;
       setError(msg);
     } finally {
       setRegistering(false);
@@ -179,7 +179,7 @@ export default function SessionDetailPage() {
       <div className="flex min-h-screen flex-col">
         <SiteHeader />
         <main className="flex-1 flex items-center justify-center">
-          <p className="text-destructive">{error ?? "Session not found"}</p>
+          <p className="text-destructive">{error ?? t.liveSessions.notFound}</p>
         </main>
         <SiteFooter />
       </div>
@@ -263,7 +263,7 @@ export default function SessionDetailPage() {
           <div className="mt-6 flex flex-wrap gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <CalendarDays className="h-4 w-4" />
-              {scheduledDate.toLocaleDateString("en-AE", {
+              {scheduledDate.toLocaleDateString(dateLocale, {
                 weekday: "long",
                 day: "numeric",
                 month: "long",
@@ -273,7 +273,7 @@ export default function SessionDetailPage() {
             </span>
             <span className="flex items-center gap-x-1.5 gap-y-1 flex-wrap">
               <Clock className="h-4 w-4" />
-              {formatTimeInTimezone(scheduledDate, viewerTimezone)}{" "}
+              {formatTimeInTimezone(scheduledDate, viewerTimezone, dateLocale)}{" "}
               ({session.duration_minutes} {t.common.minutes})
               <TimezoneNotice timezone={viewerTimezone} variant="compact" />
             </span>
@@ -369,7 +369,7 @@ export default function SessionDetailPage() {
                     </Button>
                     <p className="text-xs text-center text-muted-foreground">
                       {t.liveSessions.scheduledFor}{" "}
-                      {formatTimeInTimezone(scheduledDate, viewerTimezone)}
+                      {formatTimeInTimezone(scheduledDate, viewerTimezone, dateLocale)}
                     </p>
                     {joinOpensText && (
                       <p className="text-xs text-center text-muted-foreground">
@@ -385,7 +385,7 @@ export default function SessionDetailPage() {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {t.liveSessions.scheduledFor}{" "}
-                      {formatTimeInTimezone(scheduledDate, viewerTimezone)}
+                      {formatTimeInTimezone(scheduledDate, viewerTimezone, dateLocale)}
                     </p>
                   </div>
                 ) : registrationClosed ? (

@@ -117,11 +117,11 @@ function RegistrationCard({
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <CalendarDays className="h-3.5 w-3.5" />
-                {formatDateInTimezone(scheduledDate, viewerTimezone)}
+                {formatDateInTimezone(scheduledDate, viewerTimezone, dateLocale)}
               </span>
               <span className="flex items-center gap-x-1 gap-y-0.5 flex-wrap">
                 <Clock className="h-3.5 w-3.5" />
-                {formatTimeInTimezone(scheduledDate, viewerTimezone)}{" "}
+                {formatTimeInTimezone(scheduledDate, viewerTimezone, dateLocale)}{" "}
                 · {session.duration_minutes} {t.common.minutes}
                 <TimezoneNotice timezone={viewerTimezone} variant="compact" />
               </span>

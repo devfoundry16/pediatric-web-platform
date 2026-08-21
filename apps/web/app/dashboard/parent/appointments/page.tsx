@@ -172,7 +172,8 @@ function ParentAppointmentsContent() {
       appt.scheduled_date,
       appt.scheduled_time,
       appt.timezone ?? DEFAULT_TIMEZONE,
-      viewerTimezone
+      viewerTimezone,
+      dateLocale
     );
 
     // Announced only while still ahead — once the window is open the Join
@@ -416,7 +417,7 @@ function ParentAppointmentsContent() {
                     {rescheduleSlots.map((slot) => {
                       const shiftedDay =
                         calendarDayInTimezone(slot.startsAt, viewerTimezone) !== slot.date
-                          ? formatShortDateInTimezone(slot.startsAt, viewerTimezone)
+                          ? formatShortDateInTimezone(slot.startsAt, viewerTimezone, dateLocale)
                           : null;
                       return (
                         <Button
@@ -428,7 +429,7 @@ function ParentAppointmentsContent() {
                           className="h-auto flex-col gap-0 py-1.5 text-xs"
                           onClick={() => setRescheduleSlot(slot)}
                         >
-                          <span>{formatTimeInTimezone(slot.startsAt, viewerTimezone)}</span>
+                          <span>{formatTimeInTimezone(slot.startsAt, viewerTimezone, dateLocale)}</span>
                           {shiftedDay && (
                             <span className="text-[10px] opacity-70">{shiftedDay}</span>
                           )}

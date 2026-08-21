@@ -65,7 +65,7 @@ const ALL_TAB = "__all__";
 const MAX_FILE_SIZE_MB = 10;
 
 export default function ParentFilesPage() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const mr = t.medicalRecords;
 
   const [children, setChildren] = useState<ChildProfile[]>([]);
@@ -112,13 +112,13 @@ export default function ParentFilesPage() {
     if (!file) return;
 
     if (file.size > MAX_FILE_SIZE_MB * 1024 * 1024) {
-      toast.error(`File exceeds ${MAX_FILE_SIZE_MB} MB limit`);
+      toast.error(mr.fileTooLarge.replace("{max}", String(MAX_FILE_SIZE_MB)));
       return;
     }
 
     const childId = selectedChildForUpload || (children[0]?.id ?? "");
     if (!childId) {
-      toast.error("Select a child before uploading");
+      toast.error(mr.selectChildBeforeUpload);
       return;
     }
 
@@ -266,7 +266,7 @@ export default function ParentFilesPage() {
                           href={file.signed_url ?? "#"}
                           target="_blank"
                           rel="noopener noreferrer"
-                          title="Open file"
+                          title={mr.openFile}
                         >
                           <Button variant="ghost" size="icon" className="h-7 w-7">
                             <ExternalLink className="h-3.5 w-3.5" />
@@ -296,7 +296,7 @@ export default function ParentFilesPage() {
                       )}
                       <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
                         <span>{formatFileSize(file.file_size_bytes)}</span>
-                        <span>{formatDateDisplayDubai(file.created_at)}</span>
+                        <span>{formatDateDisplayDubai(file.created_at, dateLocale)}</span>
                       </div>
                     </div>
                   </CardContent>

@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 type BadgeVariant = "optional" | "recommended" | "required" | "none";
 
@@ -38,10 +39,11 @@ export function FormSection({
   className,
   children,
 }: FormSectionProps) {
+  const { dictionary: t } = useI18n();
   const defaultLabels: Record<Exclude<BadgeVariant, "none">, string> = {
-    optional: "Optional",
-    recommended: "Recommended",
-    required: "Required",
+    optional: t.common.optional,
+    recommended: t.common.recommended,
+    required: t.common.required,
   };
 
   const showBadge = badge !== "none";

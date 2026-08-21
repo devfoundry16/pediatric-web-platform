@@ -22,6 +22,7 @@ import {
   CommandList,
 } from "@/components/ui/command"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useI18n } from "@/lib/i18n/i18n-context"
 
 type PhoneInputProps = Omit<
   React.ComponentProps<typeof RPNInput.default>,
@@ -91,10 +92,14 @@ function CountrySelect({
   value,
   onChange,
   options,
-  searchPlaceholder = "Search country...",
-  emptyText = "No country found.",
+  searchPlaceholder,
+  emptyText,
 }: CountrySelectProps) {
+  const { dictionary: t } = useI18n()
   const [open, setOpen] = React.useState(false)
+  const resolvedSearchPlaceholder =
+    searchPlaceholder ?? t.common.searchCountry
+  const resolvedEmptyText = emptyText ?? t.common.noCountryFound
 
   const handleSelect = React.useCallback(
     (country: RPNInput.Country) => {
@@ -129,10 +134,10 @@ function CountrySelect({
       </PopoverTrigger>
       <PopoverContent className="w-[280px] p-0">
         <Command>
-          <CommandInput placeholder={searchPlaceholder} />
+          <CommandInput placeholder={resolvedSearchPlaceholder} />
           <CommandList>
             <ScrollArea className="h-72">
-              <CommandEmpty>{emptyText}</CommandEmpty>
+              <CommandEmpty>{resolvedEmptyText}</CommandEmpty>
               <CommandGroup>
                 {options
                   .filter((x) => x.value)

@@ -127,7 +127,7 @@ export function LiveSessionForm({
             <Label htmlFor="title">{t.liveSessions.sessionTitle} *</Label>
             <Input
               id="title"
-              placeholder="e.g. Child Nutrition Workshop"
+              placeholder={t.liveSessions.sessionTitlePlaceholder}
               {...register("title")}
             />
             {errors.title && (
@@ -141,7 +141,7 @@ export function LiveSessionForm({
             </Label>
             <Textarea
               id="description"
-              placeholder="Describe what participants will learn..."
+              placeholder={t.liveSessions.sessionDescriptionPlaceholder}
               rows={4}
               {...register("description")}
             />
@@ -248,7 +248,7 @@ export function LiveSessionForm({
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Set to 0 for a free session
+              {t.liveSessions.sessionPriceHint}
             </p>
           </div>
 

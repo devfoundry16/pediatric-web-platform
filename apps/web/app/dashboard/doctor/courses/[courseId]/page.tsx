@@ -73,7 +73,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
   const [course, setCourse] = useState<DoctorCourse | null>(null);
   const [lessons, setLessons] = useState<CourseLesson[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   // Edit course form
   const [isEditingCourse, setIsEditingCourse] = useState(false);
@@ -106,7 +106,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
 
   async function loadData() {
     setIsLoading(true);
-    setError(null);
+    setLoadFailed(false);
     try {
       const [coursesData, lessonsData] = await Promise.all([
         coursesApi.getCreatedCourses(),
@@ -123,7 +123,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
       }
       setLessons(lessonsData);
     } catch {
-      setError("Failed to load course data.");
+      setLoadFailed(true);
     } finally {
       setIsLoading(false);
     }
@@ -145,7 +145,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
       setIsEditingCourse(false);
       toast.success(tc.courseUpdated);
     } catch {
-      toast.error("Failed to update course.");
+      toast.error(tc.updateError);
     } finally {
       setIsSavingCourse(false);
     }
@@ -158,7 +158,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
       setCourse(updated);
       toast.success(tc.courseUpdated);
     } catch {
-      toast.error("Failed to update course.");
+      toast.error(tc.updateError);
     }
   }
 
@@ -199,7 +199,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
       setUploadProgress(null);
       toast.success(tc.videoUploaded);
     } catch {
-      toast.error("Failed to upload video.");
+      toast.error(tc.uploadVideoError);
       setUploadProgress(null);
     } finally {
       setIsUploading(false);
@@ -237,7 +237,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
       }
       setLessonDialogOpen(false);
     } catch {
-      toast.error("Failed to save lesson.");
+      toast.error(tc.saveLessonError);
     } finally {
       setIsSavingLesson(false);
     }
@@ -252,7 +252,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
       toast.success(tc.lessonDeleted);
       setDeletingLessonId(null);
     } catch {
-      toast.error("Failed to delete lesson.");
+      toast.error(tc.deleteLessonError);
     } finally {
       setIsDeletingLesson(false);
     }
@@ -269,10 +269,10 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
           {t.common.back}
         </Link>
 
-        {error && (
+        {loadFailed && (
           <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0" />
-            {error}
+            {tc.loadCourseError}
           </div>
         )}
 
@@ -312,7 +312,9 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
                     </div>
                     <div className="flex flex-wrap gap-2 text-sm text-muted-foreground">
                       <span>
-                        {course.is_free ? tc.free : `${Number(course.price_aed).toFixed(0)} AED`}
+                        {course.is_free
+                          ? tc.free
+                          : `${Number(course.price_aed).toFixed(0)} ${t.common.aed}`}
                       </span>
                       <span>·</span>
                       <span>{course.lesson_count} {tc.lessons}</span>
@@ -356,7 +358,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
                         type="url"
                         value={editThumbnail}
                         onChange={(e) => setEditThumbnail(e.target.value)}
-                        placeholder="https://..."
+                        placeholder={tc.thumbnailUrlPlaceholder}
                       />
                     </div>
                     <div className="flex items-center justify-between rounded-lg border p-3">
@@ -474,7 +476,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
             </div>
           </div>
         ) : (
-          <p className="text-muted-foreground">Course not found.</p>
+          <p className="text-muted-foreground">{tc.notFound}</p>
         )}
       </div>
 
@@ -551,7 +553,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="lesson-duration">Duration (seconds)</Label>
+              <Label htmlFor="lesson-duration">{tc.durationSeconds}</Label>
               <Input
                 id="lesson-duration"
                 type="number"
@@ -560,7 +562,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
                 onChange={(e) =>
                   setLessonForm((p) => ({ ...p, duration_seconds: e.target.value }))
                 }
-                placeholder="e.g. 300 for 5 minutes"
+                placeholder={tc.durationSecondsPlaceholder}
               />
             </div>
 

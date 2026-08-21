@@ -83,7 +83,7 @@ export function ChildForm({
         await childrenApi.create(body);
       } else {
         if (!childId) {
-          toast.error("Missing child id");
+          toast.error(t.childForm.missingChildId);
           return;
         }
         await childrenApi.update(childId, body);
@@ -94,9 +94,9 @@ export function ChildForm({
     } catch (e: unknown) {
       if (axios.isAxiosError(e)) {
         const err = e.response?.data as { error?: string } | undefined;
-        toast.error(err?.error ?? e.message ?? "Request failed");
+        toast.error(err?.error ?? e.message ?? t.childForm.requestFailed);
       } else {
-        toast.error("Request failed");
+        toast.error(t.childForm.requestFailed);
       }
     }
   };

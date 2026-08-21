@@ -70,7 +70,7 @@ function toPdfLabels(mr: Dictionary["medicalRecords"]): MedicalRecordPdfLabels {
 const ALL_TAB = "__all__";
 
 export default function ParentRecordsPage() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const mr = t.medicalRecords;
 
   const [children, setChildren] = useState<ChildProfile[]>([]);
@@ -175,7 +175,7 @@ export default function ParentRecordsPage() {
                           {getTypeLabelKey(record.record_type)}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {formatDateDisplayDubai(record.created_at)}
+                          {formatDateDisplayDubai(record.created_at, dateLocale)}
                         </span>
                       </div>
                       <p className="font-semibold text-foreground truncate">{record.title}</p>

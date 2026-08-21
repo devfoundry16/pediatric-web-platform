@@ -99,7 +99,7 @@ export function RegisterForm() {
         <Input
           id="fullName"
           type="text"
-          placeholder="John Doe"
+          placeholder={t.auth.fullNamePlaceholder}
           {...register("fullName")}
         />
         {errors.fullName && (
@@ -112,7 +112,7 @@ export function RegisterForm() {
         <Input
           id="regEmail"
           type="email"
-          placeholder="name@example.com"
+          placeholder={t.auth.emailPlaceholder}
           autoComplete="email"
           {...register("email")}
         />

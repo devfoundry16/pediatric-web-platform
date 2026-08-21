@@ -76,7 +76,7 @@ export default function CourseDetailPage({ params }: PageProps) {
         }
       }
     } catch {
-      setError("Failed to load course. Please try again.");
+      setError(tc.loadCourseError);
     } finally {
       setIsLoading(false);
     }
@@ -91,7 +91,7 @@ export default function CourseDetailPage({ params }: PageProps) {
       await loadData();
     } catch (err: unknown) {
       const message =
-        err instanceof Error ? err.message : "Enrollment failed. Please try again.";
+        err instanceof Error ? err.message : tc.enrollError;
       toast.error(message);
     } finally {
       setIsEnrolling(false);
@@ -136,7 +136,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                 <div className="flex flex-wrap items-start gap-2">
                   <h1 className="text-2xl font-bold text-foreground">{course.title}</h1>
                   <Badge variant={course.is_free ? "secondary" : "default"}>
-                    {course.is_free ? tc.free : `${Number(course.price_aed).toFixed(0)} AED`}
+                    {course.is_free ? tc.free : `${Number(course.price_aed).toFixed(0)} ${t.common.aed}`}
                   </Badge>
                   {isEnrolled && enrollment?.completed_at && (
                     <Badge variant="default" className="bg-green-600">
@@ -284,7 +284,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                     <div className="flex flex-col gap-3">
                       <div className="text-center">
                         <span className="text-2xl font-bold text-foreground">
-                          {course.is_free ? tc.free : `${Number(course.price_aed).toFixed(0)} AED`}
+                          {course.is_free ? tc.free : `${Number(course.price_aed).toFixed(0)} ${t.common.aed}`}
                         </span>
                       </div>
                       <Button
