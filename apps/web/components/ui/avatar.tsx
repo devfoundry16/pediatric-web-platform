@@ -29,10 +29,15 @@ function AvatarImage({
   className,
   ...props
 }: React.ComponentProps<typeof AvatarPrimitive.Image>) {
+  // Cover-crop from the top so tall portraits keep the face in frame rather
+  // than being stretched to fill the square.
   return (
     <AvatarPrimitive.Image
       data-slot="avatar-image"
-      className={cn("aspect-square size-full", className)}
+      className={cn(
+        "aspect-square size-full object-cover object-top",
+        className
+      )}
       {...props}
     />
   )
