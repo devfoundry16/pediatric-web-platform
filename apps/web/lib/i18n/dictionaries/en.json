@@ -419,7 +419,12 @@
     "minSuffix": "min",
     "dash": "—",
     "consultationRoom": "Consultation room",
-    "roomOpensAt": "The room opens at {time}."
+    "roomOpensAt": "The room opens at {time}.",
+    "joinWindowHint": "The video room opens {openMinutes} minutes before the scheduled start time and closes {closeMinutes} minutes after the end.",
+    "joinOpensAt": "Join opens at {time}.",
+    "joinNotOpenYet": "This consultation is not open yet.",
+    "joinEnded": "This consultation has ended.",
+    "joinFailed": "Failed to join the consultation."
   },
   "patient": {
     "personalInfo": "Personal Information",
@@ -647,7 +652,10 @@
     "mySessions": "My Live Sessions",
     "noRegistrations": "You have no registered sessions",
     "joinRoom": "Join Room",
-    "paymentConfirmed": "Payment confirmed — you're registered!"
+    "paymentConfirmed": "Payment confirmed — you're registered!",
+    "joinNotOpenYet": "This session is not open yet.",
+    "joinEnded": "This session has ended.",
+    "joinFailed": "Failed to join the session."
   },
   "medicalRecords": {
     "title": "Medical Records",

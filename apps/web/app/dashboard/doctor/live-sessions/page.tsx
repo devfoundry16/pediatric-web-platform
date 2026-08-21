@@ -21,6 +21,12 @@ import {
   todayInTimezone,
   wallClockToInstant,
 } from "@/lib/timezone";
+import { sessionOpensAt } from "@/lib/session-window";
+import {
+  joinNotYetOpen,
+  joinOpensAtLabel,
+  joinWindowHintText,
+} from "@/lib/appointment-window";
 import { toast } from "sonner";
 import {
   Video,
@@ -205,7 +211,7 @@ function SessionRow({
   onReschedule: (id: string, scheduledAt: string) => Promise<void>;
   onCancel: (id: string) => Promise<void>;
 }) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const router = useRouter();
   const [actionLoading, setActionLoading] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -223,6 +229,17 @@ function SessionRow({
   // zone rather than relying on the runtime default.
   const { timezone: viewerTimezone } = useViewerTimezone();
   const scheduledDate = new Date(session.scheduled_at);
+
+  // Announced only next to a Join button that exists (published, scheduled)
+  // and only while the window is still ahead.
+  const opensAt = sessionOpensAt(session);
+  const joinOpensText =
+    session.is_published &&
+    session.status === "scheduled" &&
+    opensAt &&
+    joinNotYetOpen(opensAt)
+      ? joinOpensAtLabel(t, opensAt, scheduledDate, viewerTimezone, dateLocale)
+      : null;
 
   async function handleEnd() {
     setActionLoading(true);
@@ -428,6 +445,12 @@ function SessionRow({
                 </AlertDialogContent>
               </AlertDialog>
             )}
+
+            {joinOpensText && (
+              <p className="basis-full text-xs text-muted-foreground">
+                {joinOpensText}
+              </p>
+            )}
           </div>
         </div>
       </CardContent>
@@ -534,6 +557,9 @@ export default function DoctorLiveSessionsPage() {
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {t.liveSessions.subtitle}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {joinWindowHintText(t)}
             </p>
           </div>
           <div className="flex items-center gap-1">

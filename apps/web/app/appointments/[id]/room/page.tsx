@@ -5,6 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { appointmentsApi } from "@/lib/api/appointments";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
@@ -18,7 +20,8 @@ import { ArrowLeft, Loader2 } from "lucide-react";
  * goes, which is the dashboard.
  */
 export default function AppointmentRoomPage() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
+  const { timezone: viewerTimezone } = useViewerTimezone();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -45,6 +48,22 @@ export default function AppointmentRoomPage() {
   // Doctors manage their day from a different dashboard than parents do.
   const role = (user?.user_metadata?.role as string) === "doctor" ? "doctor" : "parent";
   const backHref = `/dashboard/${role}/appointments?appointment=${params.id}`;
+
+  // Known errors (the API's join-gate messages and our own fallback) are
+  // translated here at render rather than in the callbacks: the dictionary
+  // swaps shortly after mount for a stored non-default locale, and having it
+  // in the callbacks' hook deps would tear down and re-join the call.
+  const displayError =
+    error === null
+      ? null
+      : opensAt
+        ? t.appointments.joinNotOpenYet
+        : error === "This consultation has ended"
+          ? t.appointments.joinEnded
+          : error === "Failed to join the consultation" ||
+              error === "Could not join the consultation"
+            ? t.appointments.joinFailed
+            : error;
 
   const leave = useCallback(() => {
     if (callRef.current) {
@@ -134,14 +153,14 @@ export default function AppointmentRoomPage() {
             <p className="text-sm text-muted-foreground">{t.common.loading}</p>
           </div>
         )}
-        {error && (
+        {displayError && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background px-6 text-center">
-            <p className="text-sm text-destructive">{error}</p>
+            <p className="text-sm text-destructive">{displayError}</p>
             {opensAt && (
               <p className="text-sm text-muted-foreground">
                 {t.appointments.roomOpensAt.replace(
                   "{time}",
-                  new Date(opensAt).toLocaleString()
+                  `${formatDateInTimezone(opensAt, viewerTimezone, dateLocale)}, ${formatTimeInTimezone(opensAt, viewerTimezone, dateLocale)}`
                 )}
               </p>
             )}

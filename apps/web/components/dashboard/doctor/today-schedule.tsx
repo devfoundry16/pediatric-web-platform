@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 
 import { useEffect, useState, useCallback } from "react";
 import { DEFAULT_TIMEZONE, wallClockToInstant } from "@/lib/timezone";
+import {
+  appointmentOpensAt,
+  appointmentStartMs,
+  joinNotYetOpen,
+  joinOpensAtLabel,
+} from "@/lib/appointment-window";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,7 +87,7 @@ function getStatusDisplay(apt: DoctorAppointment, timezone: string): {
 
 export function TodaySchedule() {
   const router = useRouter();
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
   const [doctorTimezone, setDoctorTimezone] = useState(DEFAULT_TIMEZONE);
   const [loading, setLoading] = useState(true);
@@ -165,6 +171,22 @@ export function TodaySchedule() {
             const showJoin = apt.status === "confirmed";
             const showComplete = apt.status === "confirmed";
 
+            // Announced only while still ahead, in the doctor's own zone
+            // like everything else in this widget (rows carry no zone of
+            // their own).
+            const schedulable = { ...apt, timezone: doctorTimezone };
+            const opensAt = showJoin ? appointmentOpensAt(schedulable) : null;
+            const joinOpensText =
+              opensAt && joinNotYetOpen(opensAt)
+                ? joinOpensAtLabel(
+                    t,
+                    opensAt,
+                    new Date(appointmentStartMs(schedulable)),
+                    doctorTimezone,
+                    dateLocale
+                  )
+                : null;
+
             return (
               <div
                 key={apt.id}
@@ -191,50 +213,57 @@ export function TodaySchedule() {
                     </Badge>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${display.className}`}
-                  >
-                    {display.label}
-                  </span>
-                  {showStart && (
-                    <Button
-                      size="sm"
-                      className="gap-1.5"
-                      disabled={actionLoading === apt.id}
-                      onClick={() => handleStart(apt.id)}
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${display.className}`}
                     >
-                      <Video className="h-3.5 w-3.5" />
-                      {t.doctorDashboard.startSession}
-                    </Button>
-                  )}
-                  {showJoin && (
-                    <Button
-                      size="sm"
-                      className="gap-1.5"
-                      disabled={actionLoading === apt.id}
-                      onClick={() => handleJoin(apt.id)}
-                    >
-                      <Video className="h-3.5 w-3.5" />
-                      {t.doctorDashboard.joinSession}
-                    </Button>
-                  )}
-                  {showComplete && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5"
-                      disabled={actionLoading === apt.id}
-                      onClick={() => handleComplete(apt.id)}
-                    >
-                      <CheckCircle className="h-3.5 w-3.5" />
-                      {t.doctorDashboard.completeSession}
-                    </Button>
-                  )}
-                  {apt.symptoms && (
-                    <Button size="sm" variant="ghost" title={apt.symptoms}>
-                      <FileText className="h-3.5 w-3.5" />
-                    </Button>
+                      {display.label}
+                    </span>
+                    {showStart && (
+                      <Button
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={actionLoading === apt.id}
+                        onClick={() => handleStart(apt.id)}
+                      >
+                        <Video className="h-3.5 w-3.5" />
+                        {t.doctorDashboard.startSession}
+                      </Button>
+                    )}
+                    {showJoin && (
+                      <Button
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={actionLoading === apt.id}
+                        onClick={() => handleJoin(apt.id)}
+                      >
+                        <Video className="h-3.5 w-3.5" />
+                        {t.doctorDashboard.joinSession}
+                      </Button>
+                    )}
+                    {showComplete && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5"
+                        disabled={actionLoading === apt.id}
+                        onClick={() => handleComplete(apt.id)}
+                      >
+                        <CheckCircle className="h-3.5 w-3.5" />
+                        {t.doctorDashboard.completeSession}
+                      </Button>
+                    )}
+                    {apt.symptoms && (
+                      <Button size="sm" variant="ghost" title={apt.symptoms}>
+                        <FileText className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+                  {joinOpensText && (
+                    <p className="text-xs text-muted-foreground">
+                      {joinOpensText}
+                    </p>
                   )}
                 </div>
               </div>

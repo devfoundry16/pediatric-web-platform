@@ -17,12 +17,18 @@ import { doctorApi } from "@/lib/api/doctor";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
+import { sessionOpensAt } from "@/lib/session-window";
+import {
+  joinNotYetOpen,
+  joinOpensAtLabel,
+  joinWindowHintText,
+} from "@/lib/appointment-window";
 
 /** The list is public, so a doctor going live has to be picked up by polling. */
 const REFRESH_MS = 30_000;
 
 export default function LiveSessionsPage() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   // scheduled_at is a real instant (TIMESTAMPTZ); render it in the viewer's
   // zone explicitly, rather than relying on the runtime default and then
   // labelling it GST regardless.
@@ -93,6 +99,9 @@ export default function LiveSessionsPage() {
             <p className="mt-4 text-lg text-muted-foreground">
               {t.liveSessions.subtitle}
             </p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {joinWindowHintText(t)}
+            </p>
           </div>
 
           <Tabs defaultValue="upcoming" className="mt-10">
@@ -113,33 +122,55 @@ export default function LiveSessionsPage() {
                   {t.liveSessions.noSessions}
                 </p>
               ) : (
-                upcoming.map((session) => (
-                  <Link key={session.id} href={`/live-sessions/${session.id}`}>
-                    <SessionCard
-                      session={{
-                        id: session.id,
-                        title: session.title,
-                        description: session.description ?? "",
-                        date: formatDateInTimezone(session.scheduled_at, viewerTimezone),
-                        time: formatTimeInTimezone(session.scheduled_at, viewerTimezone),
-                        timezone: viewerTimezone,
-                        duration: session.duration_minutes,
-                        maxUsers: session.max_participants,
-                        currentUsers: session.participant_count,
-                        price: Number(session.price_aed),
-                        isLive: session.status === "live",
-                        isRegistered: isConfirmedRegistration(
-                          registrations.get(session.id)
-                        ),
-                        paymentPending:
-                          registrations.get(session.id) === "pending",
-                        isHost:
-                          hostDoctorId !== null &&
-                          session.doctors?.id === hostDoctorId,
-                      }}
-                    />
-                  </Link>
-                ))
+                upcoming.map((session) => {
+                  const isRegistered = isConfirmedRegistration(
+                    registrations.get(session.id)
+                  );
+                  const isHost =
+                    hostDoctorId !== null &&
+                    session.doctors?.id === hostDoctorId;
+                  // Only the host gets the opens-at line here: the card's
+                  // only enabled join CTA before a session is live is the
+                  // host's. Registrants join from the detail page, which
+                  // carries its own opens-at line.
+                  const opensAt = sessionOpensAt(session);
+                  const joinOpensAtText =
+                    isHost &&
+                    opensAt &&
+                    joinNotYetOpen(opensAt)
+                      ? joinOpensAtLabel(
+                          t,
+                          opensAt,
+                          new Date(session.scheduled_at),
+                          viewerTimezone,
+                          dateLocale
+                        )
+                      : undefined;
+                  return (
+                    <Link key={session.id} href={`/live-sessions/${session.id}`}>
+                      <SessionCard
+                        session={{
+                          id: session.id,
+                          title: session.title,
+                          description: session.description ?? "",
+                          date: formatDateInTimezone(session.scheduled_at, viewerTimezone),
+                          time: formatTimeInTimezone(session.scheduled_at, viewerTimezone),
+                          timezone: viewerTimezone,
+                          duration: session.duration_minutes,
+                          maxUsers: session.max_participants,
+                          currentUsers: session.participant_count,
+                          price: Number(session.price_aed),
+                          isLive: session.status === "live",
+                          isRegistered,
+                          paymentPending:
+                            registrations.get(session.id) === "pending",
+                          isHost,
+                          joinOpensAtText,
+                        }}
+                      />
+                    </Link>
+                  );
+                })
               )}
             </TabsContent>
 

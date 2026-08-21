@@ -4,11 +4,14 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { liveSessionsApi } from "@/lib/api/live-sessions";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Loader2 } from "lucide-react";
 
 export default function SessionRoomPage() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
+  const { timezone: viewerTimezone } = useViewerTimezone();
   const params = useParams<{ id: string }>();
   const router = useRouter();
 
@@ -110,6 +113,23 @@ export default function SessionRoomPage() {
     };
   }, [startCall]);
 
+  // Known errors (the API's join-gate messages and our own fallbacks) are
+  // translated here at render rather than in the callbacks: the dictionary
+  // swaps shortly after mount for a stored non-default locale, and having it
+  // in the callbacks' hook deps would tear down and re-join the call.
+  const displayError =
+    error === null
+      ? null
+      : opensAt
+        ? t.liveSessions.joinNotOpenYet
+        : error === "This session has ended"
+          ? t.liveSessions.joinEnded
+          : error === "Failed to join room" ||
+              error === "Failed to join session" ||
+              error === "Could not join the session"
+            ? t.liveSessions.joinFailed
+            : error;
+
   return (
     <div className="flex h-screen flex-col bg-background">
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
@@ -140,14 +160,14 @@ export default function SessionRoomPage() {
             <p className="text-sm text-muted-foreground">{t.common.loading}</p>
           </div>
         )}
-        {error && (
+        {displayError && (
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 bg-background px-6 text-center">
-            <p className="text-destructive text-sm">{error}</p>
+            <p className="text-destructive text-sm">{displayError}</p>
             {opensAt && (
               <p className="text-sm text-muted-foreground">
                 {t.appointments.roomOpensAt.replace(
                   "{time}",
-                  new Date(opensAt).toLocaleString()
+                  `${formatDateInTimezone(opensAt, viewerTimezone, dateLocale)}, ${formatTimeInTimezone(opensAt, viewerTimezone, dateLocale)}`
                 )}
               </p>
             )}

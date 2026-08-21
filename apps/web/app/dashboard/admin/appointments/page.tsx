@@ -39,6 +39,8 @@ import {
   Loader2,
 } from "lucide-react";
 import { adminApi, type AdminAppointment, type AdminDoctorRow } from "@/lib/api/admin";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { joinWindowHintText } from "@/lib/appointment-window";
 
 const STATUS_COLORS: Record<string, string> = {
   confirmed: "bg-blue-100 text-blue-700",
@@ -61,6 +63,9 @@ export default function AdminAppointmentsPage() {
 }
 
 function AdminAppointmentsContent() {
+  // This page is otherwise untranslated; the dictionary is used only for the
+  // join-window hint so its copy stays in step with the other surfaces.
+  const { dictionary: t } = useI18n();
   const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
   const [doctors, setDoctors] = useState<AdminDoctorRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -137,6 +142,7 @@ function AdminAppointmentsContent() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Appointments</h1>
           <p className="text-sm text-muted-foreground">View and manage all appointments across the platform</p>
+          <p className="mt-1 text-xs text-muted-foreground">{joinWindowHintText(t)}</p>
         </div>
         <RefreshButton onRefresh={() => load(true)} />
       </div>

@@ -35,6 +35,13 @@ import {
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { doctorApi, type DoctorAppointment } from "@/lib/api/doctor";
 import { DEFAULT_TIMEZONE, formatDateDisplayDubai, wallClockToInstant } from "@/lib/timezone";
+import {
+  appointmentOpensAt,
+  appointmentStartMs,
+  joinNotYetOpen,
+  joinOpensAtLabel,
+  joinWindowHintText,
+} from "@/lib/appointment-window";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -141,7 +148,7 @@ export default function DoctorAppointmentsPage() {
 
 function DoctorAppointmentsContent() {
   const router = useRouter();
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -219,6 +226,9 @@ function DoctorAppointmentsContent() {
               {t.doctorDashboard.allAppointments}
             </h1>
             <TimezoneNotice timezone={doctorTimezone} variant="compact" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {joinWindowHintText(t)}
+            </p>
           </div>
           <RefreshButton onRefresh={load} />
         </div>
@@ -275,6 +285,22 @@ function DoctorAppointmentsContent() {
               const showStart = apt.status === "pending";
               const showJoin = apt.status === "confirmed";
               const showComplete = apt.status === "confirmed";
+
+              // Announced only while still ahead, in the doctor's own zone
+              // like everything else on this page (rows carry no zone of
+              // their own).
+              const schedulable = { ...apt, timezone: doctorTimezone };
+              const opensAt = showJoin ? appointmentOpensAt(schedulable) : null;
+              const joinOpensText =
+                opensAt && joinNotYetOpen(opensAt)
+                  ? joinOpensAtLabel(
+                      t,
+                      opensAt,
+                      new Date(appointmentStartMs(schedulable)),
+                      doctorTimezone,
+                      dateLocale
+                    )
+                  : null;
 
               const isHighlighted = apt.id === highlightedId;
 
@@ -361,6 +387,11 @@ function DoctorAppointmentsContent() {
                           <FileText className="h-3.5 w-3.5" />
                           {t.doctorDashboard.viewSymptoms}
                         </Button>
+                      )}
+                      {joinOpensText && (
+                        <p className="basis-full text-xs text-muted-foreground">
+                          {joinOpensText}
+                        </p>
                       )}
                     </div>
                   </CardContent>

@@ -419,7 +419,12 @@
     "minSuffix": "د",
     "dash": "—",
     "consultationRoom": "غرفة الاستشارة",
-    "roomOpensAt": "تفتح الغرفة في {time}."
+    "roomOpensAt": "تفتح الغرفة في {time}.",
+    "joinWindowHint": "تفتح غرفة الفيديو قبل {openMinutes} دقيقة من وقت البدء المحدد وتُغلق بعد {closeMinutes} دقيقة من الانتهاء.",
+    "joinOpensAt": "يفتح الانضمام في {time}.",
+    "joinNotOpenYet": "هذه الاستشارة لم تفتح بعد.",
+    "joinEnded": "انتهت هذه الاستشارة.",
+    "joinFailed": "تعذّر الانضمام إلى الاستشارة."
   },
   "patient": {
     "personalInfo": "المعلومات الشخصية",
@@ -647,7 +652,10 @@
     "mySessions": "جلساتي المباشرة",
     "noRegistrations": "لا توجد جلسات مسجّل فيها",
     "joinRoom": "الدخول للغرفة",
-    "paymentConfirmed": "تم تأكيد الدفع — أنت مسجّل!"
+    "paymentConfirmed": "تم تأكيد الدفع — أنت مسجّل!",
+    "joinNotOpenYet": "هذه الجلسة لم تفتح بعد.",
+    "joinEnded": "انتهت هذه الجلسة.",
+    "joinFailed": "تعذّر الانضمام إلى الجلسة."
   },
   "medicalRecords": {
     "title": "السجلات الطبية",
