@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useForm, type SubmitHandler, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,31 +13,36 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { todayInTimezone, wallClockToInstant } from "@/lib/timezone";
 import type { CreateSessionPayload } from "@/lib/api/live-sessions";
 import { Video } from "lucide-react";
 
-const schema = z.object({
-  title: z.string().min(3, "Title must be at least 3 characters"),
-  description: z.string().optional(),
-  scheduled_date: z.string().min(1, "Date is required"),
-  scheduled_time: z.string().min(1, "Time is required"),
-  duration_minutes: z.coerce
-    .number()
-    .int()
-    .min(15, "Minimum 15 minutes")
-    .max(480, "Maximum 8 hours"),
-  max_participants: z.coerce
-    .number()
-    .int()
-    .min(2, "At least 2 participants")
-    .max(500),
-  price_aed: z.coerce.number().min(0, "Price cannot be negative"),
-  is_published: z.boolean(),
-});
+function createLiveSessionSchema(t: Dictionary) {
+  return z.object({
+    title: z.string().min(3, t.validation.titleMin),
+    description: z.string().optional(),
+    scheduled_date: z.string().min(1, t.validation.dateRequired),
+    scheduled_time: z.string().min(1, t.validation.timeRequired),
+    duration_minutes: z.coerce
+      .number()
+      .int()
+      .min(15, t.validation.durationMin)
+      .max(480, t.validation.durationMax),
+    max_participants: z.coerce
+      .number()
+      .int()
+      .min(2, t.validation.participantsMin)
+      .max(500, t.validation.participantsMax),
+    price_aed: z.coerce.number().min(0, t.validation.priceNegative),
+    is_published: z.boolean(),
+  });
+}
 
-export type LiveSessionFormValues = z.infer<typeof schema>;
+export type LiveSessionFormValues = z.infer<
+  ReturnType<typeof createLiveSessionSchema>
+>;
 
 const EMPTY_VALUES: LiveSessionFormValues = {
   title: "",
@@ -72,6 +77,8 @@ export function LiveSessionForm({
   const { dictionary: t } = useI18n();
   const { timezone: viewerTimezone } = useViewerTimezone();
   const [saving, setSaving] = useState(false);
+
+  const schema = useMemo(() => createLiveSessionSchema(t), [t]);
 
   const {
     register,
@@ -127,7 +134,7 @@ export function LiveSessionForm({
             <Label htmlFor="title">{t.liveSessions.sessionTitle} *</Label>
             <Input
               id="title"
-              placeholder="e.g. Child Nutrition Workshop"
+              placeholder={t.liveSessions.sessionTitlePlaceholder}
               {...register("title")}
             />
             {errors.title && (
@@ -141,7 +148,7 @@ export function LiveSessionForm({
             </Label>
             <Textarea
               id="description"
-              placeholder="Describe what participants will learn..."
+              placeholder={t.liveSessions.sessionDescriptionPlaceholder}
               rows={4}
               {...register("description")}
             />
@@ -248,7 +255,7 @@ export function LiveSessionForm({
               </p>
             )}
             <p className="text-xs text-muted-foreground">
-              Set to 0 for a free session
+              {t.liveSessions.sessionPriceHint}
             </p>
           </div>
 

@@ -64,7 +64,7 @@ function CatalogCard({ course, isEnrolled, enrollment }: CatalogCardProps) {
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-base leading-snug">{course.title}</CardTitle>
           <Badge variant={course.is_free ? "secondary" : "default"} className="shrink-0">
-            {course.is_free ? tc.free : `${Number(course.price_aed).toFixed(0)} AED`}
+            {course.is_free ? tc.free : `${Number(course.price_aed).toFixed(0)} ${t.common.aed}`}
           </Badge>
         </div>
         {course.doctors?.full_name && (
@@ -139,7 +139,7 @@ export default function ParentCoursesPage() {
   const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [enrollments, setEnrollments] = useState<CourseEnrollment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -147,7 +147,7 @@ export default function ParentCoursesPage() {
 
   async function loadData() {
     setIsLoading(true);
-    setError(null);
+    setLoadFailed(false);
     try {
       const [courses, myEnrollments] = await Promise.all([
         coursesApi.list(),
@@ -156,7 +156,7 @@ export default function ParentCoursesPage() {
       setAllCourses(courses);
       setEnrollments(myEnrollments);
     } catch {
-      setError("Failed to load courses. Please try again.");
+      setLoadFailed(true);
     } finally {
       setIsLoading(false);
     }
@@ -179,10 +179,10 @@ export default function ParentCoursesPage() {
           <p className="mt-1 text-muted-foreground">{tc.subtitle}</p>
         </div>
 
-        {error && (
+        {loadFailed && (
           <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0" />
-            {error}
+            {tc.loadError}
           </div>
         )}
 
@@ -239,7 +239,7 @@ export default function ParentCoursesPage() {
               <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
                 <CheckCircle className="h-10 w-10 text-primary/40" />
                 <p className="font-medium text-foreground">
-                  You&apos;re enrolled in all available courses!
+                  {tc.allEnrolled}
                 </p>
               </CardContent>
             </Card>

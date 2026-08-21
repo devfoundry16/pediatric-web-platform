@@ -33,6 +33,13 @@ export default function LessonPlayerPage({ params }: PageProps) {
   const { courseId, lessonId } = use(params);
   const { dictionary: t } = useI18n();
   const tc = t.courses;
+  // Loading is triggered from a useCallback keyed on the route params; a ref
+  // keeps the toast/error copy current without retriggering the fetch on
+  // locale change (same pattern as the admin pages).
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const user = useAuthStore((s) => s.user);
@@ -55,7 +62,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
 
       const lesson = courseData.course_lessons.find((l) => l.id === lessonId);
       if (!lesson) {
-        setError("Lesson not found.");
+        setError(tRef.current.courses.lessonNotFound);
         return;
       }
       setCurrentLesson(lesson);
@@ -73,7 +80,8 @@ export default function LessonPlayerPage({ params }: PageProps) {
         setCourseCompleted(true);
       }
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to load lesson.";
+      const message =
+        err instanceof Error ? err.message : tRef.current.courses.loadLessonError;
       setError(message);
     } finally {
       setIsLoading(false);
@@ -97,7 +105,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
         toast.success(tc.lessonCompleted);
       }
     } catch {
-      toast.error("Failed to mark lesson as complete.");
+      toast.error(tc.markCompleteError);
     } finally {
       setIsMarkingComplete(false);
     }
@@ -175,14 +183,14 @@ export default function LessonPlayerPage({ params }: PageProps) {
                   onEnded={handleMarkComplete}
                 >
                   <source src={signedUrl} />
-                  Your browser does not support the video tag.
+                  {tc.videoNotSupported}
                 </video>
               </div>
             ) : (
               <div className="flex aspect-video w-full items-center justify-center rounded-xl bg-muted">
                 <div className="flex flex-col items-center gap-2 text-muted-foreground">
                   <BookOpen className="h-12 w-12" />
-                  <p className="text-sm">No video available for this lesson</p>
+                  <p className="text-sm">{tc.noVideo}</p>
                 </div>
               </div>
             )}

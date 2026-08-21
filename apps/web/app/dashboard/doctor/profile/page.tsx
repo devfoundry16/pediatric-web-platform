@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { DashboardProfile } from "@/components/dashboard/dashboard-profile";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -25,26 +26,30 @@ import { doctorApi, type DoctorProfile } from "@/lib/api/doctor";
 
 // ─── Professional info form ───────────────────────────────────────────────────
 
-const professionalSchema = z.object({
-  specialty: z.string().min(2, "Enter your specialty"),
-  bio: z.string().max(600, "Max 600 characters").optional(),
-  avatar_url: z
-    .string()
-    .url("Enter a valid URL")
-    .optional()
-    .or(z.literal("")),
-  // Notification address, not a login. A doctor can be bookable without an
-  // account, so this is stored on the doctors row rather than read from auth.
-  email: z.email("Enter a valid email").optional().or(z.literal("")),
-});
+function createProfessionalSchema(t: Dictionary) {
+  return z.object({
+    specialty: z.string().min(2, t.validation.specialtyRequired),
+    bio: z.string().max(600, t.validation.bioMax).optional(),
+    avatar_url: z
+      .string()
+      .url(t.validation.urlInvalid)
+      .optional()
+      .or(z.literal("")),
+    // Notification address, not a login. A doctor can be bookable without an
+    // account, so this is stored on the doctors row rather than read from auth.
+    email: z.email(t.validation.emailInvalid).optional().or(z.literal("")),
+  });
+}
 
-type ProfessionalValues = z.infer<typeof professionalSchema>;
+type ProfessionalValues = z.infer<ReturnType<typeof createProfessionalSchema>>;
 
 function ProfessionalInfoCard() {
   const { dictionary: t } = useI18n();
   const d = t.doctorDashboard;
   const [profile, setProfile] = useState<DoctorProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const professionalSchema = useMemo(() => createProfessionalSchema(t), [t]);
 
   const form = useForm<ProfessionalValues>({
     resolver: zodResolver(professionalSchema),
@@ -153,7 +158,7 @@ function ProfessionalInfoCard() {
             <Input
               id="doctor-email"
               type="email"
-              placeholder="doctor@clinic.ae"
+              placeholder={t.doctorDashboard.emailPlaceholder}
               {...form.register("email")}
             />
             <p className="text-xs text-muted-foreground">

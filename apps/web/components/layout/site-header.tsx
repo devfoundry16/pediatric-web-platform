@@ -77,13 +77,13 @@ export function SiteHeader() {
             <SheetTrigger asChild className="md:hidden">
               <Button variant="ghost" size="icon">
                 <Menu className="h-5 w-5" />
-                <span className="sr-only">Toggle menu</span>
+                <span className="sr-only">{t.common.toggleMenu}</span>
               </Button>
             </SheetTrigger>
             <SheetContent side={isRtl ? "right" : "left"}>
               <VisuallyHidden asChild>
                 <SheetHeader>
-                  <SheetTitle>Navigation</SheetTitle>
+                  <SheetTitle>{t.common.navigation}</SheetTitle>
                 </SheetHeader>
               </VisuallyHidden>
               <nav className="flex flex-col gap-4 pt-8">

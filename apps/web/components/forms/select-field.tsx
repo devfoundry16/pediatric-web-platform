@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 export interface SelectOption {
   value: string;
@@ -36,11 +37,13 @@ export function SelectField<T extends FieldValues>({
   control,
   name,
   label,
-  placeholder = "Select…",
+  placeholder,
   options,
   disabled,
   className,
 }: SelectFieldProps<T>) {
+  const { dictionary: t } = useI18n();
+  const resolvedPlaceholder = placeholder ?? t.common.selectPlaceholder;
   return (
     <FormField
       control={control}
@@ -55,7 +58,7 @@ export function SelectField<T extends FieldValues>({
           >
             <FormControl>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder={placeholder} />
+                <SelectValue placeholder={resolvedPlaceholder} />
               </SelectTrigger>
             </FormControl>
             <SelectContent>

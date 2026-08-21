@@ -8,18 +8,21 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, ChevronRight, Baby } from "lucide-react";
 import { adminApi, type ChildProfile } from "@/lib/api/admin";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { getGenderLabel } from "@/lib/i18n/gender";
 
-function calcAge(dob: string): string {
+function calcAge(dob: string, monthsTemplate: string, yearsTemplate: string): string {
   const birth = new Date(dob);
   const now = new Date();
   const years = now.getFullYear() - birth.getFullYear();
   const months = now.getMonth() - birth.getMonth();
   const totalMonths = years * 12 + months;
-  if (totalMonths < 24) return `${totalMonths}mo`;
-  return `${Math.floor(totalMonths / 12)}y`;
+  if (totalMonths < 24) return monthsTemplate.replace("{count}", String(totalMonths));
+  return yearsTemplate.replace("{count}", String(Math.floor(totalMonths / 12)));
 }
 
 export default function AdminPatientsPage() {
+  const { dictionary: t } = useI18n();
   const [patients, setPatients] = useState<ChildProfile[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -42,14 +45,14 @@ export default function AdminPatientsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Patients</h1>
-        <p className="text-sm text-muted-foreground">View child profiles and medical history</p>
+        <h1 className="text-2xl font-bold text-foreground">{t.admin.patients.title}</h1>
+        <p className="text-sm text-muted-foreground">{t.admin.patients.subtitle}</p>
       </div>
 
       <div className="relative max-w-xs">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search by name…"
+          placeholder={t.admin.common.searchByName}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           className="pl-9"
@@ -58,7 +61,7 @@ export default function AdminPatientsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Children ({total})</CardTitle>
+          <CardTitle className="text-base">{t.admin.patients.listTitle.replace("{count}", String(total))}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -68,7 +71,7 @@ export default function AdminPatientsPage() {
           ) : patients.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-center">
               <Baby className="h-8 w-8 text-muted-foreground/40" />
-              <p className="text-sm text-muted-foreground">No patients found.</p>
+              <p className="text-sm text-muted-foreground">{t.admin.patients.empty}</p>
             </div>
           ) : (
             <ul className="divide-y divide-border">
@@ -81,7 +84,7 @@ export default function AdminPatientsPage() {
                     <div>
                       <p className="font-medium text-foreground">{p.first_name} {p.last_name}</p>
                       <p className="text-xs text-muted-foreground">
-                        {p.date_of_birth ? calcAge(p.date_of_birth) : "—"} · {p.gender ?? "—"}
+                        {p.date_of_birth ? calcAge(p.date_of_birth, t.admin.patients.ageMonthsShort, t.admin.patients.ageYearsShort) : "—"} · {getGenderLabel(t, p.gender)}
                       </p>
                     </div>
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -95,10 +98,10 @@ export default function AdminPatientsPage() {
 
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>Page {page} of {totalPages}</span>
+          <span>{t.admin.common.pageOf.replace("{page}", String(page)).replace("{total}", String(totalPages))}</span>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>{t.common.previous}</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>{t.common.next}</Button>
           </div>
         </div>
       )}

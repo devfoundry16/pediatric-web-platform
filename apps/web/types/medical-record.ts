@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 
 // ─── Domain types ─────────────────────────────────────────────────────────────
 
@@ -81,15 +82,19 @@ export const vitalsSchema = z.object({
   oxygen_saturation: z.coerce.number().min(50).max(100).optional().or(z.literal("")),
 });
 
-export const medicalRecordFormSchema = z.object({
-  childId: z.string().min(1, "Select a child"),
-  appointmentId: z.string().optional(),
-  recordType: z.enum(RECORD_TYPES),
-  title: z.string().min(1, "Title is required").max(200),
-  notes: z.string().max(5000).optional(),
-  diagnosis: z.string().max(1000).optional(),
-  prescription: z.string().max(2000).optional(),
-  vitals: vitalsSchema.optional(),
-});
+export function createMedicalRecordFormSchema(t: Dictionary) {
+  return z.object({
+    childId: z.string().min(1, t.validation.selectChild),
+    appointmentId: z.string().optional(),
+    recordType: z.enum(RECORD_TYPES),
+    title: z.string().min(1, t.validation.titleRequired).max(200),
+    notes: z.string().max(5000).optional(),
+    diagnosis: z.string().max(1000).optional(),
+    prescription: z.string().max(2000).optional(),
+    vitals: vitalsSchema.optional(),
+  });
+}
 
-export type MedicalRecordFormValues = z.infer<typeof medicalRecordFormSchema>;
+export type MedicalRecordFormValues = z.infer<
+  ReturnType<typeof createMedicalRecordFormSchema>
+>;

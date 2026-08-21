@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -10,23 +10,26 @@ import { toast } from "sonner";
 import { Eye, EyeOff, Heart, Loader2 } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const schema = z
-  .object({
-    password: z.string().min(8, "Password must be at least 8 characters"),
-    confirmPassword: z.string().min(1, "Please confirm your password"),
-  })
-  .refine((v) => v.password === v.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
-  });
+function createSchema(t: Dictionary) {
+  return z
+    .object({
+      password: z.string().min(8, t.validation.passwordMin8),
+      confirmPassword: z.string().min(1, t.validation.confirmPasswordRequired),
+    })
+    .refine((v) => v.password === v.confirmPassword, {
+      message: t.validation.passwordsMismatch,
+      path: ["confirmPassword"],
+    });
+}
 
-type FormValues = z.infer<typeof schema>;
+type FormValues = z.infer<ReturnType<typeof createSchema>>;
 
 export default function ResetPasswordPage() {
   const { dictionary: t } = useI18n();
@@ -47,6 +50,8 @@ export default function ResetPasswordPage() {
       setChecking(false);
     });
   }, []);
+
+  const schema = useMemo(() => createSchema(t), [t]);
 
   const {
     register,

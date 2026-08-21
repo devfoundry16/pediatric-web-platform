@@ -38,6 +38,9 @@ interface SessionCardProps {
     paymentPending?: boolean;
     /** Viewer is the doctor hosting this session. */
     isHost?: boolean;
+    /** Preformatted "Join opens at {time}." line, passed only while the join
+     *  window is still ahead for a viewer with a join CTA. */
+    joinOpensAtText?: string;
   };
 }
 
@@ -186,6 +189,12 @@ export function SessionCard({ session }: SessionCardProps) {
             </>
           )}
         </div>
+
+        {session.joinOpensAtText && (
+          <p className="text-xs text-muted-foreground">
+            {session.joinOpensAtText}
+          </p>
+        )}
       </CardContent>
     </Card>
   );

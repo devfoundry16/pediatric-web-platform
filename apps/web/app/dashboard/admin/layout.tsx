@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button";
 import { AdminSidebar } from "@/components/dashboard/admin-sidebar";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Menu, Heart } from "lucide-react";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { dictionary: t } = useI18n();
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -25,13 +27,13 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
                 <Menu className="h-5 w-5" />
-                <span className="sr-only">Toggle sidebar</span>
+                <span className="sr-only">{t.admin.nav.toggleSidebar}</span>
               </Button>
             </SheetTrigger>
             <SheetContent aria-describedby={undefined} side="left" className="w-64 p-0">
               <VisuallyHidden asChild>
                 <SheetHeader>
-                  <SheetTitle>Admin Navigation</SheetTitle>
+                  <SheetTitle>{t.admin.nav.navigationLabel}</SheetTitle>
                 </SheetHeader>
               </VisuallyHidden>
               <AdminSidebar />
@@ -41,7 +43,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
               <Heart className="h-3.5 w-3.5 text-primary-foreground" />
             </div>
-            <span className="font-bold text-foreground">LittleCare Admin</span>
+            <span className="font-bold text-foreground">{t.admin.nav.brandAdmin}</span>
           </Link>
         </header>
 

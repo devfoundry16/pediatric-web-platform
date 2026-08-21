@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,13 +17,31 @@ import { toast } from "sonner";
 import { adminApi, type AdminDoctorRow, type DoctorScheduleSlot } from "@/lib/api/admin";
 import { TimezoneSelect } from "@/components/ui/timezone-select";
 import { DEFAULT_TIMEZONE } from "@/lib/timezone";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
-const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+/** Weekday dictionary keys, indexed by day_of_week (0 = Sunday). */
+const DAY_KEYS = [
+  "sunday",
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+] as const;
 
 /** Postgres returns TIME as "09:00:00"; <input type="time"> wants "09:00". */
 const toHHMM = (time: string) => (time ?? "").slice(0, 5);
 
 export default function AdminAvailabilityPage() {
+  const { dictionary: t } = useI18n();
+  // The data effects below must not re-run when the locale changes (that would
+  // refetch and wipe in-progress edits), so they read their toast copy through
+  // a ref that always holds the current dictionary.
+  const tRef = useRef(t);
+  useEffect(() => {
+    tRef.current = t;
+  });
   const [doctors, setDoctors] = useState<AdminDoctorRow[]>([]);
   const [selectedDoctorId, setSelectedDoctorId] = useState<string>("");
   const [schedule, setSchedule] = useState<DoctorScheduleSlot[]>([]);
@@ -41,7 +59,7 @@ export default function AdminAvailabilityPage() {
   useEffect(() => {
     adminApi.listDoctors()
       .then(({ doctors: d }) => { setDoctors(d); if (d.length > 0) setSelectedDoctorId(d[0].id); })
-      .catch(() => toast.error("Could not load doctors"))
+      .catch(() => toast.error(tRef.current.admin.common.loadDoctorsError))
       .finally(() => setLoadingDoctors(false));
   }, []);
 
@@ -72,7 +90,7 @@ export default function AdminAvailabilityPage() {
         setHolidays(h);
         if (tz) setTimezone(tz);
       })
-      .catch(() => { if (!cancelled) toast.error("Could not load availability"); })
+      .catch(() => { if (!cancelled) toast.error(tRef.current.admin.availability.loadError); })
       .finally(() => { if (!cancelled) setLoadingData(false); });
 
     return () => { cancelled = true; };
@@ -82,16 +100,16 @@ export default function AdminAvailabilityPage() {
     if (!selectedDoctorId) return;
 
     if (schedule.some((s) => s.start_time >= s.end_time)) {
-      toast.error("End time must be after start time");
+      toast.error(t.doctorDashboard.endBeforeStart);
       return;
     }
 
     setIsSaving(true);
     try {
       await adminApi.updateDoctorSchedule(selectedDoctorId, schedule.map(({ day_of_week, start_time, end_time, is_active }) => ({ day_of_week, start_time, end_time, is_active })));
-      toast.success("Working hours saved");
+      toast.success(t.doctorDashboard.scheduleSaved);
     } catch {
-      toast.error("Could not save working hours");
+      toast.error(t.admin.availability.saveError);
     } finally {
       setIsSaving(false);
     }
@@ -104,10 +122,10 @@ export default function AdminAvailabilityPage() {
     setIsSavingTimezone(true);
     try {
       await adminApi.updateDoctor(selectedDoctorId, { timezone: next });
-      toast.success("Timezone saved");
+      toast.success(t.doctorDashboard.timezoneSaved);
     } catch {
       setTimezone(previous);
-      toast.error("Could not save timezone");
+      toast.error(t.admin.availability.timezoneError);
     } finally {
       setIsSavingTimezone(false);
     }
@@ -133,9 +151,9 @@ export default function AdminAvailabilityPage() {
       setHolidays(h);
       setNewHolidayDate("");
       setNewHolidayReason("");
-      toast.success("Date blocked");
+      toast.success(t.doctorDashboard.holidayAdded);
     } catch {
-      toast.error("Could not block that date");
+      toast.error(t.admin.availability.blockError);
     }
   };
 
@@ -143,17 +161,17 @@ export default function AdminAvailabilityPage() {
     try {
       await adminApi.deleteDoctorHoliday(id);
       setHolidays((prev) => prev.filter((h) => h.id !== id));
-      toast.success("Date unblocked");
+      toast.success(t.doctorDashboard.holidayRemoved);
     } catch {
-      toast.error("Could not unblock that date");
+      toast.error(t.admin.availability.unblockError);
     }
   };
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Doctor Availability</h1>
-        <p className="text-sm text-muted-foreground">Manage working hours, slots, and blocked dates</p>
+        <h1 className="text-2xl font-bold text-foreground">{t.admin.availability.title}</h1>
+        <p className="text-sm text-muted-foreground">{t.admin.availability.subtitle}</p>
       </div>
 
       {/* Doctor selector */}
@@ -162,7 +180,7 @@ export default function AdminAvailabilityPage() {
       ) : (
         <Select value={selectedDoctorId} onValueChange={setSelectedDoctorId}>
           <SelectTrigger className="w-64">
-            <SelectValue placeholder="Select doctor" />
+            <SelectValue placeholder={t.admin.availability.selectDoctor} />
           </SelectTrigger>
           <SelectContent>
             {doctors.map((d) => (
@@ -177,9 +195,9 @@ export default function AdminAvailabilityPage() {
           {/* Schedule */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-3">
-              <CardTitle className="text-base">Working Hours</CardTitle>
+              <CardTitle className="text-base">{t.doctorDashboard.workingHours}</CardTitle>
               <Button variant="outline" size="sm" className="gap-1.5" onClick={addSlot}>
-                <Plus className="h-4 w-4" /> Add slot
+                <Plus className="h-4 w-4" /> {t.admin.availability.addSlot}
               </Button>
             </CardHeader>
             <CardContent>
@@ -187,7 +205,7 @@ export default function AdminAvailabilityPage() {
                   deleted and reinserted wholesale on save. */}
               <div className="mb-4 flex flex-col gap-1.5 rounded-lg border border-dashed border-border p-3">
                 <label htmlFor="doctor-timezone" className="text-sm font-medium text-foreground">
-                  Timezone
+                  {t.doctorDashboard.timezoneLabel}
                 </label>
                 <TimezoneSelect
                   id="doctor-timezone"
@@ -196,7 +214,7 @@ export default function AdminAvailabilityPage() {
                   disabled={loadingData || isSavingTimezone}
                 />
                 <p className="text-xs text-muted-foreground">
-                  The working hours below are in this timezone. Patients see them converted to their own.
+                  {t.admin.availability.timezoneHint}
                 </p>
               </div>
 
@@ -205,7 +223,7 @@ export default function AdminAvailabilityPage() {
                   {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
                 </div>
               ) : schedule.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No working hours set. Add a slot above.</p>
+                <p className="text-sm text-muted-foreground">{t.admin.availability.noSlots}</p>
               ) : (
                 <div className="flex flex-col gap-3">
                   {schedule.map((slot, idx) => (
@@ -218,8 +236,8 @@ export default function AdminAvailabilityPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {DAYS.map((d, i) => (
-                            <SelectItem key={i} value={String(i)}>{d}</SelectItem>
+                          {DAY_KEYS.map((key, i) => (
+                            <SelectItem key={i} value={String(i)}>{t.doctorDashboard[key]}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -240,7 +258,7 @@ export default function AdminAvailabilityPage() {
                         onClick={() => updateSlot(idx, "is_active", !slot.is_active)}
                         className={`rounded-full px-2 py-0.5 text-xs font-medium transition-colors ${slot.is_active ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}
                       >
-                        {slot.is_active ? "Active" : "Off"}
+                        {slot.is_active ? t.admin.common.active : t.admin.common.off}
                       </button>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeSlot(idx)}>
                         <Trash2 className="h-4 w-4" />
@@ -251,7 +269,7 @@ export default function AdminAvailabilityPage() {
               )}
               <Button className="mt-4 gap-2" onClick={handleSaveSchedule} disabled={isSaving}>
                 {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                Save schedule
+                {t.admin.availability.saveSchedule}
               </Button>
             </CardContent>
           </Card>
@@ -259,7 +277,7 @@ export default function AdminAvailabilityPage() {
           {/* Holidays / blocked dates */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Blocked Dates & Holidays</CardTitle>
+              <CardTitle className="text-base">{t.admin.availability.holidaysTitle}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               {/* Add new */}
@@ -271,13 +289,13 @@ export default function AdminAvailabilityPage() {
                   className="w-40"
                 />
                 <Input
-                  placeholder="Reason (optional)"
+                  placeholder={t.doctorDashboard.holidayReason}
                   value={newHolidayReason}
                   onChange={(e) => setNewHolidayReason(e.target.value)}
                   className="flex-1 min-w-32"
                 />
                 <Button size="sm" className="gap-1.5" onClick={addHoliday} disabled={!newHolidayDate}>
-                  <Plus className="h-4 w-4" /> Add
+                  <Plus className="h-4 w-4" /> {t.admin.availability.add}
                 </Button>
               </div>
 
@@ -286,7 +304,7 @@ export default function AdminAvailabilityPage() {
                   {[1, 2].map((i) => <Skeleton key={i} className="h-10 w-full" />)}
                 </div>
               ) : holidays.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No blocked dates.</p>
+                <p className="text-sm text-muted-foreground">{t.admin.availability.noBlockedDates}</p>
               ) : (
                 <ul className="flex flex-col gap-2">
                   {holidays.map((h) => (

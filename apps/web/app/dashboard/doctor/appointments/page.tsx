@@ -34,16 +34,22 @@ import {
 } from "lucide-react";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { doctorApi, type DoctorAppointment } from "@/lib/api/doctor";
-import { DEFAULT_TIMEZONE, formatDateDisplayDubai, wallClockToInstant } from "@/lib/timezone";
+import {
+  DEFAULT_TIMEZONE,
+  formatStoredAppointment,
+  wallClockToInstant,
+} from "@/lib/timezone";
+import {
+  appointmentOpensAt,
+  appointmentStartMs,
+  joinNotYetOpen,
+  joinOpensAtLabel,
+  joinWindowHintText,
+} from "@/lib/appointment-window";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
+import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatTime(time: string): string {
-  const [h, m] = time.split(":").map(Number);
-  const suffix = h >= 12 ? "PM" : "AM";
-  const hour = h % 12 || 12;
-  return `${hour}:${String(m).padStart(2, "0")} ${suffix}`;
-}
 
 type FilterTab = "all" | "today" | "upcoming" | "completed" | "cancelled";
 
@@ -66,37 +72,41 @@ function isUnderway(
   return now >= start.getTime() && now <= end;
 }
 
-function getStatusBadge(apt: DoctorAppointment, timezone: string): {
+function getStatusBadge(
+  t: Dictionary,
+  apt: DoctorAppointment,
+  timezone: string
+): {
   label: string;
   variant: "default" | "secondary" | "destructive" | "outline";
   className: string;
 } {
   if (apt.status === "completed")
     return {
-      label: "Completed",
+      label: t.doctorDashboard.statusCompleted,
       variant: "secondary",
       className: "bg-gray-100 text-gray-700",
     };
   if (apt.status === "cancelled")
     return {
-      label: "Cancelled",
+      label: t.doctorDashboard.statusCancelled,
       variant: "destructive",
       className: "bg-red-100 text-red-700",
     };
   if (apt.status === "confirmed" && isUnderway(apt, timezone))
     return {
-      label: "In Progress",
+      label: t.doctorDashboard.statusInProgress,
       variant: "default",
       className: "bg-green-100 text-green-800",
     };
   if (apt.status === "confirmed")
     return {
-      label: "Confirmed",
+      label: t.appointments.statusConfirmed,
       variant: "default",
       className: "bg-blue-100 text-blue-800",
     };
   return {
-    label: "Pending",
+    label: t.doctorDashboard.statusPending,
     variant: "outline",
     className: "bg-yellow-50 text-yellow-800",
   };
@@ -141,7 +151,7 @@ export default function DoctorAppointmentsPage() {
 
 function DoctorAppointmentsContent() {
   const router = useRouter();
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const [appointments, setAppointments] = useState<DoctorAppointment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -219,6 +229,9 @@ function DoctorAppointmentsContent() {
               {t.doctorDashboard.allAppointments}
             </h1>
             <TimezoneNotice timezone={doctorTimezone} variant="compact" />
+            <p className="mt-1 text-xs text-muted-foreground">
+              {joinWindowHintText(t)}
+            </p>
           </div>
           <RefreshButton onRefresh={load} />
         </div>
@@ -265,16 +278,39 @@ function DoctorAppointmentsContent() {
         ) : (
           <div className="flex flex-col gap-4">
             {visible.map((apt) => {
-              const badge = getStatusBadge(apt, doctorTimezone);
+              const badge = getStatusBadge(t, apt, doctorTimezone);
+              const shownAt = formatStoredAppointment(
+                apt.scheduled_date,
+                apt.scheduled_time,
+                doctorTimezone,
+                doctorTimezone,
+                dateLocale
+              );
               const childName = apt.child_profiles
                 ? `${apt.child_profiles.first_name} ${apt.child_profiles.last_name}`
-                : "—";
+                : t.appointments.dash;
               // Start confirms a pending booking; a confirmed one is simply
               // joined. Neither depends on meeting_url any more, which is
               // filled in asynchronously once the booking is confirmed.
               const showStart = apt.status === "pending";
               const showJoin = apt.status === "confirmed";
               const showComplete = apt.status === "confirmed";
+
+              // Announced only while still ahead, in the doctor's own zone
+              // like everything else on this page (rows carry no zone of
+              // their own).
+              const schedulable = { ...apt, timezone: doctorTimezone };
+              const opensAt = showJoin ? appointmentOpensAt(schedulable) : null;
+              const joinOpensText =
+                opensAt && joinNotYetOpen(opensAt)
+                  ? joinOpensAtLabel(
+                      t,
+                      opensAt,
+                      new Date(appointmentStartMs(schedulable)),
+                      doctorTimezone,
+                      dateLocale
+                    )
+                  : null;
 
               const isHighlighted = apt.id === highlightedId;
 
@@ -292,20 +328,20 @@ function DoctorAppointmentsContent() {
                           {childName}
                         </span>
                         <span className="text-sm text-muted-foreground">
-                          &middot; {apt.parent_name ?? "—"}
+                          &middot; {apt.parent_name ?? t.appointments.dash}
                         </span>
                       </div>
                       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                        <span>{formatDateDisplayDubai(apt.scheduled_date)}</span>
+                        <span>{shownAt.date}</span>
                         <span className="flex items-center gap-1">
                           <Clock className="h-3.5 w-3.5" />
-                          {formatTime(apt.scheduled_time)}
+                          {shownAt.time}
                         </span>
                         <span>
                           {apt.duration_minutes} {t.common.minutes}
                         </span>
-                        <Badge variant="secondary" className="text-xs capitalize">
-                          {apt.consultation_type}
+                        <Badge variant="secondary" className="text-xs">
+                          {getConsultationTypeLabel(t, apt.consultation_type)}
                         </Badge>
                       </div>
                     </div>
@@ -361,6 +397,11 @@ function DoctorAppointmentsContent() {
                           <FileText className="h-3.5 w-3.5" />
                           {t.doctorDashboard.viewSymptoms}
                         </Button>
+                      )}
+                      {joinOpensText && (
+                        <p className="basis-full text-xs text-muted-foreground">
+                          {joinOpensText}
+                        </p>
                       )}
                     </div>
                   </CardContent>

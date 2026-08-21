@@ -22,10 +22,16 @@ import { getAppointmentStatusLabel } from "@/lib/i18n/appointment-status";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { DEFAULT_TIMEZONE, formatStoredAppointment } from "@/lib/timezone";
-import { appointmentStartMs, isUpcomingAppointment } from "@/lib/appointment-window";
+import {
+  appointmentOpensAt,
+  appointmentStartMs,
+  isUpcomingAppointment,
+  joinNotYetOpen,
+  joinOpensAtLabel,
+} from "@/lib/appointment-window";
 
 export function UpcomingAppointments() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const router = useRouter();
   const { timezone: viewerTimezone } = useViewerTimezone(DEFAULT_TIMEZONE);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
@@ -103,8 +109,25 @@ export function UpcomingAppointments() {
               appt.scheduled_date,
               appt.scheduled_time,
               appt.timezone ?? DEFAULT_TIMEZONE,
-              viewerTimezone
+              viewerTimezone,
+              dateLocale
             );
+
+            // Announced only while still ahead — once the window is open the
+            // Join button speaks for itself.
+            const opensAt = appointmentOpensAt(appt);
+            const joinOpensText =
+              appt.status === "confirmed" &&
+              opensAt &&
+              joinNotYetOpen(opensAt)
+                ? joinOpensAtLabel(
+                    t,
+                    opensAt,
+                    new Date(appointmentStartMs(appt)),
+                    viewerTimezone,
+                    dateLocale
+                  )
+                : null;
 
             return (
               <div
@@ -127,25 +150,32 @@ export function UpcomingAppointments() {
                     <TimezoneNotice timezone={viewerTimezone} variant="compact" />
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Badge
-                    variant={
-                      appt.status === "confirmed" ? "default" : "secondary"
-                    }
-                  >
-                    {getAppointmentStatusLabel(t, appt.status)}
-                  </Badge>
-                  {/* Status alone — see the appointments list for why. */}
-                  {appt.status === "confirmed" && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5 bg-transparent"
-                      onClick={() => handleJoin(appt.id)}
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant={
+                        appt.status === "confirmed" ? "default" : "secondary"
+                      }
                     >
-                      <Video className="h-3.5 w-3.5" />
-                      {t.appointments.join}
-                    </Button>
+                      {getAppointmentStatusLabel(t, appt.status)}
+                    </Badge>
+                    {/* Status alone — see the appointments list for why. */}
+                    {appt.status === "confirmed" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 bg-transparent"
+                        onClick={() => handleJoin(appt.id)}
+                      >
+                        <Video className="h-3.5 w-3.5" />
+                        {t.appointments.join}
+                      </Button>
+                    )}
+                  </div>
+                  {joinOpensText && (
+                    <p className="text-xs text-muted-foreground">
+                      {joinOpensText}
+                    </p>
                   )}
                 </div>
               </div>

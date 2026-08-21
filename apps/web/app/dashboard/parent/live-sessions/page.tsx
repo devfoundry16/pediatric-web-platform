@@ -12,7 +12,6 @@ import { useI18n } from "@/lib/i18n/i18n-context";
 import {
   liveSessionsApi,
   isConfirmedRegistration,
-  type GroupSession,
   type SessionRegistration,
 } from "@/lib/api/live-sessions";
 import { toast } from "sonner";
@@ -27,26 +26,19 @@ import {
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
-
-// A session the doctor never started stays 'scheduled' forever, so the status
-// alone would keep offering Join long after the slot passed — the join
-// endpoint rejects it anyway. Same end-of-slot semantics as the session detail
-// page; the server still owns the join window, this only stops advertising
-// dead sessions.
-function sessionHasFinished(session: GroupSession): boolean {
-  return (
-    Date.now() >
-    new Date(session.scheduled_at).getTime() +
-      session.duration_minutes * 60_000
-  );
-}
+import { sessionJoinClosed, sessionOpensAt } from "@/lib/session-window";
+import {
+  joinNotYetOpen,
+  joinOpensAtLabel,
+  joinWindowHintText,
+} from "@/lib/appointment-window";
 
 function RegistrationCard({
   reg,
 }: {
   reg: SessionRegistration;
 }) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const router = useRouter();
   // scheduled_at is a real instant (TIMESTAMPTZ) — format it with an explicit
   // zone rather than relying on the runtime default and labelling it GST.
@@ -61,7 +53,22 @@ function RegistrationCard({
   // Only a confirmed place gets into the room — the join endpoint rejects
   // anything else with a 403, so offering the button would be a dead end.
   const isConfirmed = isConfirmedRegistration(reg.payment_status);
-  const hasFinished = sessionHasFinished(session);
+  // A session the doctor never started stays 'scheduled' forever, so the
+  // status alone would keep offering Join long after the slot passed. Gate on
+  // the same window the join endpoint enforces, grace period included.
+  const joinClosed = sessionJoinClosed(session);
+  const showJoin =
+    (isLive || (session.status === "scheduled" && !joinClosed)) && isConfirmed;
+  // Announced only while still ahead — once the window is open the Join
+  // button speaks for itself.
+  const opensAt = sessionOpensAt(session);
+  const joinOpensText =
+    showJoin &&
+    session.status === "scheduled" &&
+    opensAt &&
+    joinNotYetOpen(opensAt)
+      ? joinOpensAtLabel(t, opensAt, scheduledDate, viewerTimezone, dateLocale)
+      : null;
 
   return (
     <Card className="transition-all hover:shadow-md">
@@ -110,11 +117,11 @@ function RegistrationCard({
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <CalendarDays className="h-3.5 w-3.5" />
-                {formatDateInTimezone(scheduledDate, viewerTimezone)}
+                {formatDateInTimezone(scheduledDate, viewerTimezone, dateLocale)}
               </span>
               <span className="flex items-center gap-x-1 gap-y-0.5 flex-wrap">
                 <Clock className="h-3.5 w-3.5" />
-                {formatTimeInTimezone(scheduledDate, viewerTimezone)}{" "}
+                {formatTimeInTimezone(scheduledDate, viewerTimezone, dateLocale)}{" "}
                 · {session.duration_minutes} {t.common.minutes}
                 <TimezoneNotice timezone={viewerTimezone} variant="compact" />
               </span>
@@ -127,19 +134,18 @@ function RegistrationCard({
 
           <div className="flex items-center gap-2 flex-wrap">
             {/* Live keeps Join regardless of the clock (overrun grace). */}
-            {(isLive || (session.status === "scheduled" && !hasFinished)) &&
-              isConfirmed && (
-                <Button
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() =>
-                    router.push(`/live-sessions/${session.id}/room`)
-                  }
-                >
-                  <Radio className="h-3.5 w-3.5" />
-                  {t.liveSessions.joinRoom}
-                </Button>
-              )}
+            {showJoin && (
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() =>
+                  router.push(`/live-sessions/${session.id}/room`)
+                }
+              >
+                <Radio className="h-3.5 w-3.5" />
+                {t.liveSessions.joinRoom}
+              </Button>
+            )}
 
             {reg.payment_status === "pending" && !isEnded && (
               <Button size="sm" variant="outline" className="gap-1.5" asChild>
@@ -167,6 +173,12 @@ function RegistrationCard({
                 <ExternalLink className="h-3.5 w-3.5" />
               </Link>
             </Button>
+
+            {joinOpensText && (
+              <p className="basis-full text-xs text-muted-foreground">
+                {joinOpensText}
+              </p>
+            )}
           </div>
         </div>
       </CardContent>
@@ -231,6 +243,9 @@ export default function ParentLiveSessionsPage() {
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {t.liveSessions.subtitle}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {joinWindowHintText(t)}
             </p>
           </div>
           <Button asChild variant="outline" className="gap-2">

@@ -21,6 +21,12 @@ import {
   todayInTimezone,
   wallClockToInstant,
 } from "@/lib/timezone";
+import { sessionOpensAt } from "@/lib/session-window";
+import {
+  joinNotYetOpen,
+  joinOpensAtLabel,
+  joinWindowHintText,
+} from "@/lib/appointment-window";
 import { toast } from "sonner";
 import {
   Video,
@@ -205,7 +211,7 @@ function SessionRow({
   onReschedule: (id: string, scheduledAt: string) => Promise<void>;
   onCancel: (id: string) => Promise<void>;
 }) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const router = useRouter();
   const [actionLoading, setActionLoading] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
@@ -223,6 +229,17 @@ function SessionRow({
   // zone rather than relying on the runtime default.
   const { timezone: viewerTimezone } = useViewerTimezone();
   const scheduledDate = new Date(session.scheduled_at);
+
+  // Announced only next to a Join button that exists (published, scheduled)
+  // and only while the window is still ahead.
+  const opensAt = sessionOpensAt(session);
+  const joinOpensText =
+    session.is_published &&
+    session.status === "scheduled" &&
+    opensAt &&
+    joinNotYetOpen(opensAt)
+      ? joinOpensAtLabel(t, opensAt, scheduledDate, viewerTimezone, dateLocale)
+      : null;
 
   async function handleEnd() {
     setActionLoading(true);
@@ -254,7 +271,7 @@ function SessionRow({
               {statusBadge(session.status, t)}
               {!session.is_published && (
                 <Badge variant="outline" className="text-xs border-amber-400 text-amber-600 bg-amber-50 dark:bg-amber-950/30">
-                  Draft
+                  {t.liveSessions.statusDraft}
                 </Badge>
               )}
               {session.is_free ? (
@@ -271,11 +288,11 @@ function SessionRow({
             <div className="mt-2 flex flex-wrap gap-3 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <CalendarDays className="h-3.5 w-3.5" />
-                {formatDateInTimezone(scheduledDate, viewerTimezone)}
+                {formatDateInTimezone(scheduledDate, viewerTimezone, dateLocale)}
               </span>
               <span className="flex flex-wrap items-center gap-x-1 gap-y-0.5">
                 <Clock className="h-3.5 w-3.5" />
-                {formatTimeInTimezone(scheduledDate, viewerTimezone)}{" "}
+                {formatTimeInTimezone(scheduledDate, viewerTimezone, dateLocale)}{" "}
                 · {session.duration_minutes} {t.common.minutes}
                 <TimezoneNotice timezone={viewerTimezone} variant="compact" />
               </span>
@@ -295,7 +312,7 @@ function SessionRow({
                 disabled={actionLoading}
                 onClick={handlePublish}
               >
-                Publish
+                {t.liveSessions.publish}
               </Button>
             )}
 
@@ -428,6 +445,12 @@ function SessionRow({
                 </AlertDialogContent>
               </AlertDialog>
             )}
+
+            {joinOpensText && (
+              <p className="basis-full text-xs text-muted-foreground">
+                {joinOpensText}
+              </p>
+            )}
           </div>
         </div>
       </CardContent>
@@ -463,7 +486,7 @@ export default function DoctorLiveSessionsPage() {
       );
       toast.success(t.liveSessions.statusEnded);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to end session";
+      const msg = err instanceof Error ? err.message : t.liveSessions.endFailed;
       toast.error(msg);
     }
   }
@@ -479,7 +502,7 @@ export default function DoctorLiveSessionsPage() {
       toast.success(t.liveSessions.sessionRescheduled);
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "Failed to reschedule session";
+        err instanceof Error ? err.message : t.liveSessions.rescheduleFailed;
       toast.error(msg);
     }
   }
@@ -496,7 +519,7 @@ export default function DoctorLiveSessionsPage() {
       toast.success(t.liveSessions.sessionCancelled);
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "Failed to cancel session";
+        err instanceof Error ? err.message : t.liveSessions.cancelFailed;
       toast.error(msg);
     }
   }
@@ -509,10 +532,10 @@ export default function DoctorLiveSessionsPage() {
       setSessions((prev) =>
         prev.map((s) => (s.id === id ? { ...s, ...session } : s))
       );
-      toast.success("Session published — parents can now see it");
+      toast.success(t.liveSessions.sessionPublished);
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "Failed to publish session";
+        err instanceof Error ? err.message : t.liveSessions.publishFailed;
       toast.error(msg);
     }
   }
@@ -534,6 +557,9 @@ export default function DoctorLiveSessionsPage() {
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {t.liveSessions.subtitle}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {joinWindowHintText(t)}
             </p>
           </div>
           <div className="flex items-center gap-1">

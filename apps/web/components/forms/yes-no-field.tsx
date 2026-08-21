@@ -13,6 +13,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n/i18n-context";
 
 interface YesNoFieldProps<T extends FieldValues> {
   control: Control<T>;
@@ -32,10 +33,11 @@ export function YesNoField<T extends FieldValues>({
   namePresent,
   nameDetails,
   label,
-  detailsLabel = "Details",
+  detailsLabel,
   detailsPlaceholder,
   className,
 }: YesNoFieldProps<T>) {
+  const { dictionary: t } = useI18n();
   const present = useWatch({ control, name: namePresent });
 
   return (
@@ -67,7 +69,7 @@ export function YesNoField<T extends FieldValues>({
                     htmlFor={`${String(namePresent)}-yes`}
                     className="font-normal"
                   >
-                    Yes
+                    {t.childForm.yes}
                   </Label>
                 </div>
                 <div className="flex items-center gap-2">
@@ -76,7 +78,7 @@ export function YesNoField<T extends FieldValues>({
                     htmlFor={`${String(namePresent)}-no`}
                     className="font-normal"
                   >
-                    No
+                    {t.childForm.no}
                   </Label>
                 </div>
               </RadioGroup>
@@ -92,7 +94,7 @@ export function YesNoField<T extends FieldValues>({
           name={nameDetails}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{detailsLabel}</FormLabel>
+              <FormLabel>{detailsLabel ?? t.common.details}</FormLabel>
               <FormControl>
                 <Textarea
                   placeholder={detailsPlaceholder}

@@ -26,7 +26,7 @@ interface StepReviewProps {
 }
 
 export function StepReview({ bookingData }: StepReviewProps) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
 
   // The slot grid showed the visitor their own time; showing the doctor-local
   // wall clock here instead would look like the booking silently moved.
@@ -37,7 +37,8 @@ export function StepReview({ bookingData }: StepReviewProps) {
           bookingData.date,
           bookingData.time,
           bookingData.doctorTimezone,
-          viewerTimezone
+          viewerTimezone,
+          dateLocale
         )
       : null;
   const type = CONSULTATION_TYPES.find((c) => c.id === bookingData.typeId);
@@ -164,9 +165,12 @@ export function StepReview({ bookingData }: StepReviewProps) {
             <div className="flex items-center gap-2 rounded-lg bg-green-50 px-4 py-3 text-sm text-green-700 dark:bg-green-950/30 dark:text-green-400">
               <Ticket className="h-4 w-4 shrink-0" />
               <span>
-                1 credit will be deducted from your{" "}
+                {t.booking.packageCreditPrefix}{" "}
                 <strong>{matchingPackage.consultation_packages.name}</strong>{" "}
-                ({matchingPackage.credits_remaining} remaining)
+                {t.booking.packageCreditRemaining.replace(
+                  "{count}",
+                  String(matchingPackage.credits_remaining)
+                )}
               </span>
             </div>
           )}
@@ -175,14 +179,14 @@ export function StepReview({ bookingData }: StepReviewProps) {
             <div className="flex items-center gap-2 rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:bg-amber-950/30 dark:text-amber-400">
               <CreditCard className="h-4 w-4 shrink-0" />
               <span>
-                No active package — full price applies.{" "}
+                {t.booking.noPackageNotice}{" "}
                 <a
                   href="/dashboard/parent/packages"
                   className="underline underline-offset-2 hover:no-underline"
                 >
-                  Browse packages
+                  {t.booking.browsePackagesLink}
                 </a>{" "}
-                to save on future sessions.
+                {t.booking.browsePackagesSuffix}
               </span>
             </div>
           )}

@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { packagesApi } from "@/lib/api/packages";
 import type { ConsultationPackage, UserPackage, PackageUsageLog } from "@/types/packages";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 
 const PACKAGE_ICONS: Record<string, typeof Package> = {
   monthly_followup: CalendarDays,
@@ -46,15 +48,18 @@ const STATUS_VARIANTS: Record<
   cancelled: "destructive",
 };
 
-const STATUS_LABELS: Record<UserPackage["status"], string> = {
-  active: "Active",
-  expired: "Expired",
-  exhausted: "Used up",
-  cancelled: "Cancelled",
-};
+function statusLabel(t: Dictionary, status: UserPackage["status"]): string {
+  const map: Record<UserPackage["status"], string> = {
+    active: t.packages.statusActive,
+    expired: t.packages.statusExpired,
+    exhausted: t.packages.statusExhausted,
+    cancelled: t.packages.statusCancelled,
+  };
+  return map[status] ?? status;
+}
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-AE", {
+function formatDate(iso: string, locale: string) {
+  return new Date(iso).toLocaleDateString(locale, {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -75,6 +80,7 @@ interface PackageCardProps {
 }
 
 function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
+  const { dictionary: t } = useI18n();
   const Icon = PACKAGE_ICONS[pkg.slug] ?? Package;
   const isEmergency = pkg.slug === "emergency_priority";
   const [quantity, setQuantity] = useState(1);
@@ -84,7 +90,7 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
     <Card className="relative flex flex-col overflow-hidden transition-shadow hover:shadow-md">
       {isEmergency && (
         <div className="absolute right-0 top-0 rounded-bl-lg bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white">
-          Priority
+          {t.landing.priorityBadge}
         </div>
       )}
       <CardHeader className="pb-3">
@@ -103,38 +109,52 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
         <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted p-3 text-center text-sm">
           <div>
             <p className="font-semibold text-foreground">{pkg.sessions}</p>
-            <p className="text-xs text-muted-foreground">Sessions</p>
+            <p className="text-xs text-muted-foreground">{t.packages.sessionsLabel}</p>
           </div>
           <div>
-            <p className="font-semibold text-foreground">{pkg.duration_minutes} min</p>
-            <p className="text-xs text-muted-foreground">Each</p>
+            <p className="font-semibold text-foreground">
+              {pkg.duration_minutes} {t.appointments.minSuffix}
+            </p>
+            <p className="text-xs text-muted-foreground">{t.packages.eachLabel}</p>
           </div>
           <div>
-            <p className="font-semibold text-foreground">{pkg.validity_days}d</p>
-            <p className="text-xs text-muted-foreground">Valid</p>
+            <p className="font-semibold text-foreground">
+              {t.packages.validityDaysShort.replace(
+                "{count}",
+                String(pkg.validity_days)
+              )}
+            </p>
+            <p className="text-xs text-muted-foreground">{t.packages.validLabel}</p>
           </div>
         </div>
 
         <ul className="flex flex-col gap-1.5 text-sm text-muted-foreground">
           <li className="flex items-center gap-2">
             <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
-            {pkg.sessions} × {pkg.duration_minutes}-minute consultations
+            {t.packages.featureSessions
+              .replace("{sessions}", String(pkg.sessions))
+              .replace("{duration}", String(pkg.duration_minutes))}
           </li>
           <li className="flex items-center gap-2">
             <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
-            Valid for {pkg.validity_days} days from purchase
+            {t.packages.featureValidity.replace(
+              "{days}",
+              String(pkg.validity_days)
+            )}
           </li>
           {isEmergency && (
             <li className="flex items-center gap-2">
               <CheckCircle className="h-3.5 w-3.5 text-green-500 shrink-0" />
-              Guaranteed slot within 2 hours
+              {t.packages.featurePriority}
             </li>
           )}
         </ul>
 
         <div className="mt-auto flex flex-col gap-3 pt-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Quantity</span>
+            <span className="text-sm text-muted-foreground">
+              {t.booking.quantityLabel}
+            </span>
             <div className="flex items-center gap-2">
               <Button
                 type="button"
@@ -142,7 +162,7 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
                 size="icon-sm"
                 onClick={() => setQuantity((q) => Math.max(1, q - 1))}
                 disabled={quantity <= 1}
-                aria-label="Decrease quantity"
+                aria-label={t.booking.decreaseQuantity}
               >
                 <Minus className="h-3.5 w-3.5" />
               </Button>
@@ -153,7 +173,7 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
                 size="icon-sm"
                 onClick={() => setQuantity((q) => Math.min(MAX_QTY, q + 1))}
                 disabled={quantity >= MAX_QTY}
-                aria-label="Increase quantity"
+                aria-label={t.booking.increaseQuantity}
               >
                 <Plus className="h-3.5 w-3.5" />
               </Button>
@@ -165,7 +185,9 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
               <span className="text-2xl font-bold text-foreground">
                 {total.toFixed(0)}
               </span>
-              <span className="ml-1 text-sm text-muted-foreground">AED</span>
+              <span className="ml-1 text-sm text-muted-foreground">
+                {t.common.aed}
+              </span>
             </div>
             <Button
               size="sm"
@@ -177,7 +199,7 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
               ) : (
                 <>
                   <ShoppingCart className="mr-1.5 h-4 w-4" />
-                  Buy Now
+                  {t.packages.buyNow}
                 </>
               )}
             </Button>
@@ -193,6 +215,7 @@ interface ActivePackageCardProps {
 }
 
 function ActivePackageCard({ up }: ActivePackageCardProps) {
+  const { dictionary: t, dateLocale } = useI18n();
   const pkg = up.consultation_packages;
   const Icon = PACKAGE_ICONS[pkg.slug] ?? Package;
   const percent = Math.round((up.credits_remaining / up.credits_total) * 100);
@@ -210,11 +233,15 @@ function ActivePackageCard({ up }: ActivePackageCardProps) {
             <div>
               <p className="font-medium text-foreground">{pkg.name}</p>
               <p className="text-sm text-muted-foreground">
-                {up.credits_remaining} of {up.credits_total} sessions remaining
+                {t.packages.sessionsRemainingOf
+                  .replace("{remaining}", String(up.credits_remaining))
+                  .replace("{total}", String(up.credits_total))}
               </p>
             </div>
           </div>
-          <Badge variant={STATUS_VARIANTS[up.status]}>{STATUS_LABELS[up.status]}</Badge>
+          <Badge variant={STATUS_VARIANTS[up.status]}>
+            {statusLabel(t, up.status)}
+          </Badge>
         </div>
 
         <div className="mt-3 flex flex-col gap-2">
@@ -224,11 +251,24 @@ function ActivePackageCard({ up }: ActivePackageCardProps) {
               <Clock className="h-3 w-3" />
               {up.status === "active"
                 ? isUrgent
-                  ? `Expires in ${days} day${days !== 1 ? "s" : ""} — use soon!`
-                  : `Expires ${formatDate(up.expires_at)}`
-                : `Expired ${formatDate(up.expires_at)}`}
+                  ? days === 1
+                    ? t.packages.expiresInOneDay
+                    : t.packages.expiresInDays.replace("{days}", String(days))
+                  : t.packages.expiresOn.replace(
+                      "{date}",
+                      formatDate(up.expires_at, dateLocale)
+                    )
+                : t.packages.expiredOn.replace(
+                    "{date}",
+                    formatDate(up.expires_at, dateLocale)
+                  )}
             </span>
-            <span>Purchased {formatDate(up.purchased_at)}</span>
+            <span>
+              {t.packages.purchasedOn.replace(
+                "{date}",
+                formatDate(up.purchased_at, dateLocale)
+              )}
+            </span>
           </div>
         </div>
       </CardContent>
@@ -237,8 +277,10 @@ function ActivePackageCard({ up }: ActivePackageCardProps) {
 }
 
 function UsageLogRow({ log }: { log: PackageUsageLog }) {
+  const { dictionary: t, dateLocale } = useI18n();
   const appt = log.appointments;
-  const pkgName = log.user_packages?.consultation_packages?.name ?? "Package";
+  const pkgName =
+    log.user_packages?.consultation_packages?.name ?? t.packages.packageFallback;
 
   return (
     <div className="flex items-center justify-between py-2 text-sm">
@@ -246,26 +288,30 @@ function UsageLogRow({ log }: { log: PackageUsageLog }) {
         <span className="font-medium text-foreground">{pkgName}</span>
         {appt ? (
           <span className="text-xs text-muted-foreground">
-            {formatDate(appt.scheduled_date)} at {appt.scheduled_time.slice(0, 5)}
+            {formatDate(appt.scheduled_date, dateLocale)} {t.booking.dateTimeAt}{" "}
+            {appt.scheduled_time.slice(0, 5)}
             {appt.doctors?.full_name ? ` · ${appt.doctors.full_name}` : ""}
           </span>
         ) : (
-          <span className="text-xs text-muted-foreground">Appointment removed</span>
+          <span className="text-xs text-muted-foreground">
+            {t.packages.appointmentRemoved}
+          </span>
         )}
       </div>
       <Badge variant="outline" className="shrink-0">
-        −{log.credits_used} credit{log.credits_used !== 1 ? "s" : ""}
+        {t.packages.creditsUsed.replace("{count}", String(log.credits_used))}
       </Badge>
     </div>
   );
 }
 
 export default function PackagesPage() {
+  const { dictionary: t } = useI18n();
   const [availablePackages, setAvailablePackages] = useState<ConsultationPackage[]>([]);
   const [userPackages, setUserPackages] = useState<UserPackage[]>([]);
   const [usageLogs, setUsageLogs] = useState<PackageUsageLog[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<"load" | "checkout" | null>(null);
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -285,7 +331,7 @@ export default function PackagesPage() {
       setUserPackages(myPkgs);
       setUsageLogs(logs);
     } catch {
-      setError("Failed to load packages. Please try again.");
+      setError("load");
     } finally {
       setIsLoading(false);
     }
@@ -300,7 +346,7 @@ export default function PackagesPage() {
       });
       window.location.href = url;
     } catch {
-      setError("Could not start checkout. Please try again.");
+      setError("checkout");
       setPurchasingId(null);
     }
   }
@@ -313,23 +359,22 @@ export default function PackagesPage() {
       <div className="flex flex-col gap-8 p-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Consultation Packages</h1>
-          <p className="mt-1 text-muted-foreground">
-            Purchase bundled consultation sessions and save on your child&apos;s care.
-            Credits are automatically deducted when you book an appointment.
-          </p>
+          <h1 className="text-2xl font-bold text-foreground">{t.packages.title}</h1>
+          <p className="mt-1 text-muted-foreground">{t.packages.subtitle}</p>
         </div>
 
         {error && (
           <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0" />
-            {error}
+            {error === "load" ? t.packages.loadError : t.booking.checkoutError}
           </div>
         )}
 
         {/* Available Packages */}
         <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold text-foreground">Available Packages</h2>
+          <h2 className="text-lg font-semibold text-foreground">
+            {t.packages.availableTitle}
+          </h2>
           {isLoading ? (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {[1, 2, 3].map((i) => (
@@ -354,7 +399,9 @@ export default function PackagesPage() {
 
         {/* My Active Packages */}
         <section className="flex flex-col gap-4">
-          <h2 className="text-lg font-semibold text-foreground">My Active Packages</h2>
+          <h2 className="text-lg font-semibold text-foreground">
+            {t.packages.activeTitle}
+          </h2>
           {isLoading ? (
             <div className="flex flex-col gap-3">
               <Skeleton className="h-28 rounded-xl" />
@@ -364,9 +411,11 @@ export default function PackagesPage() {
             <Card>
               <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
                 <Package className="h-10 w-10 text-muted-foreground/40" />
-                <p className="font-medium text-foreground">No active packages</p>
+                <p className="font-medium text-foreground">
+                  {t.packages.emptyTitle}
+                </p>
                 <p className="text-sm text-muted-foreground">
-                  Purchase a package above to get started.
+                  {t.packages.emptySubtitle}
                 </p>
               </CardContent>
             </Card>
@@ -384,14 +433,19 @@ export default function PackagesPage() {
           <>
             <Separator />
             <section className="flex flex-col gap-4">
-              <h2 className="text-lg font-semibold text-foreground">History</h2>
+              <h2 className="text-lg font-semibold text-foreground">
+                {t.packages.historyTitle}
+              </h2>
               <Accordion type="multiple" className="flex flex-col gap-3">
                 {usageLogs.length > 0 && (
                   <AccordionItem value="usage" className="rounded-xl border">
                     <AccordionTrigger className="rounded-xl px-4 hover:no-underline">
                       <div className="flex items-center gap-2 text-sm font-medium">
                         <History className="h-4 w-4 text-muted-foreground" />
-                        Credit Usage Log ({usageLogs.length})
+                        {t.packages.usageLogTitle.replace(
+                          "{count}",
+                          String(usageLogs.length)
+                        )}
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-4 pb-4">
@@ -408,7 +462,10 @@ export default function PackagesPage() {
                     <AccordionTrigger className="rounded-xl px-4 hover:no-underline">
                       <div className="flex items-center gap-2 text-sm font-medium">
                         <Package className="h-4 w-4 text-muted-foreground" />
-                        Past Packages ({inactivePackages.length})
+                        {t.packages.pastPackagesTitle.replace(
+                          "{count}",
+                          String(inactivePackages.length)
+                        )}
                       </div>
                     </AccordionTrigger>
                     <AccordionContent className="px-4 pb-4">

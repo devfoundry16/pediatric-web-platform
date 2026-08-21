@@ -39,6 +39,11 @@ import {
   Loader2,
 } from "lucide-react";
 import { adminApi, type AdminAppointment, type AdminDoctorRow } from "@/lib/api/admin";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { getAppointmentStatusLabel } from "@/lib/i18n/appointment-status";
+import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
+import type { AppointmentStatus } from "@/types/appointment";
+import { joinWindowHintText } from "@/lib/appointment-window";
 
 const STATUS_COLORS: Record<string, string> = {
   confirmed: "bg-blue-100 text-blue-700",
@@ -61,6 +66,7 @@ export default function AdminAppointmentsPage() {
 }
 
 function AdminAppointmentsContent() {
+  const { dictionary: t } = useI18n();
   const [appointments, setAppointments] = useState<AdminAppointment[]>([]);
   const [doctors, setDoctors] = useState<AdminDoctorRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -135,8 +141,9 @@ function AdminAppointmentsContent() {
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Appointments</h1>
-          <p className="text-sm text-muted-foreground">View and manage all appointments across the platform</p>
+          <h1 className="text-2xl font-bold text-foreground">{t.admin.appointments.title}</h1>
+          <p className="text-sm text-muted-foreground">{t.admin.appointments.subtitle}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{joinWindowHintText(t)}</p>
         </div>
         <RefreshButton onRefresh={() => load(true)} />
       </div>
@@ -148,14 +155,14 @@ function AdminAppointmentsContent() {
           value={filterDate}
           onChange={(e) => { setFilterDate(e.target.value); setPage(1); }}
           className="w-40"
-          placeholder="Filter by date"
+          placeholder={t.admin.appointments.filterDate}
         />
         <Select value={filterDoctor || "all"} onValueChange={(v) => { setFilterDoctor(v === "all" ? "" : v); setPage(1); }}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="All doctors" />
+            <SelectValue placeholder={t.admin.common.allDoctors} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All doctors</SelectItem>
+            <SelectItem value="all">{t.admin.common.allDoctors}</SelectItem>
             {doctors.map((d) => (
               <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>
             ))}
@@ -163,24 +170,24 @@ function AdminAppointmentsContent() {
         </Select>
         <Select value={filterStatus || "all"} onValueChange={(v) => { setFilterStatus(v === "all" ? "" : v); setPage(1); }}>
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder={t.admin.common.allStatuses} />
           </SelectTrigger>
           <SelectContent>
             {STATUSES.map((s) => (
-              <SelectItem key={s || "all"} value={s || "all"}>{s || "All statuses"}</SelectItem>
+              <SelectItem key={s || "all"} value={s || "all"}>{s ? getAppointmentStatusLabel(t, s) : t.admin.common.allStatuses}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         {(filterDate || filterDoctor || filterStatus) && (
           <Button variant="ghost" size="sm" onClick={() => { setFilterDate(""); setFilterDoctor(""); setFilterStatus(""); setPage(1); }}>
-            Clear filters
+            {t.admin.appointments.clearFilters}
           </Button>
         )}
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Appointments ({total})</CardTitle>
+          <CardTitle className="text-base">{t.admin.appointments.listTitle.replace("{count}", String(total))}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading ? (
@@ -188,18 +195,18 @@ function AdminAppointmentsContent() {
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
             </div>
           ) : appointments.length === 0 ? (
-            <p className="px-6 py-8 text-center text-sm text-muted-foreground">No appointments found.</p>
+            <p className="px-6 py-8 text-center text-sm text-muted-foreground">{t.admin.appointments.empty}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date & Time</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Patient / Parent</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Doctor</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Type</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Amount</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.booking.dateTime}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.appointments.colPatientParent}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.doctor}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.type}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.amount}</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
@@ -224,14 +231,14 @@ function AdminAppointmentsContent() {
                         <div className="text-xs text-muted-foreground">{a.parent_name ?? "—"}</div>
                       </td>
                       <td className="px-4 py-3 text-foreground">{a.doctors?.full_name ?? "—"}</td>
-                      <td className="px-4 py-3 capitalize text-muted-foreground">{a.consultation_type}</td>
+                      <td className="px-4 py-3 capitalize text-muted-foreground">{getConsultationTypeLabel(t, a.consultation_type)}</td>
                       <td className="px-4 py-3">
                         <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${STATUS_COLORS[a.status] ?? "bg-gray-100 text-gray-600"}`}>
-                          {a.status}
+                          {getAppointmentStatusLabel(t, a.status as AppointmentStatus)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-foreground">
-                        {a.price_aed > 0 ? `AED ${a.price_aed}` : <Badge variant="outline" className="text-xs">Package</Badge>}
+                        {a.price_aed > 0 ? t.admin.common.amountAed.replace("{amount}", String(a.price_aed)) : <Badge variant="outline" className="text-xs">{t.admin.common.package}</Badge>}
                       </td>
                       <td className="px-4 py-3">
                         <DropdownMenu>
@@ -247,17 +254,17 @@ function AdminAppointmentsContent() {
                             {!["completed", "cancelled"].includes(a.status) && (
                               <>
                                 <DropdownMenuItem onClick={() => quickAction(a.id, "complete")}>
-                                  <CheckCircle className="mr-2 h-4 w-4 text-green-600" /> Mark completed
+                                  <CheckCircle className="mr-2 h-4 w-4 text-green-600" /> {t.admin.appointments.markCompleted}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => quickAction(a.id, "no_show")}>
-                                  <UserMinus className="mr-2 h-4 w-4 text-orange-500" /> Mark no-show
+                                  <UserMinus className="mr-2 h-4 w-4 text-orange-500" /> {t.admin.appointments.markNoShow}
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => { setActionAppt(a); setActionType("reschedule"); setRescheduleDate(""); setRescheduleTime(""); }}>
-                                  <CalendarClock className="mr-2 h-4 w-4" /> Reschedule
+                                  <CalendarClock className="mr-2 h-4 w-4" /> {t.appointments.reschedule}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => { setActionAppt(a); setActionType("cancel"); setCancelReason(""); }} className="text-destructive">
-                                  <XCircle className="mr-2 h-4 w-4" /> Cancel
+                                  <XCircle className="mr-2 h-4 w-4" /> {t.common.cancel}
                                 </DropdownMenuItem>
                               </>
                             )}
@@ -276,10 +283,10 @@ function AdminAppointmentsContent() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>Page {page} of {totalPages}</span>
+          <span>{t.admin.common.pageOf.replace("{page}", String(page)).replace("{total}", String(totalPages))}</span>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Previous</Button>
-            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>{t.common.previous}</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>{t.common.next}</Button>
           </div>
         </div>
       )}
@@ -288,16 +295,16 @@ function AdminAppointmentsContent() {
       <Dialog open={actionType === "cancel" && !!actionAppt} onOpenChange={() => { setActionAppt(null); setActionType(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Cancel Appointment</DialogTitle>
+            <DialogTitle>{t.appointments.cancelTitle}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-2">
-            <label className="text-sm font-medium text-foreground">Cancellation reason (optional)</label>
-            <Input value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder="Enter reason…" />
+            <label className="text-sm font-medium text-foreground">{t.admin.appointments.cancelReasonLabel}</label>
+            <Input value={cancelReason} onChange={(e) => setCancelReason(e.target.value)} placeholder={t.admin.appointments.cancelReasonPlaceholder} />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setActionAppt(null); setActionType(null); }}>Back</Button>
+            <Button variant="outline" onClick={() => { setActionAppt(null); setActionType(null); }}>{t.common.back}</Button>
             <Button variant="destructive" onClick={handleAction} disabled={isActing} className="gap-2">
-              {isActing && <Loader2 className="h-4 w-4 animate-spin" />} Cancel appointment
+              {isActing && <Loader2 className="h-4 w-4 animate-spin" />} {t.admin.appointments.cancelConfirm}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -307,22 +314,22 @@ function AdminAppointmentsContent() {
       <Dialog open={actionType === "reschedule" && !!actionAppt} onOpenChange={() => { setActionAppt(null); setActionType(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Reschedule Appointment</DialogTitle>
+            <DialogTitle>{t.appointments.rescheduleTitle}</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">New date</label>
+              <label className="text-sm font-medium text-foreground">{t.admin.appointments.newDate}</label>
               <Input type="date" value={rescheduleDate} onChange={(e) => setRescheduleDate(e.target.value)} />
             </div>
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-foreground">New time (HH:MM)</label>
+              <label className="text-sm font-medium text-foreground">{t.admin.appointments.newTime}</label>
               <Input type="time" value={rescheduleTime} onChange={(e) => setRescheduleTime(e.target.value)} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setActionAppt(null); setActionType(null); }}>Back</Button>
+            <Button variant="outline" onClick={() => { setActionAppt(null); setActionType(null); }}>{t.common.back}</Button>
             <Button onClick={handleAction} disabled={isActing || !rescheduleDate || !rescheduleTime} className="gap-2">
-              {isActing && <Loader2 className="h-4 w-4 animate-spin" />} Confirm reschedule
+              {isActing && <Loader2 className="h-4 w-4 animate-spin" />} {t.admin.appointments.confirmReschedule}
             </Button>
           </DialogFooter>
         </DialogContent>

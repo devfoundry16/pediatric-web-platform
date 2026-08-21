@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { isValidPhoneNumber } from "react-phone-number-input";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 
 export type Gender = "male" | "female" | "prefer_not_to_say";
 export type GuardianRelationship = "mother" | "father" | "guardian";
@@ -93,166 +94,175 @@ export type CreateChildInput = {
   consent: ConsentInfo;
 };
 
-const personalInfoSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  dateOfBirth: z
-    .string()
-    .min(1, "Date of birth is required")
-    .refine((v) => v <= new Date().toLocaleDateString("en-CA"), {
-      message: "Date of birth cannot be in the future",
-    }),
-  gender: z.enum(["male", "female", "prefer_not_to_say"]),
-  nationality: z.string().nullable(),
-  emiratesIdPassport: z.string().nullable(),
-});
+export function createChildProfileFormSchema(t: Dictionary) {
+  const v = t.validation;
 
-const physicalInfoSchema = z.object({
-  weightKg: z.number().nullable(),
-  heightCm: z.number().nullable(),
-  headCircumferenceCm: z.number().nullable(),
-  bloodType: z.string().nullable(),
-});
+  const personalInfoSchema = z.object({
+    firstName: z.string().min(1, v.firstNameRequired),
+    lastName: z.string().min(1, v.lastNameRequired),
+    dateOfBirth: z
+      .string()
+      .min(1, v.dobRequired)
+      .refine((val) => val <= new Date().toLocaleDateString("en-CA"), {
+        message: v.dobInFuture,
+      }),
+    gender: z.enum(["male", "female", "prefer_not_to_say"]),
+    nationality: z.string().nullable(),
+    emiratesIdPassport: z.string().nullable(),
+  });
 
-const birthHistorySchema = z.object({
-  placeOfBirth: z.string().nullable(),
-  prematureBirth: z.boolean().nullable(),
-  birthWeightKg: z.number().nullable(),
-  deliveryType: z.enum(["normal", "c_section"]).nullable(),
-  nicuStay: z.boolean().nullable(),
-  nicuDuration: z.string().nullable(),
-});
+  const physicalInfoSchema = z.object({
+    weightKg: z.number().nullable(),
+    heightCm: z.number().nullable(),
+    headCircumferenceCm: z.number().nullable(),
+    bloodType: z.string().nullable(),
+  });
 
-const healthBackgroundSchema = z
-  .object({
-    allergiesPresent: z.boolean(),
-    allergiesDetails: z.string().nullable(),
-    chronicConditionsPresent: z.boolean(),
-    chronicConditionsDetails: z.string().nullable(),
-    surgeriesPresent: z.boolean(),
-    surgeriesDetails: z.string().nullable(),
-    medicationsPresent: z.boolean(),
-    medicationsDetails: z.string().nullable(),
-    vaccinationStatus: z
-      .enum(["up_to_date", "partial", "not_sure"])
-      .nullable(),
-    familyMedicalHistory: z.string().nullable(),
-  })
-  .superRefine((data, ctx) => {
-    const checks: Array<{
-      present: boolean;
-      details: string | null;
-      path: (string | number)[];
-    }> = [
-      {
-        present: data.allergiesPresent,
-        details: data.allergiesDetails,
-        path: ["allergiesDetails"],
-      },
-      {
-        present: data.chronicConditionsPresent,
-        details: data.chronicConditionsDetails,
-        path: ["chronicConditionsDetails"],
-      },
-      {
-        present: data.surgeriesPresent,
-        details: data.surgeriesDetails,
-        path: ["surgeriesDetails"],
-      },
-      {
-        present: data.medicationsPresent,
-        details: data.medicationsDetails,
-        path: ["medicationsDetails"],
-      },
-    ];
-    for (const { present, details, path } of checks) {
-      if (present && !(details?.trim().length)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Please provide details",
-          path,
-        });
+  const birthHistorySchema = z.object({
+    placeOfBirth: z.string().nullable(),
+    prematureBirth: z.boolean().nullable(),
+    birthWeightKg: z.number().nullable(),
+    deliveryType: z.enum(["normal", "c_section"]).nullable(),
+    nicuStay: z.boolean().nullable(),
+    nicuDuration: z.string().nullable(),
+  });
+
+  const healthBackgroundSchema = z
+    .object({
+      allergiesPresent: z.boolean(),
+      allergiesDetails: z.string().nullable(),
+      chronicConditionsPresent: z.boolean(),
+      chronicConditionsDetails: z.string().nullable(),
+      surgeriesPresent: z.boolean(),
+      surgeriesDetails: z.string().nullable(),
+      medicationsPresent: z.boolean(),
+      medicationsDetails: z.string().nullable(),
+      vaccinationStatus: z
+        .enum(["up_to_date", "partial", "not_sure"])
+        .nullable(),
+      familyMedicalHistory: z.string().nullable(),
+    })
+    .superRefine((data, ctx) => {
+      const checks: Array<{
+        present: boolean;
+        details: string | null;
+        path: (string | number)[];
+      }> = [
+        {
+          present: data.allergiesPresent,
+          details: data.allergiesDetails,
+          path: ["allergiesDetails"],
+        },
+        {
+          present: data.chronicConditionsPresent,
+          details: data.chronicConditionsDetails,
+          path: ["chronicConditionsDetails"],
+        },
+        {
+          present: data.surgeriesPresent,
+          details: data.surgeriesDetails,
+          path: ["surgeriesDetails"],
+        },
+        {
+          present: data.medicationsPresent,
+          details: data.medicationsDetails,
+          path: ["medicationsDetails"],
+        },
+      ];
+      for (const { present, details, path } of checks) {
+        if (present && !(details?.trim().length)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: v.detailsRequired,
+            path,
+          });
+        }
       }
-    }
-  });
+    });
 
-const optionalPhoneSchema = z
-  .string()
-  .nullable()
-  .refine((v) => !v || isValidPhoneNumber(v), {
-    message: "Enter a valid phone number",
-  });
-
-const guardianInfoSchema = z.object({
-  guardianName: z.string().min(1, "Guardian name is required"),
-  guardianRelationship: z.enum(["mother", "father", "guardian"]),
-  guardianMobile: z
+  const optionalPhoneSchema = z
     .string()
-    .min(1, "Mobile number is required")
-    .refine((v) => isValidPhoneNumber(v), {
-      message: "Enter a valid phone number",
+    .nullable()
+    .refine((val) => !val || isValidPhoneNumber(val), {
+      message: v.phoneInvalid,
+    });
+
+  const guardianInfoSchema = z.object({
+    guardianName: z.string().min(1, v.guardianNameRequired),
+    guardianRelationship: z.enum(["mother", "father", "guardian"]),
+    guardianMobile: z
+      .string()
+      .min(1, v.phoneRequired)
+      .refine((val) => isValidPhoneNumber(val), {
+        message: v.phoneInvalid,
+      }),
+    guardianEmail: z
+      .string()
+      .min(1, v.emailRequired)
+      .pipe(z.email(v.emailInvalid)),
+    secondaryContactPhone: optionalPhoneSchema,
+    emergencyContactName: z.string().nullable(),
+    emergencyContactPhone: optionalPhoneSchema,
+  });
+
+  const lifestyleSchema = z.object({
+    schoolNurseryName: z.string().nullable(),
+    gradeAgeGroup: z.string().nullable(),
+    smokingExposureHome: z.boolean().nullable(),
+    screenTimeHoursPerDay: z.number().nullable(),
+    physicalActivityLevel: z
+      .enum(["low", "moderate", "high"])
+      .nullable(),
+  });
+
+  const consentSchema = z.object({
+    consentLegalGuardian: z.boolean().refine((val) => val === true, {
+      message: v.consentGuardian,
     }),
-  guardianEmail: z
-    .string()
-    .min(1, "Email is required")
-    .pipe(z.email("Enter a valid email")),
-  secondaryContactPhone: optionalPhoneSchema,
-  emergencyContactName: z.string().nullable(),
-  emergencyContactPhone: optionalPhoneSchema,
-});
+    consentDataStorage: z.boolean().refine((val) => val === true, {
+      message: v.consentStorage,
+    }),
+    consentTerms: z.boolean().refine((val) => val === true, {
+      message: v.consentTerms,
+    }),
+  });
 
-const lifestyleSchema = z.object({
-  schoolNurseryName: z.string().nullable(),
-  gradeAgeGroup: z.string().nullable(),
-  smokingExposureHome: z.boolean().nullable(),
-  screenTimeHoursPerDay: z.number().nullable(),
-  physicalActivityLevel: z
-    .enum(["low", "moderate", "high"])
-    .nullable(),
-});
+  return z.object({
+    personalInfo: personalInfoSchema,
+    physicalInfo: physicalInfoSchema,
+    birthHistory: birthHistorySchema,
+    healthBackground: healthBackgroundSchema,
+    guardianInfo: guardianInfoSchema,
+    lifestyle: lifestyleSchema,
+    consent: consentSchema,
+  });
+}
 
-const consentSchema = z.object({
-  consentLegalGuardian: z.boolean().refine((v) => v === true, {
-    message: "You must confirm legal guardianship",
-  }),
-  consentDataStorage: z.boolean().refine((v) => v === true, {
-    message: "You must consent to data storage",
-  }),
-  consentTerms: z.boolean().refine((v) => v === true, {
-    message: "You must agree to Terms & Privacy",
-  }),
-});
-
-export const childProfileFormSchema = z.object({
-  personalInfo: personalInfoSchema,
-  physicalInfo: physicalInfoSchema,
-  birthHistory: birthHistorySchema,
-  healthBackground: healthBackgroundSchema,
-  guardianInfo: guardianInfoSchema,
-  lifestyle: lifestyleSchema,
-  consent: consentSchema,
-});
-
-export type ChildProfileFormValues = z.infer<typeof childProfileFormSchema>;
+export type ChildProfileFormValues = z.infer<
+  ReturnType<typeof createChildProfileFormSchema>
+>;
 
 /** Per-step validation (multi-step form next button) */
-export const childFormStepSchemas = [
-  childProfileFormSchema.pick({
-    personalInfo: true,
-    physicalInfo: true,
-    birthHistory: true,
-  }),
-  childProfileFormSchema.pick({
-    healthBackground: true,
-    lifestyle: true,
-  }),
-  childProfileFormSchema.pick({
-    guardianInfo: true,
-  }),
-  childProfileFormSchema.pick({
-    consent: true,
-  }),
-] as const;
+export function createChildFormStepSchemas(t: Dictionary) {
+  const schema = createChildProfileFormSchema(t);
+  return [
+    schema.pick({
+      personalInfo: true,
+      physicalInfo: true,
+      birthHistory: true,
+    }),
+    schema.pick({
+      healthBackground: true,
+      lifestyle: true,
+    }),
+    schema.pick({
+      guardianInfo: true,
+    }),
+    schema.pick({
+      consent: true,
+    }),
+  ] as const;
+}
 
 /** Default empty shape for "add child" form */
 export function getDefaultChildFormValues(): ChildProfileFormValues {

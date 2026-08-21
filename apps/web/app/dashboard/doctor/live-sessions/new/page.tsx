@@ -38,7 +38,7 @@ export default function NewLiveSessionPage() {
               router.push("/dashboard/doctor/live-sessions");
             } catch (err: unknown) {
               const msg =
-                err instanceof Error ? err.message : "Failed to create session";
+                err instanceof Error ? err.message : t.liveSessions.createFailed;
               toast.error(msg);
             }
           }}

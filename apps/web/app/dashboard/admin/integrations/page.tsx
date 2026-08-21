@@ -17,21 +17,35 @@ import {
 import { AlertCircle, Calendar, CheckCircle, XCircle } from "lucide-react";
 import { adminApi, type CalendarAccount, type CalendarEventLog } from "@/lib/api/admin";
 import { calendarApi, type CalendarConnectionStatus } from "@/lib/api/calendar";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
 
-// Codes the OAuth callback can bounce back with (?error=...), mapped to
-// something an admin can act on. Keep in step with googleCalendarCallback in
-// apps/api/src/controllers/google-calendar.ts.
-const CALLBACK_ERRORS: Record<string, string> = {
-  access_denied: "The Google consent screen was cancelled. No changes were made.",
-  invalid_state: "The connection link expired or was tampered with. Try connecting again.",
-  missing_code: "Google did not return an authorization code. Try connecting again.",
-  exchange_failed: "Google rejected the authorization code. Try connecting again.",
-  no_refresh_token:
-    "Google did not issue a refresh token. Remove the app's access at myaccount.google.com/permissions, then connect again.",
-  store_failed: "The connection could not be saved. Check the API logs and try again.",
+// Codes the OAuth callback can bounce back with (?error=...), mapped to a
+// dictionary key an admin can act on. Keep in step with googleCalendarCallback
+// in apps/api/src/controllers/google-calendar.ts.
+const CALLBACK_ERROR_KEYS: Record<string, keyof Dictionary["admin"]["integrations"]> = {
+  access_denied: "errAccessDenied",
+  invalid_state: "errInvalidState",
+  missing_code: "errMissingCode",
+  exchange_failed: "errExchangeFailed",
+  no_refresh_token: "errNoRefreshToken",
+  store_failed: "errStoreFailed",
 };
 
+/** Renders a dictionary string whose `code`-formatted tokens are marked with backticks. */
+function TextWithCode({ text }: { text: string }) {
+  return (
+    <>
+      {text.split("`").map((part, i) => (i % 2 === 1 ? <code key={i}>{part}</code> : part))}
+    </>
+  );
+}
+
 function IntegrationsPageInner() {
+  const { dictionary: t, dateLocale } = useI18n();
+  const { timezone } = useViewerTimezone();
   const searchParams = useSearchParams();
   const justConnected = searchParams.get("calendar") === "connected";
   const callbackError = searchParams.get("calendar_error");
@@ -97,12 +111,7 @@ function IntegrationsPageInner() {
   };
 
   const handleDisconnect = async () => {
-    if (
-      !window.confirm(
-        "Disconnect your Google Calendar? Bookings will stop appearing on it, and the events already there will be removed."
-      )
-    )
-      return;
+    if (!window.confirm(t.admin.integrations.disconnectConfirm)) return;
     setBusy(true);
     try {
       await calendarApi.disconnect();
@@ -114,14 +123,15 @@ function IntegrationsPageInner() {
 
   const totalPages = Math.ceil(total / LIMIT);
 
+  const callbackErrorKey = callbackError ? CALLBACK_ERROR_KEYS[callbackError] : undefined;
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Integrations</h1>
+          <h1 className="text-2xl font-bold text-foreground">{t.admin.integrations.title}</h1>
           <p className="text-sm text-muted-foreground">
-            Connect your Google Calendar. As an admin you receive every appointment and live
-            session on the platform; parents and doctors only receive their own.
+            {t.admin.integrations.subtitle}
           </p>
         </div>
         <RefreshButton onRefresh={() => Promise.all([loadStatus(true), loadLogs(true)])} />
@@ -130,13 +140,15 @@ function IntegrationsPageInner() {
       {justConnected && (
         <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
           <CheckCircle className="h-4 w-4 shrink-0" />
-          Google Calendar connected. Every appointment and live session will now appear on it.
+          {t.admin.integrations.connectedBanner}
         </div>
       )}
       {callbackError && (
         <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          {CALLBACK_ERRORS[callbackError] ?? `Connection failed (${callbackError}). Try again.`}
+          {callbackErrorKey
+            ? t.admin.integrations[callbackErrorKey]
+            : t.admin.integrations.connectionFailed.replace("{code}", callbackError)}
         </div>
       )}
 
@@ -144,7 +156,7 @@ function IntegrationsPageInner() {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <Calendar className="h-4 w-4" />
-            Google Calendar
+            {t.profile.googleCalendar.title}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -152,18 +164,15 @@ function IntegrationsPageInner() {
             <Skeleton className="h-16 w-full" />
           ) : !status?.configured ? (
             <p className="text-sm text-muted-foreground">
-              Not configured on the server. Set <code>GOOGLE_CLIENT_ID</code>,{" "}
-              <code>GOOGLE_CLIENT_SECRET</code> and <code>GOOGLE_REDIRECT_URI</code> in the API
-              environment — see <code>GOOGLE_CALENDAR_SETUP.md</code> — then reload this page.
+              <TextWithCode text={t.admin.integrations.notConfigured} />
             </p>
           ) : !status.connected ? (
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="text-sm text-muted-foreground">
-                No account connected. Connect yours to receive every appointment and live session on
-                the platform.
+                {t.admin.integrations.notConnected}
               </p>
               <Button onClick={handleConnect} disabled={busy}>
-                {busy ? "Redirecting…" : "Connect Google Calendar"}
+                {busy ? t.admin.integrations.redirecting : t.profile.googleCalendar.connect}
               </Button>
             </div>
           ) : (
@@ -173,22 +182,22 @@ function IntegrationsPageInner() {
                   <span className="text-sm font-medium text-foreground">{status.email}</span>
                   {status.status === "error" ? (
                     <Badge variant="outline" className="border-red-200 bg-red-50 text-red-700">
-                      Needs reconnect
+                      {t.admin.integrations.needsReconnect}
                     </Badge>
                   ) : (
                     <Badge variant="outline" className="border-green-200 bg-green-50 text-green-700">
-                      Connected
+                      {t.admin.integrations.connected}
                     </Badge>
                   )}
                 </div>
                 <div className="flex gap-2">
                   {status.status === "error" && (
                     <Button onClick={handleConnect} disabled={busy}>
-                      Reconnect
+                      {t.profile.googleCalendar.reconnect}
                     </Button>
                   )}
                   <Button variant="outline" onClick={handleDisconnect} disabled={busy}>
-                    Disconnect
+                    {t.profile.googleCalendar.disconnect}
                   </Button>
                 </div>
               </div>
@@ -197,7 +206,10 @@ function IntegrationsPageInner() {
               )}
               {status.connectedAt && (
                 <p className="text-xs text-muted-foreground">
-                  Connected {new Date(status.connectedAt).toLocaleString()}
+                  {t.admin.integrations.connectedAtLine.replace(
+                    "{date}",
+                    `${formatDateInTimezone(status.connectedAt, timezone, dateLocale)} ${formatTimeInTimezone(status.connectedAt, timezone, dateLocale)}`
+                  )}
                 </p>
               )}
             </div>
@@ -207,24 +219,23 @@ function IntegrationsPageInner() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Connected accounts ({accounts.length})</CardTitle>
+          <CardTitle className="text-base">{t.admin.integrations.accountsTitle.replace("{count}", String(accounts.length))}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {accounts.length === 0 ? (
             <p className="px-6 py-8 text-center text-sm text-muted-foreground">
-              No Google accounts connected yet. Parents and doctors connect their own calendar from
-              their profile page; anyone who doesn&apos;t is invited by email instead.
+              {t.admin.integrations.accountsEmpty}
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Google account</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Owner</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Role</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Connected</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colGoogleAccount}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colOwner}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.role}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colConnectedAt}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -234,7 +245,13 @@ function IntegrationsPageInner() {
                       <td className="px-4 py-3 text-muted-foreground">{a.owner.fullName ?? "—"}</td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="text-xs capitalize">
-                          {a.owner.role}
+                          {a.owner.role === "parent"
+                            ? t.admin.common.roleParent
+                            : a.owner.role === "doctor"
+                              ? t.admin.common.roleDoctor
+                              : a.owner.role === "admin"
+                                ? t.admin.common.roleAdmin
+                                : a.owner.role}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
@@ -247,11 +264,11 @@ function IntegrationsPageInner() {
                           ) : (
                             <XCircle className="h-3 w-3" />
                           )}
-                          {a.status === "connected" ? "connected" : "needs reconnect"}
+                          {a.status === "connected" ? t.admin.integrations.connected : t.admin.integrations.needsReconnect}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {new Date(a.connectedAt).toLocaleDateString()}
+                        {formatDateInTimezone(a.connectedAt, timezone, dateLocale)}
                       </td>
                     </tr>
                   ))}
@@ -272,12 +289,12 @@ function IntegrationsPageInner() {
           }}
         >
           <SelectTrigger className="w-40">
-            <SelectValue placeholder="All statuses" />
+            <SelectValue placeholder={t.admin.common.allStatuses} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            <SelectItem value="sent">Sent</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
+            <SelectItem value="all">{t.admin.common.allStatuses}</SelectItem>
+            <SelectItem value="sent">{t.admin.common.sent}</SelectItem>
+            <SelectItem value="failed">{t.admin.common.failed}</SelectItem>
           </SelectContent>
         </Select>
         <Select
@@ -288,19 +305,19 @@ function IntegrationsPageInner() {
           }}
         >
           <SelectTrigger className="w-52">
-            <SelectValue placeholder="All types" />
+            <SelectValue placeholder={t.admin.common.allTypes} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            <SelectItem value="appointment">Appointments</SelectItem>
-            <SelectItem value="group_session">Live sessions</SelectItem>
+            <SelectItem value="all">{t.admin.common.allTypes}</SelectItem>
+            <SelectItem value="appointment">{t.admin.integrations.typeAppointments}</SelectItem>
+            <SelectItem value="group_session">{t.admin.integrations.typeLiveSessions}</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base">Calendar Event Logs ({total})</CardTitle>
+          <CardTitle className="text-base">{t.admin.integrations.logsTitle.replace("{count}", String(total))}</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {logsLoading ? (
@@ -311,18 +328,18 @@ function IntegrationsPageInner() {
             </div>
           ) : logs.length === 0 ? (
             <p className="px-6 py-8 text-center text-sm text-muted-foreground">
-              No calendar activity yet.
+              {t.admin.integrations.logsEmpty}
             </p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Action</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Type</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">At</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Detail</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colAction}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.type}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colAt}</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colDetail}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -331,7 +348,9 @@ function IntegrationsPageInner() {
                       <td className="px-4 py-3 capitalize text-foreground">{l.action}</td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="text-xs capitalize">
-                          {l.related_type.replace(/_/g, " ")}
+                          {l.related_type === "appointment"
+                            ? t.admin.integrations.relatedAppointment
+                            : t.admin.integrations.relatedGroupSession}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
@@ -343,11 +362,11 @@ function IntegrationsPageInner() {
                           ) : (
                             <XCircle className="h-3 w-3" />
                           )}
-                          {l.status}
+                          {l.status === "sent" ? t.admin.common.sent : t.admin.common.failed}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {new Date(l.created_at).toLocaleString()}
+                        {formatDateInTimezone(l.created_at, timezone, dateLocale)} {formatTimeInTimezone(l.created_at, timezone, dateLocale)}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
                         {l.error_message ? (
@@ -373,7 +392,7 @@ function IntegrationsPageInner() {
       {totalPages > 1 && (
         <div className="flex items-center justify-between text-sm text-muted-foreground">
           <span>
-            Page {page} of {totalPages}
+            {t.admin.common.pageOf.replace("{page}", String(page)).replace("{total}", String(totalPages))}
           </span>
           <div className="flex gap-2">
             <Button
@@ -382,7 +401,7 @@ function IntegrationsPageInner() {
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page === 1}
             >
-              Previous
+              {t.common.previous}
             </Button>
             <Button
               variant="outline"
@@ -390,7 +409,7 @@ function IntegrationsPageInner() {
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               disabled={page === totalPages}
             >
-              Next
+              {t.common.next}
             </Button>
           </div>
         </div>

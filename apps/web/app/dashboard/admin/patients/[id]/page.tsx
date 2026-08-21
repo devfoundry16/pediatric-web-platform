@@ -15,13 +15,21 @@ import {
   CalendarDays,
 } from "lucide-react";
 import { adminApi, type ChildProfile, type AdminUser } from "@/lib/api/admin";
+import { useI18n } from "@/lib/i18n/i18n-context";
+import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
+import { formatDateInTimezone } from "@/lib/timezone";
+import { getAppointmentStatusLabel } from "@/lib/i18n/appointment-status";
+import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
+import { getGenderLabel } from "@/lib/i18n/gender";
+import { getRecordTypeLabel } from "@/lib/i18n/record-type";
+import type { AppointmentStatus } from "@/types/appointment";
 
-function calcAge(dob: string): string {
+function calcAge(dob: string, monthsTemplate: string, yearsTemplate: string): string {
   const birth = new Date(dob);
   const now = new Date();
   const totalMonths = (now.getFullYear() - birth.getFullYear()) * 12 + now.getMonth() - birth.getMonth();
-  if (totalMonths < 24) return `${totalMonths} months`;
-  return `${Math.floor(totalMonths / 12)} years`;
+  if (totalMonths < 24) return monthsTemplate.replace("{count}", String(totalMonths));
+  return yearsTemplate.replace("{count}", String(Math.floor(totalMonths / 12)));
 }
 
 interface MedicalRecord {
@@ -52,6 +60,8 @@ interface Appointment {
 
 export default function AdminPatientDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { dictionary: t, dateLocale } = useI18n();
+  const { timezone } = useViewerTimezone();
   const [child, setChild] = useState<ChildProfile | null>(null);
   const [parent, setParent] = useState<AdminUser | null>(null);
   const [files, setFiles] = useState<MedicalFile[]>([]);
@@ -77,7 +87,7 @@ export default function AdminPatientDetailPage() {
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild className="gap-1">
           <Link href="/dashboard/admin/patients">
-            <ChevronLeft className="h-4 w-4" /> Patients
+            <ChevronLeft className="h-4 w-4" /> {t.admin.nav.patients}
           </Link>
         </Button>
       </div>
@@ -88,7 +98,7 @@ export default function AdminPatientDetailPage() {
           <Skeleton className="h-48 w-full" />
         </div>
       ) : !child ? (
-        <p className="text-sm text-destructive">Patient not found.</p>
+        <p className="text-sm text-destructive">{t.admin.patients.notFound}</p>
       ) : (
         <>
           <h1 className="text-2xl font-bold text-foreground">{child.first_name} {child.last_name}</h1>
@@ -98,32 +108,32 @@ export default function AdminPatientDetailPage() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <User className="h-4 w-4" /> Child Info
+                  <User className="h-4 w-4" /> {t.admin.patients.childInfo}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-2 text-sm">
-                <Row label="Full name" value={`${child.first_name} ${child.last_name}`} />
-                <Row label="Date of birth" value={child.date_of_birth as string} />
-                <Row label="Age" value={child.date_of_birth ? calcAge(child.date_of_birth as string) : "—"} />
-                <Row label="Gender" value={(child.gender as string) ?? "—"} />
-                {(child.blood_type as string) && <Row label="Blood type" value={child.blood_type as string} />}
-                {(child.allergies as string) && <Row label="Allergies" value={child.allergies as string} />}
+                <Row label={t.admin.common.fullName} value={`${child.first_name} ${child.last_name}`} />
+                <Row label={t.admin.patients.dateOfBirth} value={child.date_of_birth as string} />
+                <Row label={t.admin.patients.age} value={child.date_of_birth ? calcAge(child.date_of_birth as string, t.admin.patients.ageMonths, t.admin.patients.ageYears) : "—"} />
+                <Row label={t.patient.gender} value={getGenderLabel(t, (child.gender as string) ?? null)} />
+                {(child.blood_type as string) && <Row label={t.admin.patients.bloodType} value={child.blood_type as string} />}
+                {(child.allergies as string) && <Row label={t.admin.patients.allergies} value={child.allergies as string} />}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-base">
-                  <User className="h-4 w-4" /> Parent Info
+                  <User className="h-4 w-4" /> {t.admin.patients.parentInfo}
                 </CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col gap-2 text-sm">
-                <Row label="Name" value={parent?.full_name ?? "—"} />
-                <Row label="Email" value={parent?.email ?? "—"} />
-                <Row label="Phone" value={parent?.phone ?? "—"} />
-                <Row label="Status" value={
+                <Row label={t.common.name} value={parent?.full_name ?? "—"} />
+                <Row label={t.common.email} value={parent?.email ?? "—"} />
+                <Row label={t.common.phone} value={parent?.phone ?? "—"} />
+                <Row label={t.common.status} value={
                   <Badge variant="outline" className={parent?.is_active ? "text-green-700" : "text-red-600"}>
-                    {parent?.is_active ? "Active" : "Inactive"}
+                    {parent?.is_active ? t.admin.common.active : t.admin.common.inactive}
                   </Badge>
                 } />
               </CardContent>
@@ -134,19 +144,19 @@ export default function AdminPatientDetailPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <CalendarDays className="h-4 w-4" /> Recent Appointments
+                <CalendarDays className="h-4 w-4" /> {t.admin.patients.recentAppointments}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {appointments.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No appointments yet.</p>
+                <p className="text-sm text-muted-foreground">{t.admin.patients.noAppointments}</p>
               ) : (
                 <ul className="flex flex-col gap-2">
                   {appointments.map((a) => (
                     <li key={a.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
                       <span className="font-medium text-foreground">{a.scheduled_date} {a.scheduled_time}</span>
-                      <span className="capitalize text-muted-foreground">{a.consultation_type}</span>
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize">{a.status}</span>
+                      <span className="capitalize text-muted-foreground">{getConsultationTypeLabel(t, a.consultation_type)}</span>
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize">{getAppointmentStatusLabel(t, a.status as AppointmentStatus)}</span>
                     </li>
                   ))}
                 </ul>
@@ -158,23 +168,23 @@ export default function AdminPatientDetailPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <FileText className="h-4 w-4" /> Medical Records
+                <FileText className="h-4 w-4" /> {t.medicalRecords.title}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {records.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No medical records.</p>
+                <p className="text-sm text-muted-foreground">{t.admin.patients.noRecords}</p>
               ) : (
                 <ul className="flex flex-col gap-2">
                   {records.map((r) => (
                     <li key={r.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
                       <div>
                         <span className="font-medium text-foreground">{r.title}</span>
-                        <span className="ml-2 text-xs text-muted-foreground capitalize">{r.record_type}</span>
+                        <span className="ml-2 text-xs text-muted-foreground capitalize">{getRecordTypeLabel(t, r.record_type)}</span>
                       </div>
                       <div className="text-right text-xs text-muted-foreground">
                         <div>{r.doctors?.full_name ?? "—"}</div>
-                        <div>{new Date(r.created_at).toLocaleDateString()}</div>
+                        <div>{formatDateInTimezone(r.created_at, timezone, dateLocale)}</div>
                       </div>
                     </li>
                   ))}
@@ -187,12 +197,12 @@ export default function AdminPatientDetailPage() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Paperclip className="h-4 w-4" /> Uploaded Files
+                <Paperclip className="h-4 w-4" /> {t.admin.patients.uploadedFiles}
               </CardTitle>
             </CardHeader>
             <CardContent>
               {files.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No files uploaded.</p>
+                <p className="text-sm text-muted-foreground">{t.admin.patients.noFiles}</p>
               ) : (
                 <ul className="flex flex-col gap-2">
                   {files.map((f) => (
@@ -202,7 +212,7 @@ export default function AdminPatientDetailPage() {
                       </a>
                       <div className="text-right text-xs text-muted-foreground">
                         <div>{f.file_type}</div>
-                        <div>{f.file_size_bytes ? `${Math.round(f.file_size_bytes / 1024)} KB` : ""}</div>
+                        <div>{f.file_size_bytes ? t.admin.patients.fileSizeKb.replace("{size}", String(Math.round(f.file_size_bytes / 1024))) : ""}</div>
                       </div>
                     </li>
                   ))}

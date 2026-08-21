@@ -38,7 +38,14 @@ import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { useHighlightedAppointment } from "@/hooks/use-highlighted-appointment";
 import { cn } from "@/lib/utils";
-import { isUpcomingAppointment } from "@/lib/appointment-window";
+import {
+  appointmentOpensAt,
+  appointmentStartMs,
+  isUpcomingAppointment,
+  joinNotYetOpen,
+  joinOpensAtLabel,
+  joinWindowHintText,
+} from "@/lib/appointment-window";
 import {
   DEFAULT_TIMEZONE,
   calendarDayInTimezone,
@@ -74,7 +81,7 @@ export default function ParentAppointmentsPage() {
 
 function ParentAppointmentsContent() {
   const router = useRouter();
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -165,8 +172,23 @@ function ParentAppointmentsContent() {
       appt.scheduled_date,
       appt.scheduled_time,
       appt.timezone ?? DEFAULT_TIMEZONE,
-      viewerTimezone
+      viewerTimezone,
+      dateLocale
     );
+
+    // Announced only while still ahead — once the window is open the Join
+    // button speaks for itself.
+    const opensAt = appointmentOpensAt(appt);
+    const joinOpensText =
+      opensAt && joinNotYetOpen(opensAt)
+        ? joinOpensAtLabel(
+            t,
+            opensAt,
+            new Date(appointmentStartMs(appt)),
+            viewerTimezone,
+            dateLocale
+          )
+        : null;
 
     const isHighlighted = appt.id === highlightedId;
 
@@ -224,14 +246,19 @@ function ParentAppointmentsContent() {
                 it creates the room if it is somehow missing and says when the
                 room opens if you are early. */}
             {appt.status === "confirmed" && (
-              <Button
-                size="sm"
-                className="gap-1.5"
-                onClick={() => router.push(`/appointments/${appt.id}/room`)}
-              >
-                <Video className="h-3.5 w-3.5" />
-                {t.appointments.join}
-              </Button>
+              <div className="flex flex-col gap-1 sm:items-end">
+                <Button
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => router.push(`/appointments/${appt.id}/room`)}
+                >
+                  <Video className="h-3.5 w-3.5" />
+                  {t.appointments.join}
+                </Button>
+                {joinOpensText && (
+                  <p className="text-xs text-muted-foreground">{joinOpensText}</p>
+                )}
+              </div>
             )}
             {canReschedule && (
               <Button
@@ -280,9 +307,12 @@ function ParentAppointmentsContent() {
         </div>
 
         <h1 className="text-2xl font-bold text-foreground">{t.appointments.title}</h1>
-        <p className="text-xs text-muted-foreground">
-          {t.booking.timezoneHint.replace("{timezone}", formatTimezoneLabel(viewerTimezone))}
-        </p>
+        <div className="flex flex-col gap-1">
+          <p className="text-xs text-muted-foreground">
+            {t.booking.timezoneHint.replace("{timezone}", formatTimezoneLabel(viewerTimezone))}
+          </p>
+          <p className="text-xs text-muted-foreground">{joinWindowHintText(t)}</p>
+        </div>
 
         {isLoading ? (
           <div className="flex flex-col gap-3">
@@ -387,7 +417,7 @@ function ParentAppointmentsContent() {
                     {rescheduleSlots.map((slot) => {
                       const shiftedDay =
                         calendarDayInTimezone(slot.startsAt, viewerTimezone) !== slot.date
-                          ? formatShortDateInTimezone(slot.startsAt, viewerTimezone)
+                          ? formatShortDateInTimezone(slot.startsAt, viewerTimezone, dateLocale)
                           : null;
                       return (
                         <Button
@@ -399,7 +429,7 @@ function ParentAppointmentsContent() {
                           className="h-auto flex-col gap-0 py-1.5 text-xs"
                           onClick={() => setRescheduleSlot(slot)}
                         >
-                          <span>{formatTimeInTimezone(slot.startsAt, viewerTimezone)}</span>
+                          <span>{formatTimeInTimezone(slot.startsAt, viewerTimezone, dateLocale)}</span>
                           {shiftedDay && (
                             <span className="text-[10px] opacity-70">{shiftedDay}</span>
                           )}

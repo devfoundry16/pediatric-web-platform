@@ -1,4 +1,11 @@
-import { DEFAULT_TIMEZONE, wallClockToInstant } from "@/lib/timezone";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
+import {
+  DEFAULT_TIMEZONE,
+  calendarDayInTimezone,
+  formatShortDateInTimezone,
+  formatTimeInTimezone,
+  wallClockToInstant,
+} from "@/lib/timezone";
 
 /**
  * When an appointment is joinable, in absolute time.
@@ -11,6 +18,35 @@ import { DEFAULT_TIMEZONE, wallClockToInstant } from "@/lib/timezone";
  */
 export const JOIN_OPENS_MINUTES_BEFORE = 15;
 export const JOIN_CLOSES_MINUTES_AFTER = 30;
+
+/** The join-window explainer with the minute values filled in from the
+ *  constants above, so the copy tracks the code. */
+export function joinWindowHintText(t: Dictionary): string {
+  return t.appointments.joinWindowHint
+    .replace("{openMinutes}", String(JOIN_OPENS_MINUTES_BEFORE))
+    .replace("{closeMinutes}", String(JOIN_CLOSES_MINUTES_AFTER));
+}
+
+/**
+ * The filled-in "Join opens at {time}." line.
+ *
+ * Prefixed with a short date when the window opens on a different calendar
+ * day than the start in `tz` — a time alone would read as the wrong day for
+ * slots just after midnight, whose window opens the evening before.
+ */
+export function joinOpensAtLabel(
+  t: Dictionary,
+  opensAt: Date,
+  startsAt: Date,
+  tz: string,
+  locale: string
+): string {
+  const time =
+    calendarDayInTimezone(opensAt, tz) !== calendarDayInTimezone(startsAt, tz)
+      ? `${formatShortDateInTimezone(opensAt, tz, locale)}, ${formatTimeInTimezone(opensAt, tz, locale)}`
+      : formatTimeInTimezone(opensAt, tz, locale);
+  return t.appointments.joinOpensAt.replace("{time}", time);
+}
 
 /** The fields any appointment-shaped row needs for this to work. */
 interface SchedulableAppointment {
@@ -41,6 +77,32 @@ export function appointmentClosesAt(appt: SchedulableAppointment): Date | null {
   if (isNaN(start.getTime())) return null;
   const end = start.getTime() + appt.duration_minutes * 60_000;
   return new Date(end + JOIN_CLOSES_MINUTES_AFTER * 60_000);
+}
+
+/**
+ * The instant the appointment becomes joinable, or null if the stored
+ * schedule cannot be read.
+ *
+ * The counterpart to {@link appointmentClosesAt}; see it for why the start is
+ * built from wallClockToInstant.
+ */
+export function appointmentOpensAt(appt: SchedulableAppointment): Date | null {
+  const start = wallClockToInstant(
+    appt.scheduled_date,
+    appt.scheduled_time,
+    appt.timezone || DEFAULT_TIMEZONE
+  );
+  if (isNaN(start.getTime())) return null;
+  return new Date(start.getTime() - JOIN_OPENS_MINUTES_BEFORE * 60_000);
+}
+
+/**
+ * Whether `opensAt` is still ahead — the case worth announcing next to a Join
+ * button. The clock read lives here rather than in component bodies, which
+ * the React Compiler's purity lint rejects.
+ */
+export function joinNotYetOpen(opensAt: Date, now: number = Date.now()): boolean {
+  return now < opensAt.getTime();
 }
 
 /**

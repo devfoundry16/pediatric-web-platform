@@ -377,15 +377,15 @@ export function todayInTimezone(tz: string, now: Date = new Date()): string {
  * Always pass `timeZone` so SSR (Node) and the browser produce identical strings
  * and avoid React hydration mismatches.
  */
-export function formatDateDisplayDubai(iso: string): string {
-  return formatDateInTimezone(iso, DEFAULT_TIMEZONE);
+export function formatDateDisplayDubai(iso: string, locale = "en-AE"): string {
+  return formatDateInTimezone(iso, DEFAULT_TIMEZONE, locale);
 }
 
 /** Long form with weekday — use same fixed timezone as SSR-safe display. */
-export function formatHolidayDateDubai(iso: string): string {
+export function formatHolidayDateDubai(iso: string, locale = "en-AE"): string {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-AE", {
+  return d.toLocaleDateString(locale, {
     weekday: "short",
     day: "numeric",
     month: "long",

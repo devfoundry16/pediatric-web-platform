@@ -43,7 +43,7 @@ export function StepSelectDateTime({
   onSelectDate,
   onDoctorResolved,
 }: StepSelectDateTimeProps) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const [date, setDate] = useState<Date | undefined>(
     selectedDate ? parseLocalYMD(selectedDate) : undefined
   );
@@ -187,12 +187,12 @@ export function StepSelectDateTime({
             ) : (
               <div className="flex flex-wrap gap-2">
                 {slots.map((slot) => {
-                  const label = formatTimeInTimezone(slot.startsAt, viewerTimezone);
+                  const label = formatTimeInTimezone(slot.startsAt, viewerTimezone, dateLocale);
                   // A Dubai morning can be the previous evening in the Americas.
                   // Show the shifted day so the chip isn't quietly misleading.
                   const shiftedDay =
                     calendarDayInTimezone(slot.startsAt, viewerTimezone) !== slot.date
-                      ? formatShortDateInTimezone(slot.startsAt, viewerTimezone)
+                      ? formatShortDateInTimezone(slot.startsAt, viewerTimezone, dateLocale)
                       : null;
 
                   return (

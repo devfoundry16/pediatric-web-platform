@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import type { Locale } from "./config";
-import { defaultLocale, localeDirections } from "./config";
+import { defaultLocale, localeDirections, locales } from "./config";
 import type { Dictionary } from "./get-dictionary";
 
 interface I18nContextType {
@@ -18,6 +18,7 @@ interface I18nContextType {
   setLocale: (locale: Locale) => void;
   dir: "ltr" | "rtl";
   isRtl: boolean;
+  dateLocale: string;
 }
 
 const I18nContext = createContext<I18nContextType | null>(null);
@@ -44,6 +45,21 @@ export function I18nProvider({
   }, []);
 
   useEffect(() => {
+    try {
+      const stored = localStorage.getItem("locale");
+      if (stored && locales.includes(stored as Locale) && stored !== locale) {
+        void setLocale(stored as Locale).catch((err) => {
+          // A failed dictionary chunk load falls back to English; leave a
+          // trace so "the site ignores my language" reports are debuggable.
+          console.warn("Failed to restore saved locale", err);
+        });
+      }
+    } catch {
+      // ignore (e.g. private browsing)
+    }
+  }, [locale, setLocale]);
+
+  useEffect(() => {
     const html = document.documentElement;
     html.setAttribute("lang", locale);
     html.setAttribute("dir", localeDirections[locale]);
@@ -61,9 +77,12 @@ export function I18nProvider({
 
   const dir = localeDirections[locale];
   const isRtl = dir === "rtl";
+  const dateLocale = locale === "ar" ? "ar-AE" : "en-AE";
 
   return (
-    <I18nContext.Provider value={{ locale, dictionary, setLocale, dir, isRtl }}>
+    <I18nContext.Provider
+      value={{ locale, dictionary, setLocale, dir, isRtl, dateLocale }}
+    >
       {children}
     </I18nContext.Provider>
   );

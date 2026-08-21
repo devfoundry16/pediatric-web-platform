@@ -127,7 +127,7 @@ interface ChildOption {
 // ─── Page component ───────────────────────────────────────────────────────────
 
 export default function DoctorNotesPage() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const mr = t.medicalRecords;
 
   const [records, setRecords] = useState<MedicalRecord[]>([]);
@@ -340,7 +340,7 @@ export default function DoctorNotesPage() {
                           {getTypeLabelKey(record.record_type)}
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          {formatDateDisplayDubai(record.created_at)}
+                          {formatDateDisplayDubai(record.created_at, dateLocale)}
                         </span>
                       </div>
                       <p className="font-semibold text-foreground truncate">{record.title}</p>

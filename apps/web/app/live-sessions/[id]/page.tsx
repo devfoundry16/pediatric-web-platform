@@ -29,9 +29,19 @@ import {
 import { doctorApi } from "@/lib/api/doctor";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { formatTimeInTimezone } from "@/lib/timezone";
+import {
+  sessionHasFinished,
+  sessionJoinClosed,
+  sessionOpensAt,
+} from "@/lib/session-window";
+import {
+  joinNotYetOpen,
+  joinOpensAtLabel,
+  joinWindowHintText,
+} from "@/lib/appointment-window";
 
 export default function SessionDetailPage() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   // scheduled_at is a real instant (TIMESTAMPTZ) — format it with an explicit
   // zone rather than relying on the runtime default.
   const { timezone: viewerTimezone } = useViewerTimezone();
@@ -92,7 +102,7 @@ export default function SessionDetailPage() {
           }
         }
       } catch {
-        setError("Session not found");
+        setError(t.liveSessions.notFound);
       } finally {
         setLoading(false);
       }
@@ -145,7 +155,7 @@ export default function SessionDetailPage() {
       }
     } catch (err: unknown) {
       const msg =
-        err instanceof Error ? err.message : "Registration failed";
+        err instanceof Error ? err.message : t.liveSessions.registrationFailed;
       setError(msg);
     } finally {
       setRegistering(false);
@@ -169,7 +179,7 @@ export default function SessionDetailPage() {
       <div className="flex min-h-screen flex-col">
         <SiteHeader />
         <main className="flex-1 flex items-center justify-center">
-          <p className="text-destructive">{error ?? "Session not found"}</p>
+          <p className="text-destructive">{error ?? t.liveSessions.notFound}</p>
         </main>
         <SiteFooter />
       </div>
@@ -185,12 +195,21 @@ export default function SessionDetailPage() {
   // rejects it either way; this stops the page promising otherwise. Safe to
   // read the clock during render — this branch is only reached once the session
   // has loaded client-side.
-  const hasFinished =
-    Date.now() > scheduledDate.getTime() + session.duration_minutes * 60_000;
-  const registrationClosed = hasFinished || session.status === "cancelled";
+  const registrationClosed =
+    sessionHasFinished(session) || session.status === "cancelled";
+  // Join, unlike registration, stays available through the server's post-end
+  // grace window.
   const canJoinNow =
     session.status === "live" ||
-    (session.status === "scheduled" && !registrationClosed);
+    (session.status === "scheduled" && !sessionJoinClosed(session));
+
+  // Announced only while still ahead — once the window is open the Join
+  // button speaks for itself.
+  const opensAt = sessionOpensAt(session);
+  const joinOpensText =
+    opensAt && joinNotYetOpen(opensAt)
+      ? joinOpensAtLabel(t, opensAt, scheduledDate, viewerTimezone, dateLocale)
+      : null;
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -244,7 +263,7 @@ export default function SessionDetailPage() {
           <div className="mt-6 flex flex-wrap gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <CalendarDays className="h-4 w-4" />
-              {scheduledDate.toLocaleDateString("en-AE", {
+              {scheduledDate.toLocaleDateString(dateLocale, {
                 weekday: "long",
                 day: "numeric",
                 month: "long",
@@ -254,7 +273,7 @@ export default function SessionDetailPage() {
             </span>
             <span className="flex items-center gap-x-1.5 gap-y-1 flex-wrap">
               <Clock className="h-4 w-4" />
-              {formatTimeInTimezone(scheduledDate, viewerTimezone)}{" "}
+              {formatTimeInTimezone(scheduledDate, viewerTimezone, dateLocale)}{" "}
               ({session.duration_minutes} {t.common.minutes})
               <TimezoneNotice timezone={viewerTimezone} variant="compact" />
             </span>
@@ -319,15 +338,22 @@ export default function SessionDetailPage() {
                       {t.liveSessions.youAreHost}
                     </p>
                     {canJoinNow && (
-                      <Button
-                        className="w-full gap-2"
-                        onClick={() =>
-                          router.push(`/live-sessions/${params.id}/room`)
-                        }
-                      >
-                        <Radio className="h-4 w-4" />
-                        {t.liveSessions.joinRoom}
-                      </Button>
+                      <>
+                        <Button
+                          className="w-full gap-2"
+                          onClick={() =>
+                            router.push(`/live-sessions/${params.id}/room`)
+                          }
+                        >
+                          <Radio className="h-4 w-4" />
+                          {t.liveSessions.joinRoom}
+                        </Button>
+                        {joinOpensText && (
+                          <p className="text-xs text-center text-muted-foreground">
+                            {joinOpensText}
+                          </p>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : isRegistered && canJoinNow ? (
@@ -343,8 +369,13 @@ export default function SessionDetailPage() {
                     </Button>
                     <p className="text-xs text-center text-muted-foreground">
                       {t.liveSessions.scheduledFor}{" "}
-                      {formatTimeInTimezone(scheduledDate, viewerTimezone)}
+                      {formatTimeInTimezone(scheduledDate, viewerTimezone, dateLocale)}
                     </p>
+                    {joinOpensText && (
+                      <p className="text-xs text-center text-muted-foreground">
+                        {joinOpensText}
+                      </p>
+                    )}
                   </>
                 ) : isRegistered ? (
                   <div className="flex flex-col items-center gap-2 text-center">
@@ -354,7 +385,7 @@ export default function SessionDetailPage() {
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {t.liveSessions.scheduledFor}{" "}
-                      {formatTimeInTimezone(scheduledDate, viewerTimezone)}
+                      {formatTimeInTimezone(scheduledDate, viewerTimezone, dateLocale)}
                     </p>
                   </div>
                 ) : registrationClosed ? (
@@ -398,6 +429,14 @@ export default function SessionDetailPage() {
                       {spotsLeft} {t.liveSessions.spotsLeft}
                     </p>
                   )}
+
+                {/* Not shown once the session is over — explaining when a
+                    room opens is only useful while joining is a prospect. */}
+                {session.status !== "ended" && session.status !== "cancelled" && (
+                  <p className="text-xs text-center text-muted-foreground">
+                    {joinWindowHintText(t)}
+                  </p>
+                )}
               </CardContent>
             </Card>
           </div>

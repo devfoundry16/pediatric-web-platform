@@ -26,7 +26,7 @@ export function StepConfirmation({
   appointmentId,
   bookingData,
 }: StepConfirmationProps) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const type = CONSULTATION_TYPES.find((c) => c.id === bookingData.typeId);
   const typeLabel = getConsultationTypeLabel(t, bookingData.typeId);
 
@@ -35,7 +35,8 @@ export function StepConfirmation({
     bookingData.date,
     bookingData.time,
     bookingData.doctorTimezone,
-    viewerTimezone
+    viewerTimezone,
+    dateLocale
   );
 
   return (

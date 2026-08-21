@@ -136,7 +136,7 @@ export default function EditLiveSessionPage({ params }: PageProps) {
                 const msg =
                   err instanceof Error
                     ? err.message
-                    : "Failed to update session";
+                    : t.liveSessions.updateFailed;
                 toast.error(msg);
               }
             }}

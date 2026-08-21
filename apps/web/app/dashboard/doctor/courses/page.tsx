@@ -101,7 +101,7 @@ function CourseCard({
                 {tc.free}
               </Badge>
             ) : (
-              <span>{Number(course.price_aed).toFixed(0)} AED</span>
+              <span>{Number(course.price_aed).toFixed(0)} {t.common.aed}</span>
             )}
           </span>
         </div>
@@ -125,7 +125,7 @@ export default function DoctorCoursesPage() {
 
   const [courses, setCourses] = useState<DoctorCourse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     loadCourses();
@@ -133,12 +133,12 @@ export default function DoctorCoursesPage() {
 
   async function loadCourses() {
     setIsLoading(true);
-    setError(null);
+    setLoadFailed(false);
     try {
       const data = await coursesApi.getCreatedCourses();
       setCourses(data);
     } catch {
-      setError("Failed to load courses.");
+      setLoadFailed(true);
     } finally {
       setIsLoading(false);
     }
@@ -152,7 +152,7 @@ export default function DoctorCoursesPage() {
       );
       toast.success(tc.courseUpdated);
     } catch {
-      toast.error("Failed to update course.");
+      toast.error(tc.updateError);
     }
   }
 
@@ -164,7 +164,7 @@ export default function DoctorCoursesPage() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">{tc.manageCourses}</h1>
             <p className="mt-1 text-muted-foreground">
-              Create and manage your educational courses.
+              {tc.manageSubtitle}
             </p>
           </div>
           <Button asChild>
@@ -175,10 +175,10 @@ export default function DoctorCoursesPage() {
           </Button>
         </div>
 
-        {error && (
+        {loadFailed && (
           <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertCircle className="h-4 w-4 shrink-0" />
-            {error}
+            {tc.loadError}
           </div>
         )}
 
@@ -192,9 +192,9 @@ export default function DoctorCoursesPage() {
           <Card>
             <CardContent className="flex flex-col items-center gap-3 py-16 text-center">
               <GraduationCap className="h-12 w-12 text-muted-foreground/40" />
-              <p className="font-medium text-foreground">No courses yet</p>
+              <p className="font-medium text-foreground">{tc.emptyTitle}</p>
               <p className="text-sm text-muted-foreground">
-                Create your first course to start teaching.
+                {tc.emptySubtitle}
               </p>
               <Button asChild className="mt-2">
                 <Link href="/dashboard/doctor/courses/new">

@@ -23,13 +23,13 @@ export function DashboardMobileNav({ role }: DashboardMobileNavProps) {
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon">
             <Menu className="h-5 w-5" />
-            <span className="sr-only">Toggle sidebar</span>
+            <span className="sr-only">{t.common.toggleSidebar}</span>
           </Button>
         </SheetTrigger>
         <SheetContent aria-describedby={undefined} side={isRtl ? "right" : "left"} className="w-64 p-0">
           <VisuallyHidden asChild>
             <SheetHeader>
-              <SheetTitle>Navigation</SheetTitle>
+              <SheetTitle>{t.common.navigation}</SheetTitle>
             </SheetHeader>
           </VisuallyHidden>
           <DashboardSidebar role={role} />

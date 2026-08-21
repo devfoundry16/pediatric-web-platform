@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
+import type { Dictionary } from "@/lib/i18n/get-dictionary";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { profileApi } from "@/lib/api/profile";
 import { Button } from "@/components/ui/button";
@@ -21,31 +22,37 @@ import {
 } from "@/components/ui/card";
 import { GoogleCalendarCard } from "@/components/dashboard/google-calendar-card";
 
-const personalSchema = z.object({
-  fullName: z.string().min(2, "Enter your full name"),
-  phone: z.string().min(7, "Enter a valid phone number"),
-});
-
-const emailSchema = z.object({
-  email: z
-    .string()
-    .min(1, "Email is required")
-    .pipe(z.email("Enter a valid email")),
-});
-
-const passwordSchema = z
-  .object({
-    newPassword: z.string().min(6, "At least 6 characters"),
-    confirmPassword: z.string(),
-  })
-  .refine((data) => data.newPassword === data.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
+function createPersonalSchema(t: Dictionary) {
+  return z.object({
+    fullName: z.string().min(2, t.validation.fullNameMin),
+    phone: z.string().min(7, t.validation.phoneInvalid),
   });
+}
 
-type PersonalValues = z.infer<typeof personalSchema>;
-type EmailValues = z.infer<typeof emailSchema>;
-type PasswordValues = z.infer<typeof passwordSchema>;
+function createEmailSchema(t: Dictionary) {
+  return z.object({
+    email: z
+      .string()
+      .min(1, t.validation.emailRequired)
+      .pipe(z.email(t.validation.emailInvalid)),
+  });
+}
+
+function createPasswordSchema(t: Dictionary) {
+  return z
+    .object({
+      newPassword: z.string().min(6, t.validation.passwordMin6),
+      confirmPassword: z.string(),
+    })
+    .refine((data) => data.newPassword === data.confirmPassword, {
+      message: t.validation.passwordsMismatch,
+      path: ["confirmPassword"],
+    });
+}
+
+type PersonalValues = z.infer<ReturnType<typeof createPersonalSchema>>;
+type EmailValues = z.infer<ReturnType<typeof createEmailSchema>>;
+type PasswordValues = z.infer<ReturnType<typeof createPasswordSchema>>;
 
 interface DashboardProfileProps {
   role: "parent" | "doctor";
@@ -58,6 +65,10 @@ export function DashboardProfile({ role }: DashboardProfileProps) {
   const updateProfileMetadata = useAuthStore((s) => s.updateProfileMetadata);
   const updateUserEmail = useAuthStore((s) => s.updateUserEmail);
   const updateUserPassword = useAuthStore((s) => s.updateUserPassword);
+
+  const personalSchema = useMemo(() => createPersonalSchema(t), [t]);
+  const emailSchema = useMemo(() => createEmailSchema(t), [t]);
+  const passwordSchema = useMemo(() => createPasswordSchema(t), [t]);
 
   const personalForm = useForm<PersonalValues>({
     resolver: zodResolver(personalSchema),
