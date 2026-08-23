@@ -148,17 +148,31 @@ export interface RecentPayment {
   created_at: string;
 }
 
-/** A consultation booking or a package sale, flattened into one transaction. */
+/**
+ * A consultation booking, a package sale or a live-session ticket, flattened
+ * into one transaction.
+ *
+ * Fields that only describe one kind are null on the others — the payments page
+ * shows a different column set per tab. `buyer_name` covers both the package
+ * buyer and the session registrant; `doctors` covers both the consulting doctor
+ * and the session host.
+ */
 export interface Payment {
   id: string;
-  kind: "consultation" | "package";
+  kind: "consultation" | "package" | "live_session";
   created_at: string;
   amount_aed: number;
   payment_status: string;
   payment_reference: string | null;
   doctors: { full_name: string } | null;
   child_profiles: { first_name: string; last_name: string } | null;
+  scheduled_date: string | null;
   package_name: string | null;
+  credits_total: number | null;
+  credits_remaining: number | null;
+  expires_at: string | null;
+  session_title: string | null;
+  scheduled_at: string | null;
   buyer_name: string | null;
 }
 

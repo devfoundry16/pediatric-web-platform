@@ -1022,29 +1022,69 @@ export async function listUserPackages(req: Request, res: Response): Promise<voi
 
 // ─── Payments ─────────────────────────────────────────────────────────────────
 
-/** A consultation booking or a package sale, flattened into one transaction. */
+/**
+ * A live group-session ticket, with the session it bought.
+ *
+ * What the registrant paid has to come off the session: `session_registrations`
+ * stores no amount. Like `packageAmountAed`, that means the CURRENT price is
+ * reported — a doctor can still rewrite `price_aed` on a scheduled session (see
+ * updateSession in controllers/group-sessions.ts), which shifts the amount shown
+ * for tickets already sold. Snapshotting the price at checkout is the real fix,
+ * but that needs a schema change.
+ */
+interface SessionRegistrationRow {
+  id: string;
+  user_id: string;
+  payment_status: string;
+  registered_at: string;
+  stripe_session_id: string | null;
+  group_sessions: {
+    id: string;
+    title: string;
+    scheduled_at: string;
+    price_aed: number;
+    doctors: { full_name: string } | null;
+  } | null;
+}
+
+/**
+ * A consultation booking, a package sale or a live-session ticket, flattened
+ * into one transaction.
+ *
+ * Fields that only describe one kind are null on the others: the admin table
+ * shows a different column set per kind, so each stream fills in its own and
+ * blanks the rest. `buyer_name` covers both the package buyer and the session
+ * registrant; `doctors` covers both the consulting doctor and the session host.
+ */
 interface PaymentTransaction {
   id: string;
-  kind: "consultation" | "package";
+  kind: "consultation" | "package" | "live_session";
   created_at: string;
   amount_aed: number;
   payment_status: string;
   payment_reference: string | null;
   doctors: { full_name: string } | null;
   child_profiles: { first_name: string; last_name: string } | null;
+  scheduled_date: string | null;
   package_name: string | null;
+  credits_total: number | null;
+  credits_remaining: number | null;
+  expires_at: string | null;
+  session_title: string | null;
+  scheduled_at: string | null;
   buyer_name: string | null;
 }
 
 /**
- * Money taken, across both things the clinic sells.
+ * Money taken, across all three things the clinic sells.
  *
- * Consultations live in `appointments`, package sales in `user_packages`; there
- * is no table holding both. Rather than add a union view (this codebase has no
- * views), the two streams are merged here.
+ * Consultations live in `appointments`, package sales in `user_packages`, and
+ * live group-session tickets in `session_registrations`; there is no table
+ * holding them all. Rather than add a union view (this codebase has no views),
+ * the streams are merged here.
  *
- * Pagination is exact without fetching everything: to build page N of two
- * date-descending streams, no row past the (offset + limit)th of either stream
+ * Pagination is exact without fetching everything: to build page N of a set of
+ * date-descending streams, no row past the (offset + limit)th of any one stream
  * can appear on that page, so that prefix is all we need to read.
  */
 export async function listPayments(req: Request, res: Response): Promise<void> {
@@ -1059,12 +1099,20 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
   const offset = (pageNum - 1) * limitNum;
   const prefix = offset + limitNum;
 
-  const wantConsultations = type !== "package";
-  const wantPackages = type !== "consultation";
+  // Tested positively rather than by exclusion: with three kinds, `type !==
+  // "package"` would let a live-session filter through the consultation stream.
+  const wantConsultations = !type || type === "consultation";
+  const wantPackages = !type || type === "package";
+  const wantSessions = !type || type === "live_session";
 
   // A package sale is only ever money in or money back — it has no equivalent of
   // an appointment's `pending`/`package_credit`, so those filters exclude it.
   const packageStatusMatches = !status || status === "paid" || status === "refunded";
+
+  // A ticket can sit unpaid in checkout, so unlike a package it does have a
+  // `pending`; only `package_credit` has no meaning for one.
+  const sessionStatusMatches =
+    !status || status === "paid" || status === "pending" || status === "refunded";
 
   const appointmentsQuery = async () => {
     if (!wantConsultations) return { rows: [] as PaymentTransaction[], count: 0 };
@@ -1095,7 +1143,13 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
       doctors: (a.doctors as unknown as { full_name: string } | null) ?? null,
       child_profiles:
         (a.child_profiles as unknown as { first_name: string; last_name: string } | null) ?? null,
+      scheduled_date: (a.scheduled_date as string | null) ?? null,
       package_name: null,
+      credits_total: null,
+      credits_remaining: null,
+      expires_at: null,
+      session_title: null,
+      scheduled_at: null,
       buyer_name: null,
     }));
     return { rows, count: count ?? 0 };
@@ -1128,22 +1182,86 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
       payment_reference: row.stripe_checkout_session_id,
       doctors: null,
       child_profiles: null,
+      scheduled_date: null,
       package_name: row.consultation_packages?.name ?? null,
+      credits_total: row.credits_total,
+      credits_remaining: row.credits_remaining,
+      expires_at: row.expires_at,
+      session_title: null,
+      scheduled_at: null,
       buyer_name: names.get(row.user_id) ?? null,
     }));
     return { rows, count: count ?? 0 };
   };
 
-  try {
-    const [appointments, packages] = await Promise.all([appointmentsQuery(), packagesQuery()]);
+  const sessionRegistrationsQuery = async () => {
+    if (!wantSessions || !sessionStatusMatches) return { rows: [] as PaymentTransaction[], count: 0 };
+    let query = db
+      .from("session_registrations")
+      .select(`
+        id, user_id, payment_status, registered_at, stripe_session_id,
+        group_sessions (id, title, scheduled_at, price_aed, doctors (full_name))
+      `, { count: "exact" })
+      // A free seat is not a transaction — the same reason the consultation
+      // stream above only reads rows with a price on them.
+      .neq("payment_status", "free")
+      .order("registered_at", { ascending: false })
+      .limit(prefix);
 
-    const payments = [...appointments.rows, ...packages.rows]
+    // paid / pending / refunded already ARE the registration vocabulary, so
+    // unlike a package this needs no translation.
+    if (status) query = query.eq("payment_status", status);
+
+    const { data, error, count } = await query;
+    if (error) throw new Error(error.message);
+
+    const registrationRows = (data ?? []) as unknown as SessionRegistrationRow[];
+    const names = await fetchParentNames([...new Set(registrationRows.map((r) => r.user_id))]);
+    const rows = registrationRows.map((row): PaymentTransaction => {
+      // `session_id` is NOT NULL ON DELETE CASCADE and this client is
+      // service-role, so a registration without its session is not a reachable
+      // state — an absent embed means the select did not resolve the way the
+      // cast above claims. Pricing that at 0 would put a whole revenue stream
+      // on screen as legitimately free; fail the request the way a query error
+      // does instead. `doctors` is genuinely nullable (ON DELETE SET NULL).
+      const session = row.group_sessions;
+      if (!session) throw new Error(`Registration ${row.id} is missing its session`);
+      return {
+        id: row.id,
+        kind: "live_session",
+        created_at: row.registered_at,
+        amount_aed: Number(session.price_aed),
+        payment_status: row.payment_status,
+        payment_reference: row.stripe_session_id,
+        doctors: session.doctors ?? null,
+        child_profiles: null,
+        scheduled_date: null,
+        package_name: null,
+        credits_total: null,
+        credits_remaining: null,
+        expires_at: null,
+        session_title: session.title,
+        scheduled_at: session.scheduled_at,
+        buyer_name: names.get(row.user_id) ?? null,
+      };
+    });
+    return { rows, count: count ?? 0 };
+  };
+
+  try {
+    const [appointments, packages, registrations] = await Promise.all([
+      appointmentsQuery(),
+      packagesQuery(),
+      sessionRegistrationsQuery(),
+    ]);
+
+    const payments = [...appointments.rows, ...packages.rows, ...registrations.rows]
       .sort((a, b) => b.created_at.localeCompare(a.created_at))
       .slice(offset, offset + limitNum);
 
     res.json({
       payments,
-      total: appointments.count + packages.count,
+      total: appointments.count + packages.count + registrations.count,
       page: pageNum,
       limit: limitNum,
     });
