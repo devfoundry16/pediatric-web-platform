@@ -1,7 +1,7 @@
 "use client";
 
 import { RefreshButton } from "@/components/ui/refresh-button";
-import { useEffect, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,15 +24,25 @@ import { formatDateInTimezone } from "@/lib/timezone";
 /**
  * The tab doubles as the `type` filter sent to the API. "all" is the one value
  * that is not a `type` — it is sent as no filter at all.
+ *
+ * Derived from `Payment["kind"]` so a fourth revenue stream cannot be added to
+ * the API and quietly end up with no tab: it stops compiling here instead.
  */
-type TabValue = "all" | "consultation" | "package" | "live_session";
+type TabValue = "all" | Payment["kind"];
 
 const TABS: readonly TabValue[] = ["all", "consultation", "package", "live_session"];
 
 /**
- * Offering a status a tab can never return is a dead end, so each tab advertises
- * only its own vocabulary: a package is never `pending` and has no
- * `package_credit`, and a live-session ticket has no `package_credit` either.
+ * Each tab advertises only the statuses its own streams can hold, so switching
+ * tabs cannot strand the table behind a filter that has nothing to return: a
+ * package is never `pending`, and neither it nor a ticket has `package_credit`.
+ *
+ * `package_credit` is a known exception, kept only because it predates the tabs.
+ * A credit-booked consultation is written with `price_aed = 0` (see
+ * controllers/appointments.ts) and the payments query only reads rows with a
+ * price on them, so it returns nothing today — as does the "Package credits"
+ * summary card below. Removing both, or surfacing zero-cash bookings on
+ * purpose, is a product call rather than part of adding live sessions.
  */
 const STATUSES_BY_TAB: Record<TabValue, readonly string[]> = {
   all: ["paid", "package_credit", "refunded", "pending"],
@@ -122,7 +132,12 @@ function columnsFor(tab: TabValue, ctx: CellContext): Column[] {
       { key: "date", header: t.common.date, cell: (p) => date(p.created_at), className: "text-muted-foreground" },
       { key: "patient", header: t.admin.common.patient, cell: (p) => (p.child_profiles ? `${p.child_profiles.first_name} ${p.child_profiles.last_name}` : "—"), className: "text-foreground" },
       { key: "doctor", header: t.admin.common.doctor, cell: (p) => p.doctors?.full_name ?? "—", className: "text-foreground" },
-      { key: "scheduled", header: t.admin.payments.colConsultationDate, cell: (p) => date(p.scheduled_date), className: "text-muted-foreground" },
+      // Rendered raw, like every other admin surface that shows this column.
+      // `scheduled_date` is a bare DATE holding a wall-clock day in the
+      // DOCTOR's zone (see lib/timezone.ts); pushing it through the instant
+      // formatter parses it as UTC midnight and prints the previous day for
+      // any viewer west of UTC.
+      { key: "scheduled", header: t.admin.payments.colConsultationDate, cell: (p) => p.scheduled_date ?? "—", className: "text-muted-foreground" },
       amount,
       status,
       reference,
@@ -137,8 +152,10 @@ function columnsFor(tab: TabValue, ctx: CellContext): Column[] {
       {
         key: "credits",
         header: t.admin.packages.colCredits,
+        // Both or neither — they are NOT NULL together on the row this comes
+        // from, so testing one and printing the other would render "null of 4".
         cell: (p) =>
-          p.credits_total === null
+          p.credits_total === null || p.credits_remaining === null
             ? "—"
             : t.admin.packages.creditsOf
                 .replace("{remaining}", String(p.credits_remaining))
@@ -187,11 +204,13 @@ function PaymentsTable({
   payments,
   loading,
   emptyLabel,
+  errorLabel,
 }: {
   columns: Column[];
   payments: Payment[];
   loading: boolean;
   emptyLabel: string;
+  errorLabel: string | null;
 }) {
   if (loading) {
     return (
@@ -199,6 +218,12 @@ function PaymentsTable({
         {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
       </div>
     );
+  }
+
+  // Distinct from the empty state on purpose: "nothing sold" and "the request
+  // failed" look identical otherwise, and one of them is a lie about revenue.
+  if (errorLabel) {
+    return <p className="px-6 py-8 text-center text-sm text-destructive">{errorLabel}</p>;
   }
 
   if (payments.length === 0) {
@@ -236,40 +261,69 @@ function PaymentsTable({
 export default function AdminPaymentsPage() {
   const { dictionary: t, dateLocale } = useI18n();
   const { timezone } = useViewerTimezone();
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [total, setTotal] = useState(0);
+  /**
+   * Rows travel with the tab they were fetched for.
+   *
+   * The columns are chosen per tab, so rows and tab have to move together or a
+   * stream gets read through another's headers — consultation amounts sitting
+   * under "Session"/"Host" and counted as ticket revenue. Keeping them in one
+   * piece of state makes that unrepresentable.
+   */
+  const [data, setData] = useState<{ rows: Payment[]; total: number; tab: TabValue }>({
+    rows: [], total: 0, tab: "all",
+  });
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [page, setPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState("");
   const [tab, setTab] = useState<TabValue>("all");
+  /** Only the newest request may write; a slower earlier one is discarded. */
+  const latestRequest = useRef(0);
   const LIMIT = 50;
 
   const load = useCallback((silent = false) => {
     // Skip the skeleton swap on a manual refresh — see RefreshButton.
     if (!silent) setLoading(true);
-    adminApi.listPayments({
+    const requestId = ++latestRequest.current;
+    const requestedTab = tab;
+    return adminApi.listPayments({
       status: filterStatus || undefined,
       type: tab === "all" ? undefined : tab,
       page,
       limit: LIMIT,
     })
-      .then(({ payments: p, total: t }) => { setPayments(p); setTotal(t); })
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .then(({ payments: p, total: n }) => {
+        if (requestId !== latestRequest.current) return;
+        setData({ rows: p, total: n, tab: requestedTab });
+        setFailed(false);
+      })
+      .catch(() => {
+        if (requestId !== latestRequest.current) return;
+        // Holding on to the previous tab's rows would present them as this
+        // tab's — worse than showing nothing, because the totals look real.
+        setData({ rows: [], total: 0, tab: requestedTab });
+        setFailed(true);
+      })
+      .finally(() => {
+        if (requestId === latestRequest.current) setLoading(false);
+      });
   }, [filterStatus, tab, page]);
 
   useEffect(() => { load(); }, [load]);
 
   // A status the new tab cannot return would strand the table on an empty list
-  // with no hint why, so it is dropped rather than carried across.
+  // with no hint why, so it is dropped rather than carried across. Loading is
+  // raised here rather than in the effect so the skeleton covers the frame
+  // between the tab changing and the fetch starting.
   const selectTab = (next: TabValue) => {
     setTab(next);
     setPage(1);
+    setLoading(true);
     if (filterStatus && !STATUSES_BY_TAB[next].includes(filterStatus)) setFilterStatus("");
   };
 
-  const totalRevenue = payments.filter((p) => p.payment_status === "paid").reduce((s, p) => s + Number(p.amount_aed), 0);
-  const totalPages = Math.ceil(total / LIMIT);
+  const totalRevenue = data.rows.filter((p) => p.payment_status === "paid").reduce((s, p) => s + Number(p.amount_aed), 0);
+  const totalPages = Math.ceil(data.total / LIMIT);
   const cellContext = { t, timezone, dateLocale };
 
   return (
@@ -293,14 +347,14 @@ export default function AdminPaymentsPage() {
         <Card>
           <CardContent className="p-5">
             <p className="text-sm text-muted-foreground">{t.admin.payments.totalTransactions}</p>
-            <p className="mt-1 text-2xl font-bold text-foreground">{total}</p>
+            <p className="mt-1 text-2xl font-bold text-foreground">{data.total}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-5">
             <p className="text-sm text-muted-foreground">{t.admin.payments.packageCredits}</p>
             <p className="mt-1 text-2xl font-bold text-foreground">
-              {payments.filter((p) => p.payment_status === "package_credit").length}
+              {data.rows.filter((p) => p.payment_status === "package_credit").length}
             </p>
           </CardContent>
         </Card>
@@ -331,14 +385,15 @@ export default function AdminPaymentsPage() {
           <TabsContent key={v} value={v} className="mt-6">
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">{t.admin.payments.listTitle.replace("{count}", String(total))}</CardTitle>
+                <CardTitle className="text-base">{t.admin.payments.listTitle.replace("{count}", String(data.total))}</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <PaymentsTable
-                  columns={columnsFor(v, cellContext)}
-                  payments={payments}
+                  columns={columnsFor(data.tab, cellContext)}
+                  payments={data.rows}
                   loading={loading}
                   emptyLabel={t.admin.payments.empty}
+                  errorLabel={failed ? t.admin.payments.loadError : null}
                 />
               </CardContent>
             </Card>

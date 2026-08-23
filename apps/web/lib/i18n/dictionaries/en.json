@@ -1038,7 +1038,8 @@
       "typeLiveSession": "Live session",
       "colConsultationDate": "Consultation date",
       "colSession": "Session",
-      "colScheduled": "Scheduled"
+      "colScheduled": "Scheduled",
+      "loadError": "Could not load payments. Try refreshing."
     },
     "packages": {
       "title": "Packages",

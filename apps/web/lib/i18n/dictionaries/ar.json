@@ -1038,7 +1038,8 @@
       "typeLiveSession": "جلسة مباشرة",
       "colConsultationDate": "تاريخ الاستشارة",
       "colSession": "الجلسة",
-      "colScheduled": "موعد الجلسة"
+      "colScheduled": "موعد الجلسة",
+      "loadError": "تعذّر تحميل المدفوعات. حاول التحديث."
     },
     "packages": {
       "title": "الباقات",
