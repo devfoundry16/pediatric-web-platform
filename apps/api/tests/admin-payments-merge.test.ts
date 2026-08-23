@@ -27,6 +27,11 @@ const CATALOGUE = { id: "pkg-1", slug: "monthly_followup", name: "Monthly Follow
 
 /** Appointments on even days, packages on odd days, so a correct merge interleaves them. */
 const APPOINTMENTS = [
+  // Booked against a package credit, so no money moved and `price_aed` is 0
+  // (see controllers/appointments.ts). The `.gt("price_aed", 0)` filter must
+  // keep it out of the list AND out of `total`; nothing else here would notice
+  // if that filter were dropped.
+  { id: "appt-credit", price_aed: 0, payment_status: "package_credit", payment_reference: null, created_at: "2026-01-08T00:00:00Z", scheduled_date: "2026-01-08", parent_id: BUYER_A, doctors: { full_name: "Dr. Sahar" }, child_profiles: { first_name: "Lina", last_name: "K" } },
   { id: "appt-6", price_aed: 300, payment_status: "paid", payment_reference: "pi_6", created_at: "2026-01-06T00:00:00Z", scheduled_date: "2026-01-06", parent_id: BUYER_A, doctors: { full_name: "Dr. Sahar" }, child_profiles: { first_name: "Lina", last_name: "K" } },
   { id: "appt-4", price_aed: 300, payment_status: "paid", payment_reference: "pi_4", created_at: "2026-01-04T00:00:00Z", scheduled_date: "2026-01-04", parent_id: BUYER_A, doctors: { full_name: "Dr. Sahar" }, child_profiles: { first_name: "Lina", last_name: "K" } },
   { id: "appt-2", price_aed: 300, payment_status: "paid", payment_reference: "pi_2", created_at: "2026-01-02T00:00:00Z", scheduled_date: "2026-01-02", parent_id: BUYER_A, doctors: { full_name: "Dr. Sahar" }, child_profiles: { first_name: "Lina", last_name: "K" } },
@@ -67,7 +72,7 @@ const PROFILES = [
   { id: BUYER_B, full_name: "Parent B" },
 ];
 
-/** Honours the status/limit chained onto the query, as PostgREST would. */
+/** Honours the status/gt/order/limit chained onto the query, as PostgREST would. */
 function streamHandler(rows: any[], statusField: string): TableHandler {
   return (q: RecordedQuery) => {
     let out = [...rows];
@@ -75,6 +80,25 @@ function streamHandler(rows: any[], statusField: string): TableHandler {
     if (eq !== undefined) out = out.filter((r) => r[statusField] === eq);
     const neq = argOf(q, "neq", statusField);
     if (neq !== undefined) out = out.filter((r) => r[statusField] !== neq);
+    for (const call of q.calls.filter((c) => c.method === "gt")) {
+      const [field, value] = call.args as [string, number];
+      out = out.filter((r) => Number(r[field]) > value);
+    }
+
+    // Sorting for real is what makes the id-list assertions protect ordering
+    // too: without it, ordering a stream by a column it does not have — or
+    // ascending instead of descending — still returns the fixture order and
+    // every test passes while production 500s or pages the oldest rows.
+    const order = q.calls.find((c) => c.method === "order");
+    if (order) {
+      const [field, opts] = order.args as [string, { ascending?: boolean } | undefined];
+      if (out.some((r) => r[field] === undefined)) {
+        throw new Error(`ordered by "${field}", which this table's rows do not have`);
+      }
+      const dir = opts?.ascending ? 1 : -1;
+      out.sort((a, b) => dir * String(a[field]).localeCompare(String(b[field])));
+    }
+
     // `count` is the full match count; `data` is only the fetched prefix.
     const count = out.length;
     const limit = q.calls.find((c) => c.method === "limit")?.args[0] as number | undefined;
@@ -145,13 +169,26 @@ describe("listPayments — merging consultations, package sales and session tick
 
   it("pages across the merge without dropping or repeating a row", async () => {
     mount();
-    const page1 = ((await call(listPayments, { page: "1", limit: "3" })).body as any).payments;
-    const page2 = ((await call(listPayments, { page: "2", limit: "3" })).body as any).payments;
-    const page3 = ((await call(listPayments, { page: "3", limit: "3" })).body as any).payments;
+    // 2 per page over 9 rows keeps every stream TRUNCATED by its prefix on the
+    // early pages (each holds 3 matching rows), which is the whole point: the
+    // merge has to come out right from partial reads. A page size that happens
+    // to reach past every stream's last row would prove nothing.
+    const pages = [];
+    for (let page = 1; page <= 5; page++) {
+      pages.push(((await call(listPayments, { page: String(page), limit: "2" })).body as any).payments);
+    }
 
-    const seen = [...page1, ...page2, ...page3].map((p: any) => p.id);
+    const seen = pages.flat().map((p: any) => p.id);
     expect(seen).toEqual(MERGED);
     expect(new Set(seen).size).toBe(9);
+  });
+
+  it("builds a page that falls inside one stream's rows", async () => {
+    mount();
+    // MERGED[6..7] — a boundary that splits the registrations stream rather
+    // than landing on a stream edge.
+    const rows = ((await call(listPayments, { page: "4", limit: "2" })).body as any).payments;
+    expect(rows.map((p: any) => p.id)).toEqual(["reg-2", "appt-2"]);
   });
 
   it("reads only the prefix each page can need", async () => {
@@ -159,10 +196,40 @@ describe("listPayments — merging consultations, package sales and session tick
     await call(listPayments, { page: "2", limit: "2" });
 
     // Page 2 of a 2-per-page merge can only be built from the first 4 of each
-    // stream, so neither query should ask for more.
-    for (const q of mock.queries.filter((x) => x.table !== "profiles")) {
+    // stream, so no query should ask for more.
+    const streams = mock.queries.filter((x) => x.table !== "profiles");
+    // All three, so a stream gated off by accident cannot pass this vacuously.
+    expect(streams.length).toBe(3);
+    for (const q of streams) {
       expect(q.calls.find((c) => c.method === "limit")?.args[0]).toBe(4);
     }
+  });
+
+  it("orders every stream newest-first on its own date column", async () => {
+    const mock = mount();
+    await call(listPayments, {});
+
+    const orderOf = (table: string) =>
+      mock.queries.find((q) => q.table === table)?.calls.find((c) => c.method === "order")?.args;
+
+    expect(orderOf("appointments")).toEqual(["created_at", { ascending: false }]);
+    expect(orderOf("user_packages")).toEqual(["purchased_at", { ascending: false }]);
+    // Not `created_at` — session_registrations has no such column, so getting
+    // this wrong is a 500 in production that the fixtures alone would not show.
+    expect(orderOf("session_registrations")).toEqual(["registered_at", { ascending: false }]);
+  });
+
+  it("keeps package-credit consultations out of the money list entirely", async () => {
+    mount();
+    const all = (await call(listPayments, {})).body as any;
+    const credit = (await call(listPayments, { status: "package_credit" })).body as any;
+
+    // No cash moved, so it is not a transaction — and it must not inflate the count.
+    expect(all.payments.some((p: any) => p.id === "appt-credit")).toBe(false);
+    expect(all.total).toBe(9);
+    // Consequently this status can never return a row, on any tab.
+    expect(credit.payments).toEqual([]);
+    expect(credit.total).toBe(0);
   });
 
   it("maps a refund onto the payment vocabulary and treats every other state as paid", async () => {
@@ -191,6 +258,68 @@ describe("listPayments — merging consultations, package sales and session tick
     expect(mock.queries.some((q) => q.table === "user_packages")).toBe(false);
     expect(mock.queries.some((q) => q.table === "appointments")).toBe(true);
     expect((res.body as any).payments.map((p: any) => p.id)).toEqual(["reg-5"]);
+  });
+
+  it("filtering to refunded interleaves the two streams that can hold one", async () => {
+    mount();
+    const res = await call(listPayments, { status: "refunded" });
+
+    // The only status all three streams recognise, and the one where the
+    // package translation (status -> payment_status) runs beside the
+    // registration's native value.
+    expect((res.body as any).payments.map((p: any) => p.id)).toEqual(["reg-2", "pkg-1"]);
+    expect((res.body as any).total).toBe(2);
+  });
+
+  it("type=consultation drops the package and ticket streams entirely", async () => {
+    const mock = mount();
+    const res = await call(listPayments, { type: "consultation" });
+
+    expect((res.body as any).payments.map((p: any) => p.id)).toEqual(["appt-6", "appt-4", "appt-2"]);
+    expect((res.body as any).total).toBe(3);
+    expect(mock.queries.some((q) => q.table === "user_packages")).toBe(false);
+    expect(mock.queries.some((q) => q.table === "session_registrations")).toBe(false);
+  });
+
+  it("fails the whole request when a stream errors, rather than under-reporting", async () => {
+    mount({ session_registrations: () => ({ error: { message: "boom" } }) });
+    const res = await call(listPayments, {});
+
+    // Silently degrading to the two healthy streams would hand an admin a
+    // revenue total that looks complete and is not.
+    expect(res.statusCode).toBe(500);
+    expect((res.body as any).payments).toBeUndefined();
+    expect((res.body as any).error).toBe("boom");
+  });
+
+  it("fails rather than pricing a ticket whose session did not resolve", async () => {
+    mount({
+      session_registrations: () => ({
+        data: [{ ...REGISTRATIONS[0], group_sessions: null }],
+        count: 1,
+      }),
+    });
+    const res = await call(listPayments, {});
+
+    // AED 0 is a real price, so it cannot double as "the embed broke".
+    expect(res.statusCode).toBe(500);
+    expect((res.body as any).error).toMatch(/missing its session/);
+  });
+
+  it("reports a genuinely zero-priced ticket instead of hiding it", async () => {
+    mount({
+      session_registrations: () => ({
+        data: [{ ...REGISTRATIONS[0], group_sessions: { ...SESSION, price_aed: 0 } }],
+        count: 1,
+      }),
+    });
+    const res = await call(listPayments, { type: "live_session" });
+
+    // A doctor can zero a session's price after tickets sold (updateSession).
+    // Dropping such rows in JS would also desync `payments` from the DB count.
+    expect((res.body as any).payments.map((p: any) => p.id)).toEqual(["reg-7"]);
+    expect((res.body as any).payments[0].amount_aed).toBe(0);
+    expect((res.body as any).total).toBe(1);
   });
 
   it("type=package drops the consultation and ticket streams entirely", async () => {
