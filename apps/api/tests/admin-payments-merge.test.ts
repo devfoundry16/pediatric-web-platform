@@ -38,6 +38,30 @@ const PACKAGES = [
   { id: "pkg-1", user_id: BUYER_B, credits_total: 4, credits_remaining: 0, expires_at: "2026-02-01T00:00:00Z", status: "refunded", purchased_at: "2026-01-01T00:00:00Z", stripe_checkout_session_id: "cs_1", consultation_packages: CATALOGUE },
 ];
 
+const SESSION = {
+  id: "gs-1",
+  title: "Sleep & Toddlers",
+  scheduled_at: "2026-02-10T09:00:00Z",
+  price_aed: 120,
+  doctors: { full_name: "Dr. Sahar" },
+};
+
+/**
+ * Registrations sit on the half-day so they interleave with the whole-day
+ * appointment and package fixtures rather than tying with them.
+ */
+const REGISTRATIONS = [
+  { id: "reg-7", user_id: BUYER_A, payment_status: "paid", registered_at: "2026-01-07T00:00:00Z", stripe_session_id: "cs_reg_7", group_sessions: SESSION },
+  { id: "reg-5", user_id: BUYER_A, payment_status: "pending", registered_at: "2026-01-05T12:00:00Z", stripe_session_id: null, group_sessions: SESSION },
+  { id: "reg-4", user_id: BUYER_B, payment_status: "free", registered_at: "2026-01-04T12:00:00Z", stripe_session_id: null, group_sessions: SESSION },
+  { id: "reg-2", user_id: BUYER_B, payment_status: "refunded", registered_at: "2026-01-02T12:00:00Z", stripe_session_id: "cs_reg_2", group_sessions: SESSION },
+];
+
+/** Every transaction, newest first — the free seat is never one of them. */
+const MERGED = [
+  "reg-7", "appt-6", "reg-5", "pkg-5", "appt-4", "pkg-3", "reg-2", "appt-2", "pkg-1",
+];
+
 const PROFILES = [
   { id: BUYER_A, full_name: "Parent A" },
   { id: BUYER_B, full_name: "Parent B" },
@@ -63,6 +87,7 @@ function mount(overrides: Record<string, TableHandler> = {}) {
   const mock = createSupabaseMock({
     appointments: streamHandler(APPOINTMENTS, "payment_status"),
     user_packages: streamHandler(PACKAGES, "status"),
+    session_registrations: streamHandler(REGISTRATIONS, "payment_status"),
     profiles: (q) => {
       const ids = argOf(q, "in", "id") as string[] | undefined;
       return { data: PROFILES.filter((p) => !ids || ids.includes(p.id)) };
@@ -83,17 +108,15 @@ beforeEach(() => {
   supabaseHolder.current = null;
 });
 
-describe("listPayments — merging consultations and package sales", () => {
-  it("interleaves both streams in date order", async () => {
+describe("listPayments — merging consultations, package sales and session tickets", () => {
+  it("interleaves all three streams in date order", async () => {
     mount();
     const res = await call(listPayments, {});
 
     expect(res.statusCode).toBe(200);
-    expect((res.body as any).payments.map((p: any) => p.id)).toEqual([
-      "appt-6", "pkg-5", "appt-4", "pkg-3", "appt-2", "pkg-1",
-    ]);
-    // Both counts, not just the appointments the old query could see.
-    expect((res.body as any).total).toBe(6);
+    expect((res.body as any).payments.map((p: any) => p.id)).toEqual(MERGED);
+    // Every stream's count, not just the appointments the old query could see.
+    expect((res.body as any).total).toBe(9);
   });
 
   it("prices a package from the catalogue, multiplied by the quantity bought", async () => {
@@ -122,13 +145,13 @@ describe("listPayments — merging consultations and package sales", () => {
 
   it("pages across the merge without dropping or repeating a row", async () => {
     mount();
-    const page1 = ((await call(listPayments, { page: "1", limit: "2" })).body as any).payments;
-    const page2 = ((await call(listPayments, { page: "2", limit: "2" })).body as any).payments;
-    const page3 = ((await call(listPayments, { page: "3", limit: "2" })).body as any).payments;
+    const page1 = ((await call(listPayments, { page: "1", limit: "3" })).body as any).payments;
+    const page2 = ((await call(listPayments, { page: "2", limit: "3" })).body as any).payments;
+    const page3 = ((await call(listPayments, { page: "3", limit: "3" })).body as any).payments;
 
     const seen = [...page1, ...page2, ...page3].map((p: any) => p.id);
-    expect(seen).toEqual(["appt-6", "pkg-5", "appt-4", "pkg-3", "appt-2", "pkg-1"]);
-    expect(new Set(seen).size).toBe(6);
+    expect(seen).toEqual(MERGED);
+    expect(new Set(seen).size).toBe(9);
   });
 
   it("reads only the prefix each page can need", async () => {
@@ -153,21 +176,93 @@ describe("listPayments — merging consultations and package sales", () => {
   it("filtering to paid keeps live packages and excludes the refunded one", async () => {
     mount();
     const rows = ((await call(listPayments, { status: "paid" })).body as any).payments;
-    expect(rows.map((p: any) => p.id)).toEqual(["appt-6", "pkg-5", "appt-4", "pkg-3", "appt-2"]);
+    expect(rows.map((p: any) => p.id)).toEqual([
+      "reg-7", "appt-6", "pkg-5", "appt-4", "pkg-3", "appt-2",
+    ]);
   });
 
-  it("filtering to an appointment-only status returns no packages", async () => {
-    mount();
+  it("filtering to pending reaches consultations and tickets but not packages", async () => {
+    const mock = mount();
     const res = await call(listPayments, { status: "pending" });
-    expect(((res.body as any).payments as any[]).every((p) => p.kind === "consultation")).toBe(true);
+
+    // A package is never pending, so that stream is skipped outright; the other
+    // two are asked. No appointment fixture is pending, hence the query check
+    // rather than an assertion on the returned rows.
+    expect(mock.queries.some((q) => q.table === "user_packages")).toBe(false);
+    expect(mock.queries.some((q) => q.table === "appointments")).toBe(true);
+    expect((res.body as any).payments.map((p: any) => p.id)).toEqual(["reg-5"]);
   });
 
-  it("type=package drops the consultation stream entirely", async () => {
+  it("type=package drops the consultation and ticket streams entirely", async () => {
     const mock = mount();
     const rows = ((await call(listPayments, { type: "package" })).body as any).payments;
 
     expect(rows.map((p: any) => p.id)).toEqual(["pkg-5", "pkg-3", "pkg-1"]);
     expect(mock.queries.some((q) => q.table === "appointments")).toBe(false);
+    expect(mock.queries.some((q) => q.table === "session_registrations")).toBe(false);
+  });
+
+  it("type=live_session drops the consultation and package streams entirely", async () => {
+    const mock = mount();
+    const res = await call(listPayments, { type: "live_session" });
+
+    // The old gating tested by exclusion (`type !== "package"`), which would
+    // have let both other streams through for an unrecognised third type.
+    expect((res.body as any).payments.map((p: any) => p.id)).toEqual(["reg-7", "reg-5", "reg-2"]);
+    expect((res.body as any).total).toBe(3);
+    expect(mock.queries.some((q) => q.table === "appointments")).toBe(false);
+    expect(mock.queries.some((q) => q.table === "user_packages")).toBe(false);
+  });
+
+  it("never bills a free seat as a transaction", async () => {
+    mount();
+    const unfiltered = ((await call(listPayments, {})).body as any).payments;
+    const ticketsOnly = (await call(listPayments, { type: "live_session" })).body as any;
+    const freeFiltered = (await call(listPayments, { status: "free" })).body as any;
+
+    expect(unfiltered.some((p: any) => p.id === "reg-4")).toBe(false);
+    expect(ticketsOnly.payments.some((p: any) => p.id === "reg-4")).toBe(false);
+    // 'free' is not payment vocabulary at all — it matches nothing anywhere.
+    expect(freeFiltered.payments).toEqual([]);
+    expect(freeFiltered.total).toBe(0);
+  });
+
+  it("describes a ticket by its session, host and registrant", async () => {
+    mount();
+    const rows = ((await call(listPayments, {})).body as any).payments;
+    const ticket = rows.find((p: any) => p.id === "reg-7");
+
+    expect(ticket).toMatchObject({
+      kind: "live_session",
+      session_title: "Sleep & Toddlers",
+      scheduled_at: "2026-02-10T09:00:00Z",
+      buyer_name: "Parent A",
+      payment_status: "paid",
+      payment_reference: "cs_reg_7",
+      // Read off the session — session_registrations stores no amount.
+      amount_aed: 120,
+    });
+    expect(ticket.doctors.full_name).toBe("Dr. Sahar");
+  });
+
+  it("skips the ticket stream for a status no registration can hold", async () => {
+    const mock = mount();
+    await call(listPayments, { status: "package_credit" });
+
+    expect(mock.queries.some((q) => q.table === "session_registrations")).toBe(false);
+  });
+
+  it("carries the package credit columns the packages tab needs", async () => {
+    mount();
+    const rows = ((await call(listPayments, {})).body as any).payments;
+
+    expect(rows.find((p: any) => p.id === "pkg-3")).toMatchObject({
+      credits_total: 8,
+      credits_remaining: 2,
+      expires_at: "2026-02-03T00:00:00Z",
+    });
+    // And the consultation date the consultations tab needs.
+    expect(rows.find((p: any) => p.id === "appt-6").scheduled_date).toBe("2026-01-06");
   });
 });
 
