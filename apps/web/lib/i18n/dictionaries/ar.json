@@ -1030,7 +1030,15 @@
       "listTitle": "المعاملات ({count})",
       "empty": "لا توجد مدفوعات.",
       "colReference": "المرجع",
-      "typeConsultation": "استشارة"
+      "typeConsultation": "استشارة",
+      "tabAll": "الكل",
+      "tabConsultations": "الاستشارات",
+      "tabPackages": "الباقات",
+      "tabLiveSessions": "الجلسات المباشرة",
+      "typeLiveSession": "جلسة مباشرة",
+      "colConsultationDate": "تاريخ الاستشارة",
+      "colSession": "الجلسة",
+      "colScheduled": "موعد الجلسة"
     },
     "packages": {
       "title": "الباقات",

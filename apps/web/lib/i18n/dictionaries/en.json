@@ -1030,7 +1030,15 @@
       "listTitle": "Transactions ({count})",
       "empty": "No payments found.",
       "colReference": "Reference",
-      "typeConsultation": "Consultation"
+      "typeConsultation": "Consultation",
+      "tabAll": "All",
+      "tabConsultations": "Consultations",
+      "tabPackages": "Packages",
+      "tabLiveSessions": "Live sessions",
+      "typeLiveSession": "Live session",
+      "colConsultationDate": "Consultation date",
+      "colSession": "Session",
+      "colScheduled": "Scheduled"
     },
     "packages": {
       "title": "Packages",
