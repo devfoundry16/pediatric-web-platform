@@ -1217,24 +1217,34 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
 
     const registrationRows = (data ?? []) as unknown as SessionRegistrationRow[];
     const names = await fetchParentNames([...new Set(registrationRows.map((r) => r.user_id))]);
-    const rows = registrationRows.map((row): PaymentTransaction => ({
-      id: row.id,
-      kind: "live_session",
-      created_at: row.registered_at,
-      amount_aed: Number(row.group_sessions?.price_aed ?? 0),
-      payment_status: row.payment_status,
-      payment_reference: row.stripe_session_id,
-      doctors: row.group_sessions?.doctors ?? null,
-      child_profiles: null,
-      scheduled_date: null,
-      package_name: null,
-      credits_total: null,
-      credits_remaining: null,
-      expires_at: null,
-      session_title: row.group_sessions?.title ?? null,
-      scheduled_at: row.group_sessions?.scheduled_at ?? null,
-      buyer_name: names.get(row.user_id) ?? null,
-    }));
+    const rows = registrationRows.map((row): PaymentTransaction => {
+      // `session_id` is NOT NULL ON DELETE CASCADE and this client is
+      // service-role, so a registration without its session is not a reachable
+      // state — an absent embed means the select did not resolve the way the
+      // cast above claims. Pricing that at 0 would put a whole revenue stream
+      // on screen as legitimately free; fail the request the way a query error
+      // does instead. `doctors` is genuinely nullable (ON DELETE SET NULL).
+      const session = row.group_sessions;
+      if (!session) throw new Error(`Registration ${row.id} is missing its session`);
+      return {
+        id: row.id,
+        kind: "live_session",
+        created_at: row.registered_at,
+        amount_aed: Number(session.price_aed),
+        payment_status: row.payment_status,
+        payment_reference: row.stripe_session_id,
+        doctors: session.doctors ?? null,
+        child_profiles: null,
+        scheduled_date: null,
+        package_name: null,
+        credits_total: null,
+        credits_remaining: null,
+        expires_at: null,
+        session_title: session.title,
+        scheduled_at: session.scheduled_at,
+        buyer_name: names.get(row.user_id) ?? null,
+      };
+    });
     return { rows, count: count ?? 0 };
   };
 
