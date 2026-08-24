@@ -7,7 +7,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Eye, EyeOff, Heart, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { BrandLogo } from "@/components/layout/brand-logo";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
 import type { Dictionary } from "@/lib/i18n/get-dictionary";
@@ -78,14 +79,11 @@ export default function ResetPasswordPage() {
       <div className="hidden w-1/2 bg-primary lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-12">
         <div className="mx-auto max-w-md text-center">
           <div className="mb-8 flex justify-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary-foreground/10">
-              <Heart className="h-8 w-8 text-primary-foreground" />
+            <div className="rounded-2xl bg-white px-6 py-5 shadow-sm">
+              <BrandLogo className="h-16" />
             </div>
           </div>
-          <h2 className="text-3xl font-bold text-primary-foreground">
-            {t.common.appName}
-          </h2>
-          <p className="mt-3 text-lg text-primary-foreground/80">
+          <p className="text-lg text-primary-foreground/80">
             {t.common.tagline}
           </p>
         </div>
@@ -93,13 +91,8 @@ export default function ResetPasswordPage() {
 
       <div className="flex w-full items-center justify-center px-4 py-12 lg:w-1/2">
         <div className="w-full max-w-md">
-          <Link href="/" className="mb-8 flex items-center gap-2 lg:hidden">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-              <Heart className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="text-lg font-bold text-foreground">
-              {t.common.appName}
-            </span>
+          <Link href="/" className="mb-8 flex items-center lg:hidden">
+            <BrandLogo className="h-9" />
           </Link>
 
           {checking ? (

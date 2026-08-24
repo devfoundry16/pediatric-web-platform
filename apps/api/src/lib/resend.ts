@@ -175,7 +175,7 @@ interface AppointmentEmailData {
 }
 
 const FROM = process.env.RESEND_FROM_EMAIL ?? "noreply@littlecare.ae";
-const APP_NAME = "LittleCare";
+const APP_NAME = "Drsahar Pediatrics";
 
 /**
  * Email is rendered server-side with no idea where the recipient is, so it

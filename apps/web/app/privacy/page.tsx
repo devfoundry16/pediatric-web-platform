@@ -28,7 +28,7 @@ export default function PrivacyPolicyPage() {
             <section>
               <h2 className="text-lg font-semibold text-foreground">Who we are</h2>
               <p className="mt-2">
-                LittleCare provides online pediatric consultations and health education. This policy
+                Drsahar Pediatrics provides online pediatric consultations and health education. This policy
                 explains what we collect, why, and the choices you have. It covers our website, the
                 parent and doctor dashboards, and any integration you choose to enable.
               </p>
@@ -79,7 +79,7 @@ export default function PrivacyPolicyPage() {
                 </li>
                 <li>
                   <strong className="text-foreground">Calendar events</strong> (
-                  <code>calendar.events</code>) — to add your LittleCare appointments and live
+                  <code>calendar.events</code>) — to add your Drsahar Pediatrics appointments and live
                   sessions to your calendar, and to keep them accurate when a booking is rescheduled
                   or cancelled.
                 </li>
@@ -90,7 +90,7 @@ export default function PrivacyPolicyPage() {
                 profile from your calendar.
               </p>
               <p className="mt-2">
-                <strong className="text-foreground">Limited Use.</strong> LittleCare&apos;s use and
+                <strong className="text-foreground">Limited Use.</strong> Drsahar Pediatrics&apos;s use and
                 transfer of information received from Google APIs adheres to the{" "}
                 <a
                   href="https://developers.google.com/terms/api-services-user-data-policy"

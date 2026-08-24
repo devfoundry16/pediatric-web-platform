@@ -6,7 +6,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { Button } from "@/components/ui/button";
 import { AdminSidebar } from "@/components/dashboard/admin-sidebar";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-import { Menu, Heart } from "lucide-react";
+import { Menu } from "lucide-react";
+import { BrandLogo } from "@/components/layout/brand-logo";
 import { useI18n } from "@/lib/i18n/i18n-context";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -40,10 +41,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             </SheetContent>
           </Sheet>
           <Link href="/" className="flex items-center gap-2">
-            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
-              <Heart className="h-3.5 w-3.5 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-foreground">{t.admin.nav.brandAdmin}</span>
+            <BrandLogo className="h-8" />
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">{t.admin.nav.adminBadge}</span>
           </Link>
         </header>
 

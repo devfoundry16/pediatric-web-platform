@@ -861,7 +861,7 @@ export async function syncAppointmentCalendarEvent(appointmentId: string): Promi
     // PHI-minimal on purpose: no child name, no symptoms — calendars are shared
     // and synced surfaces. Details stay behind the dashboard links.
     const baseEvent: Omit<CalendarEvent, "description"> = {
-      summary: `LittleCare – Consultation with ${doctorName}`,
+      summary: `Drsahar Pediatrics – Consultation with ${doctorName}`,
       start: instantToEventTime(start, timezone),
       end: instantToEventTime(end, timezone),
       guestsCanInviteOthers: false,

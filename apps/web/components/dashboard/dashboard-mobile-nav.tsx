@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { DashboardSidebar } from "./dashboard-sidebar";
-import { Menu, Heart } from "lucide-react";
+import { Menu } from "lucide-react";
+import { BrandLogo } from "@/components/layout/brand-logo";
 
 interface DashboardMobileNavProps {
   role: "parent" | "doctor";
@@ -35,11 +36,8 @@ export function DashboardMobileNav({ role }: DashboardMobileNavProps) {
           <DashboardSidebar role={role} />
         </SheetContent>
       </Sheet>
-      <Link href="/" className="flex items-center gap-2">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary">
-          <Heart className="h-3.5 w-3.5 text-primary-foreground" />
-        </div>
-        <span className="font-bold text-foreground">{t.common.appName}</span>
+      <Link href="/" className="flex items-center">
+        <BrandLogo className="h-8" />
       </Link>
     </header>
   );

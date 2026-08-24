@@ -25,7 +25,7 @@ export default function TermsOfServicePage() {
             <section>
               <h2 className="text-lg font-semibold text-foreground">Medical disclaimer</h2>
               <p className="mt-2">
-                LittleCare provides online pediatric consultations. It is not a substitute for
+                Drsahar Pediatrics provides online pediatric consultations. It is not a substitute for
                 emergency care.{" "}
                 <strong className="text-foreground">
                   If your child has a medical emergency, call your local emergency number or go to
