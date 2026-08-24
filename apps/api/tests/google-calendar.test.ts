@@ -623,7 +623,7 @@ describe("appointment lifecycle", () => {
           json(200, {
             id: APPT_EVENT_ID,
             status: "confirmed",
-            summary: "LittleCare – Consultation with Dr. Sahar",
+            summary: "Drsahar Pediatrics – Consultation with Dr. Sahar",
             description: "stale",
             start: { dateTime: "2026-09-01T04:00:00Z", timeZone: "Asia/Dubai" },
             end: { dateTime: "2026-09-01T04:30:00Z", timeZone: "Asia/Dubai" },

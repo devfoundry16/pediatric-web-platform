@@ -1,6 +1,6 @@
 {
   "common": {
-    "appName": "LittleCare",
+    "appName": "Drsahar Pediatrics",
     "tagline": "Pediatric Care, Reimagined",
     "login": "Login",
     "register": "Register",
@@ -888,7 +888,6 @@
       "integrations": "Integrations",
       "settings": "Settings",
       "adminBadge": "Admin",
-      "brandAdmin": "LittleCare Admin",
       "signOut": "Sign out",
       "signingOut": "Signing out…",
       "toggleSidebar": "Toggle sidebar",

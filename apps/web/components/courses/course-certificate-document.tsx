@@ -141,7 +141,7 @@ export function CourseCertificateDocument({
         <View style={styles.innerBorder} />
 
         <View style={styles.content}>
-          <Text style={styles.appName}>Little Care</Text>
+          <Text style={styles.appName}>Drsahar Pediatrics</Text>
           <Text style={styles.heading}>Certificate of Completion</Text>
           <Text style={styles.subheading}>
             This is to certify that
