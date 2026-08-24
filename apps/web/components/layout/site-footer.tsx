@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/i18n-context";
-import { Heart } from "lucide-react";
+import { BrandLogo } from "@/components/layout/brand-logo";
 
 export function SiteFooter() {
   const { dictionary: t } = useI18n();
@@ -12,13 +12,8 @@ export function SiteFooter() {
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 gap-8 md:grid-cols-4">
           <div className="md:col-span-1">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <Heart className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <span className="text-lg font-bold text-foreground">
-                {t.common.appName}
-              </span>
+            <div className="flex items-center">
+              <BrandLogo className="h-10" />
             </div>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
               {t.landing.footerDesc}

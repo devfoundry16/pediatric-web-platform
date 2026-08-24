@@ -5,9 +5,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { LanguageSwitcher } from "@/components/language-switcher";
+import { BrandLogo } from "@/components/layout/brand-logo";
 import { cn } from "@/lib/utils";
 import {
-  Heart,
   LayoutDashboard,
   Baby,
   CalendarDays,
@@ -151,13 +151,8 @@ export function DashboardSidebar({ role }: DashboardSidebarProps) {
   return (
     <aside className="flex h-screen w-64 flex-col border-e border-border bg-card">
       <div className="flex h-16 items-center gap-2 border-b border-border px-4">
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Heart className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span className="text-lg font-bold text-foreground">
-            {t.common.appName}
-          </span>
+        <Link href="/" className="flex items-center">
+          <BrandLogo className="h-10" />
         </Link>
       </div>
 
