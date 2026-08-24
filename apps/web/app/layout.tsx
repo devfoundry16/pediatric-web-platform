@@ -23,9 +23,10 @@ const cairo = Cairo({
 });
 
 export const metadata: Metadata = {
-  title: "LittleCare - Pediatric Care, Reimagined",
+  title: "Drsahar Pediatrics",
   description:
     "Expert pediatric healthcare in Dubai. Online video consultations, digital medical records, care packages, and educational courses for your child.",
+  icons: { icon: "/logo.png", apple: "/logo.png" },
 };
 
 export const viewport: Viewport = {
