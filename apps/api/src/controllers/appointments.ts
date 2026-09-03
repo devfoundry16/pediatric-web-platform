@@ -21,6 +21,7 @@ import {
   validateAttachments,
 } from "../lib/medical-storage";
 import { CONSULTATION_CONFIG, isBlockingAppointment } from "../lib/consultation";
+import { recordJoinEvent } from "../lib/attendance";
 import { generateSlots } from "../lib/slots";
 import { hhmmToMinutes } from "../lib/timezone";
 
@@ -777,6 +778,14 @@ export async function joinAppointment(req: Request, res: Response): Promise<void
       isOwner: isDoctor,
       expiryEpoch: Math.floor(window.closesAt.getTime() / 1000),
     });
+
+    // Attendance is recorded only once the token exists, so a failed
+    // authorisation is never counted as having turned up. Awaited rather than
+    // detached: the deployed API is a Vercel function frozen once the response
+    // goes out (see lib/background-jobs.ts), and a dropped row here reads later
+    // as a no-show. It never throws.
+    await recordJoinEvent(id as string, req.userId!, isDoctor ? "doctor" : "parent");
+
     res.json({ roomUrl, token });
   } catch (err) {
     res.status(502).json({ error: "Could not authorise you for the video room", detail: String(err) });
