@@ -44,8 +44,17 @@ export function applyFilters(rows: any[], q: RecordedQuery): TableResult {
   return { data: out, count: out.length };
 }
 
-export function createSupabaseMock(handlers: Record<string, TableHandler> = {}) {
+export interface RecordedRpc {
+  fn: string;
+  args: unknown;
+}
+
+export function createSupabaseMock(
+  handlers: Record<string, TableHandler> = {},
+  rpcHandlers: Record<string, (args: unknown) => TableResult> = {}
+) {
   const queries: RecordedQuery[] = [];
+  const rpcs: RecordedRpc[] = [];
   const getUserById = vi.fn(async (_id: string): Promise<any> => ({
     data: { user: null },
     error: null,
@@ -98,8 +107,16 @@ export function createSupabaseMock(handlers: Record<string, TableHandler> = {}) 
     return builder;
   }
 
-  const client = { from, auth: { admin: { getUserById } } };
-  return { client, queries, getUserById, handlers };
+  // Postgres functions the controllers call through supabaseAdmin.rpc(...),
+  // e.g. consume_package_credit / restore_package_credit.
+  async function rpc(fn: string, args: unknown): Promise<any> {
+    rpcs.push({ fn, args });
+    const result = rpcHandlers[fn] ? rpcHandlers[fn](args) : {};
+    return { data: result.data ?? null, error: result.error ?? null };
+  }
+
+  const client = { from, rpc, auth: { admin: { getUserById } } };
+  return { client, queries, rpcs, getUserById, handlers };
 }
 
 /**
