@@ -1,6 +1,11 @@
 import axios from "axios";
 import { createClient } from "@/lib/supabase/client";
 import { getApiBaseUrl } from "./config";
+import type {
+  AttendanceOutcome,
+  RemedyKind,
+  RemedyStatus,
+} from "@/types/appointment";
 
 function getBaseUrl(): string {
   return getApiBaseUrl();
@@ -29,6 +34,13 @@ export interface DoctorAppointment {
   symptoms: string | null;
   status: "pending" | "confirmed" | "completed" | "cancelled" | "rescheduled";
   payment_status: string;
+  attendance_outcome: AttendanceOutcome | null;
+  /** At most one, per the UNIQUE constraint on refund_requests.appointment_id. */
+  refund_requests?: Array<{
+    id: string;
+    requested_remedy: RemedyKind;
+    status: RemedyStatus;
+  }>;
   meeting_url: string | null;
   created_at: string;
   child_profiles: {
@@ -36,6 +48,31 @@ export interface DoctorAppointment {
     first_name: string;
     last_name: string;
     date_of_birth: string;
+  } | null;
+}
+
+/** A claim in the doctor's review queue, with the consultation it concerns. */
+export interface DoctorRemedyRequest {
+  id: string;
+  appointment_id: string;
+  parent_id: string;
+  parent_name: string | null;
+  requested_remedy: RemedyKind;
+  reason: string | null;
+  status: RemedyStatus;
+  resolution_note: string | null;
+  resolved_at: string | null;
+  refund_amount_aed: number | null;
+  created_at: string;
+  appointments: {
+    scheduled_date: string;
+    scheduled_time: string;
+    timezone: string | null;
+    consultation_type: string;
+    price_aed: number;
+    payment_status: string;
+    attendance_outcome: AttendanceOutcome | null;
+    child_profiles: { first_name: string; last_name: string } | null;
   } | null;
 }
 
@@ -133,6 +170,28 @@ export const doctorApi = {
     await axios.patch(
       `${getBaseUrl()}/doctor/appointments/${id}/complete`,
       {},
+      { headers: await authHeaders() }
+    );
+  },
+
+  // ── Missed-consultation remedies ──────────────────────────────────────────
+
+  async getRemedyRequests(status?: RemedyStatus): Promise<DoctorRemedyRequest[]> {
+    const { data } = await axios.get<{ requests: DoctorRemedyRequest[] }>(
+      `${getBaseUrl()}/doctor/refund-requests`,
+      { headers: await authHeaders(), params: status ? { status } : undefined }
+    );
+    return data.requests;
+  },
+
+  async resolveRemedyRequest(
+    id: string,
+    action: "approve" | "decline",
+    note?: string
+  ): Promise<void> {
+    await axios.patch(
+      `${getBaseUrl()}/doctor/refund-requests/${id}`,
+      { action, note },
       { headers: await authHeaders() }
     );
   },

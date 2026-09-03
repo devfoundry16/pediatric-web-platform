@@ -1,6 +1,10 @@
 import { Router } from "express";
 import { requireCronSecret } from "../middleware/cron";
-import { runCalendarSweep, runReminders } from "../controllers/cron";
+import {
+  runAttendanceSweep,
+  runCalendarSweep,
+  runReminders,
+} from "../controllers/cron";
 
 const router = Router();
 
@@ -8,5 +12,6 @@ const router = Router();
 // secret, not the method, is what keeps these closed.
 router.get("/reminders", requireCronSecret, runReminders);
 router.get("/calendar-sweep", requireCronSecret, runCalendarSweep);
+router.get("/attendance-sweep", requireCronSecret, runAttendanceSweep);
 
 export default router;

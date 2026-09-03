@@ -7,6 +7,7 @@ import { Suspense, useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { useHighlightedAppointment } from "@/hooks/use-highlighted-appointment";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
+import { RefundRequests } from "@/components/dashboard/doctor/refund-requests";
 import { AppointmentDocuments } from "@/components/dashboard/appointment-documents";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { Button } from "@/components/ui/button";
@@ -235,6 +236,9 @@ function DoctorAppointmentsContent() {
           </div>
           <RefreshButton onRefresh={load} />
         </div>
+
+        {/* Claims after a missed consultation. Renders nothing when empty. */}
+        <RefundRequests onResolved={load} />
 
         {/* Filter tabs */}
         <div className="flex flex-wrap gap-2">

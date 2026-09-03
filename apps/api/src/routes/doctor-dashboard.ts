@@ -13,6 +13,8 @@ import {
   getDoctorHolidays,
   addDoctorHoliday,
   deleteDoctorHoliday,
+  listRemedyRequests,
+  resolveRemedyRequest,
 } from "../controllers/doctor-dashboard";
 
 const router = Router();
@@ -31,5 +33,7 @@ router.put("/schedule", updateDoctorSchedule);
 router.get("/holidays", getDoctorHolidays);
 router.post("/holidays", addDoctorHoliday);
 router.delete("/holidays/:id", deleteDoctorHoliday);
+router.get("/refund-requests", listRemedyRequests);
+router.patch("/refund-requests/:id", resolveRemedyRequest);
 
 export default router;
