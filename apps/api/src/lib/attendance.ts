@@ -79,15 +79,59 @@ export function classifyAttendance(
 }
 
 /**
+ * Decide and record one appointment's outcome from its join events.
+ *
+ * The write is guarded on attendance_outcome still being NULL, so whichever
+ * caller gets there first wins and the rest are no-ops -- the sweep and the
+ * completion transition race by design, and either answer is the same answer.
+ *
+ * Never throws: this runs alongside a state transition that has already been
+ * committed, and failing to classify must not fail the transition.
+ *
+ * @returns the outcome written, or null if it was already classified.
+ */
+export async function classifyAppointment(
+  appointmentId: string
+): Promise<AttendanceOutcome | null> {
+  if (!supabaseAdmin) return null;
+
+  try {
+    const { data: events } = await supabaseAdmin
+      .from("appointment_join_events")
+      .select("role")
+      .eq("appointment_id", appointmentId);
+
+    const outcome = classifyAttendance(events ?? []);
+
+    const { data: updated } = await supabaseAdmin
+      .from("appointments")
+      .update({ attendance_outcome: outcome })
+      .eq("id", appointmentId)
+      .is("attendance_outcome", null)
+      .select("id");
+
+    return updated && updated.length > 0 ? outcome : null;
+  } catch (err) {
+    console.error(`[attendance] could not classify appointment ${appointmentId}:`, err);
+    return null;
+  }
+}
+
+/**
  * Classify every appointment whose join window has closed.
  *
  * Runs on the same cron harness as the reminder and calendar sweeps, and is
  * safe to run more often than needed: it only ever fills in a NULL outcome, so
  * a re-run over the same rows is a no-op.
  *
- * Only `confirmed` appointments are considered. A booking the doctor marked
- * `completed` plainly happened, and `cancelled`/`rescheduled` rows were never
- * owed a call at all.
+ * Both `confirmed` and `completed` appointments are considered. `completed`
+ * used to be excluded on the reasoning that a booking the doctor marked
+ * complete plainly happened -- which was wrong, and quietly harmful: the doctor
+ * is one of the two parties a claim can be made against, so letting their own
+ * button decide whether the call happened let them void every claim, by
+ * accident or otherwise. Join events decide attendance; the button does not.
+ *
+ * `cancelled` and `rescheduled` rows were never owed a call at all.
  */
 export async function sweepAttendance(now: Date = new Date()): Promise<AttendanceRun> {
   const run: AttendanceRun = { considered: 0, classified: 0 };
@@ -105,8 +149,8 @@ export async function sweepAttendance(now: Date = new Date()): Promise<Attendanc
 
   const { data: appointments, error } = await supabaseAdmin
     .from("appointments")
-    .select("id, scheduled_date, scheduled_time, timezone, duration_minutes")
-    .eq("status", "confirmed")
+    .select("id, status, scheduled_date, scheduled_time, timezone, duration_minutes")
+    .in("status", ["confirmed", "completed"])
     .is("attendance_outcome", null)
     .gte("scheduled_date", from)
     .lte("scheduled_date", to)
@@ -123,29 +167,19 @@ export async function sweepAttendance(now: Date = new Date()): Promise<Attendanc
       duration_minutes: appointment.duration_minutes,
     });
 
-    // Unreadable schedule, or the call can still be joined: not yet decidable.
+    // Unreadable schedule: nothing to judge against.
     if (!window) continue;
-    if (window.closesAt.getTime() > now.getTime()) continue;
+
+    // A `completed` row is the doctor declaring the consultation over, so its
+    // attendance is already final and is judged now. A `confirmed` one may
+    // still be walked into until the window shuts, and calling it missed
+    // before then would be guessing.
+    const isTerminal = appointment.status === "completed";
+    if (!isTerminal && window.closesAt.getTime() > now.getTime()) continue;
 
     run.considered += 1;
 
-    const { data: events } = await supabaseAdmin
-      .from("appointment_join_events")
-      .select("role")
-      .eq("appointment_id", appointment.id);
-
-    const outcome = classifyAttendance(events ?? []);
-
-    // Guarded on attendance_outcome still being NULL so two overlapping runs
-    // cannot both claim the same row.
-    const { data: updated } = await supabaseAdmin
-      .from("appointments")
-      .update({ attendance_outcome: outcome })
-      .eq("id", appointment.id)
-      .is("attendance_outcome", null)
-      .select("id");
-
-    if (updated && updated.length > 0) run.classified += 1;
+    if (await classifyAppointment(appointment.id)) run.classified += 1;
   }
 
   return run;
