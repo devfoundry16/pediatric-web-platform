@@ -7,6 +7,7 @@ import {
   sendRescheduleEmail,
 } from "../lib/resend";
 import { notifyBookingConfirmed } from "../lib/booking-notifications";
+import { notifyRemedyRequested } from "../lib/remedy-notifications";
 import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
 import { frontendUrl } from "../lib/app-url";
 import {
@@ -21,6 +22,7 @@ import {
   validateAttachments,
 } from "../lib/medical-storage";
 import { CONSULTATION_CONFIG, isBlockingAppointment } from "../lib/consultation";
+import { isMissedOutcome, recordJoinEvent } from "../lib/attendance";
 import { generateSlots } from "../lib/slots";
 import { hhmmToMinutes } from "../lib/timezone";
 
@@ -56,9 +58,18 @@ export async function listAppointments(req: Request, res: Response): Promise<voi
       symptoms,
       status,
       payment_status,
+      attendance_outcome,
       meeting_url,
       created_at,
       child_id,
+      refund_requests (
+        id,
+        requested_remedy,
+        status,
+        reason,
+        resolution_note,
+        resolved_at
+      ),
       child_profiles!appointments_child_id_fkey (
         id,
         first_name,
@@ -777,6 +788,14 @@ export async function joinAppointment(req: Request, res: Response): Promise<void
       isOwner: isDoctor,
       expiryEpoch: Math.floor(window.closesAt.getTime() / 1000),
     });
+
+    // Attendance is recorded only once the token exists, so a failed
+    // authorisation is never counted as having turned up. Awaited rather than
+    // detached: the deployed API is a Vercel function frozen once the response
+    // goes out (see lib/background-jobs.ts), and a dropped row here reads later
+    // as a no-show. It never throws.
+    await recordJoinEvent(id as string, req.userId!, isDoctor ? "doctor" : "parent");
+
     res.json({ roomUrl, token });
   } catch (err) {
     res.status(502).json({ error: "Could not authorise you for the video room", detail: String(err) });
@@ -894,4 +913,110 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
   }).catch(() => {});
 
   res.json({ appointment: updated });
+}
+
+/**
+ * A parent claims a remedy for a consultation that was missed.
+ *
+ * POST /api/appointments/:id/refund-request  { remedy, reason? }
+ *
+ * Eligibility is decided here and nowhere else, because the parent is the
+ * beneficiary and the doctor is the judge — neither may be trusted to bound the
+ * claim. All four conditions are checked server-side:
+ *
+ *   1. the appointment is the caller's own
+ *   2. it was actually paid for, in money or in credit
+ *   3. attendance says somebody missed the call
+ *   4. no remedy has been claimed for it before
+ *
+ * (4) is ultimately guaranteed by the UNIQUE constraint on
+ * refund_requests.appointment_id; the read below only exists to return a
+ * friendlier 409 than a raw constraint violation.
+ */
+export async function requestAppointmentRemedy(req: Request, res: Response): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { id } = req.params;
+  const { remedy, reason } = req.body ?? {};
+
+  if (remedy !== "refund" && remedy !== "free_session") {
+    res.status(400).json({ error: "remedy must be 'refund' or 'free_session'" });
+    return;
+  }
+
+  const { data: appt } = await supabaseAdmin
+    .from("appointments")
+    .select("id, doctor_id, status, payment_status, attendance_outcome")
+    .eq("id", id)
+    .eq("parent_id", req.userId)
+    .maybeSingle();
+
+  if (!appt) {
+    res.status(404).json({ error: "Appointment not found" });
+    return;
+  }
+
+  // A booking that was never settled has nothing to give back. Pending rows are
+  // abandoned checkouts; they expire on their own.
+  if (!["paid", "package_credit"].includes(appt.payment_status as string)) {
+    res.status(400).json({ error: "This appointment was never paid for" });
+    return;
+  }
+
+  // NULL means the join window has not been swept yet — "not decided", not
+  // "nobody came". Telling the parent to come back is better than letting them
+  // burn their one claim on an appointment that may yet classify as attended.
+  if (appt.attendance_outcome === null) {
+    res.status(409).json({ error: "This consultation has not been reviewed yet" });
+    return;
+  }
+
+  if (!isMissedOutcome(appt.attendance_outcome as string)) {
+    res.status(400).json({
+      error: "A remedy can only be claimed for a consultation that was missed",
+    });
+    return;
+  }
+
+  const { data: existing } = await supabaseAdmin
+    .from("refund_requests")
+    .select("id")
+    .eq("appointment_id", id)
+    .maybeSingle();
+
+  if (existing) {
+    res.status(409).json({ error: "A request has already been made for this consultation" });
+    return;
+  }
+
+  const { data: created, error } = await supabaseAdmin
+    .from("refund_requests")
+    .insert({
+      appointment_id: id,
+      parent_id: req.userId,
+      doctor_id: appt.doctor_id,
+      requested_remedy: remedy,
+      reason: typeof reason === "string" && reason.trim() ? reason.trim() : null,
+    })
+    .select("id, requested_remedy, status, reason, created_at")
+    .single();
+
+  if (error) {
+    // 23505: the unique constraint caught a double submit the read above raced.
+    if ((error as { code?: string }).code === "23505") {
+      res.status(409).json({ error: "A request has already been made for this consultation" });
+      return;
+    }
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  // Awaited, not detached: on Vercel the function is frozen once the response
+  // goes out. It never throws.
+  await notifyRemedyRequested(created.id as string);
+
+  res.status(201).json({ request: created });
 }

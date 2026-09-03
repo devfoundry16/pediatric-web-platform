@@ -44,6 +44,22 @@ export interface StripeCharge {
   payment_intent: string | null;
 }
 
+// Params/result for refunds.create. Only `payment_intent` is sent: an amount is
+// deliberately never passed, so Stripe refunds the full charge. Partial refunds
+// would need a per-session price, and user_packages stores none -- see the
+// caveat on packageAmountAed() in controllers/admin.ts.
+export interface StripeRefundCreate {
+  payment_intent: string;
+  metadata?: Record<string, string>;
+}
+
+export interface StripeRefund {
+  id: string;
+  amount: number; // minor units (fils)
+  currency: string;
+  status: string; // "succeeded" | "pending" | "failed" | "canceled"
+}
+
 export interface StripeDispute {
   payment_intent: string | null;
 }
@@ -59,6 +75,9 @@ export interface StripeClient {
       create(params: StripeSessionCreate): Promise<{ url: string | null }>;
       retrieve(id: string): Promise<StripeRetrievedSession>;
     };
+  };
+  refunds: {
+    create(params: StripeRefundCreate): Promise<StripeRefund>;
   };
   webhooks: {
     constructEvent(payload: Buffer, sig: string, secret: string): StripeEvent;

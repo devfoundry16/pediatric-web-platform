@@ -43,7 +43,35 @@ export type AppointmentStatus =
   | "cancelled"
   | "rescheduled";
 
-export type PaymentStatus = "pending" | "paid" | "refunded";
+export type PaymentStatus =
+  | "pending"
+  | "paid"
+  | "refunded"
+  | "package_credit";
+
+/**
+ * Who joined a consultation, decided by the attendance sweep once the join
+ * window closed. `null` means not yet decided — never read it as "nobody came".
+ */
+export type AttendanceOutcome =
+  | "both_joined"
+  | "parent_only"
+  | "doctor_only"
+  | "neither";
+
+/** What a parent can ask for after a missed consultation. */
+export type RemedyKind = "refund" | "free_session";
+
+export type RemedyStatus = "pending" | "approved" | "declined";
+
+export interface RemedyRequest {
+  id: string;
+  requested_remedy: RemedyKind;
+  status: RemedyStatus;
+  reason: string | null;
+  resolution_note: string | null;
+  resolved_at: string | null;
+}
 
 export interface AppointmentChild {
   id: string;
@@ -67,6 +95,13 @@ export interface Appointment {
   symptoms: string | null;
   status: AppointmentStatus;
   payment_status: PaymentStatus;
+  attendance_outcome?: AttendanceOutcome | null;
+  /**
+   * The claim raised against this consultation, if any. Embedded as an array by
+   * PostgREST because the FK points this way, but the UNIQUE constraint on
+   * refund_requests.appointment_id means it holds at most one row.
+   */
+  refund_requests?: RemedyRequest[];
   payment_reference?: string;
   meeting_url?: string | null;
   cancellation_reason?: string | null;

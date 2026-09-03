@@ -28,9 +28,23 @@ import {
   Stethoscope,
   RefreshCw,
   Loader2,
+  LifeBuoy,
 } from "lucide-react";
+import { toast } from "sonner";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { appointmentsApi, doctorsApi, type Slot } from "@/lib/api/appointments";
-import type { Appointment, AppointmentStatus } from "@/types/appointment";
+import type {
+  Appointment,
+  AppointmentStatus,
+  RemedyKind,
+} from "@/types/appointment";
+import {
+  getRemedyStatusLabel,
+  isMissedOutcome,
+  isSettled,
+} from "@/lib/remedy";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 import { getAppointmentStatusLabel } from "@/lib/i18n/appointment-status";
@@ -94,6 +108,12 @@ function ParentAppointmentsContent() {
   const [rescheduleTimezone, setRescheduleTimezone] = useState(DEFAULT_TIMEZONE);
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
+
+  // Remedy dialog — claiming a refund or a replacement for a missed call.
+  const [remedyAppt, setRemedyAppt] = useState<Appointment | null>(null);
+  const [remedyKind, setRemedyKind] = useState<RemedyKind>("refund");
+  const [remedyReason, setRemedyReason] = useState("");
+  const [isRequestingRemedy, setIsRequestingRemedy] = useState(false);
 
   const { timezone: viewerTimezone } = useViewerTimezone(DEFAULT_TIMEZONE);
   const rescheduleToday = parseLocalYMD(todayInTimezone(rescheduleTimezone));
@@ -160,6 +180,22 @@ function ParentAppointmentsContent() {
   const upcoming = appointments.filter((a) => isUpcomingAppointment(a));
   const past = appointments.filter((a) => !isUpcomingAppointment(a));
 
+  async function submitRemedyRequest() {
+    if (!remedyAppt) return;
+    setIsRequestingRemedy(true);
+    try {
+      await appointmentsApi.requestRemedy(remedyAppt.id, remedyKind, remedyReason);
+      toast.success(t.appointments.remedySent);
+      setRemedyAppt(null);
+      setRemedyReason("");
+      await loadAppointments(true);
+    } catch {
+      toast.error(t.appointments.remedyFailed);
+    } finally {
+      setIsRequestingRemedy(false);
+    }
+  }
+
   const renderAppointmentCard = (appt: Appointment) => {
     const typeLabel = getConsultationTypeLabel(t, appt.consultation_type);
     const childName = appt.child_profiles
@@ -167,6 +203,15 @@ function ParentAppointmentsContent() {
       : t.appointments.dash;
     const isUpcoming = isUpcomingAppointment(appt);
     const canReschedule = ["pending", "confirmed"].includes(appt.status) && isUpcoming;
+
+    // At most one claim per consultation, guaranteed by a unique constraint.
+    const remedyRequest = appt.refund_requests?.[0] ?? null;
+    // Mirrors the server's eligibility rules; the API re-checks all of them.
+    const canRequestRemedy =
+      !isUpcoming &&
+      !remedyRequest &&
+      isMissedOutcome(appt.attendance_outcome) &&
+      isSettled(appt.payment_status);
     // Stored wall clock belongs to the doctor's zone; show it in the parent's.
     const shownAt = formatStoredAppointment(
       appt.scheduled_date,
@@ -275,6 +320,26 @@ function ParentAppointmentsContent() {
                 <RefreshCw className="h-3.5 w-3.5" />
                 {t.appointments.reschedule}
               </Button>
+            )}
+            {canRequestRemedy && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => {
+                  setRemedyAppt(appt);
+                  setRemedyKind("refund");
+                  setRemedyReason("");
+                }}
+              >
+                <LifeBuoy className="h-3.5 w-3.5" />
+                {t.appointments.remedyRequest}
+              </Button>
+            )}
+            {remedyRequest && (
+              <Badge variant="outline">
+                {getRemedyStatusLabel(t, remedyRequest.status)}
+              </Badge>
             )}
           </div>
         </CardContent>
@@ -461,6 +526,78 @@ function ParentAppointmentsContent() {
             >
               {isRescheduling && <Loader2 className="h-4 w-4 animate-spin" />}
               {t.appointments.confirmReschedule}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Claim a remedy for a missed consultation */}
+      <Dialog open={!!remedyAppt} onOpenChange={(open) => !open && setRemedyAppt(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t.appointments.remedyTitle}</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">{t.appointments.remedyBody}</p>
+
+            <RadioGroup
+              value={remedyKind}
+              onValueChange={(value) => setRemedyKind(value as RemedyKind)}
+              className="gap-3"
+            >
+              <div className="flex items-start gap-3 rounded-lg border p-3">
+                <RadioGroupItem value="refund" id="remedy-refund" className="mt-0.5" />
+                <div className="flex flex-col gap-0.5">
+                  <Label htmlFor="remedy-refund" className="font-medium">
+                    {t.appointments.remedyRefund}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t.appointments.remedyRefundHint}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3 rounded-lg border p-3">
+                <RadioGroupItem
+                  value="free_session"
+                  id="remedy-free-session"
+                  className="mt-0.5"
+                />
+                <div className="flex flex-col gap-0.5">
+                  <Label htmlFor="remedy-free-session" className="font-medium">
+                    {t.appointments.remedyFreeSession}
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {t.appointments.remedyFreeSessionHint}
+                  </p>
+                </div>
+              </div>
+            </RadioGroup>
+
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="remedy-reason">{t.appointments.remedyReason}</Label>
+              <Textarea
+                id="remedy-reason"
+                rows={3}
+                value={remedyReason}
+                placeholder={t.appointments.remedyReasonPlaceholder}
+                onChange={(e) => setRemedyReason(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemedyAppt(null)}>
+              {t.common.cancel}
+            </Button>
+            <Button
+              onClick={submitRemedyRequest}
+              disabled={isRequestingRemedy}
+              className="gap-2"
+            >
+              {isRequestingRemedy && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t.appointments.remedySubmit}
             </Button>
           </DialogFooter>
         </DialogContent>

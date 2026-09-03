@@ -4,6 +4,8 @@ import type {
   Appointment,
   CreateAppointmentPayload,
   Doctor,
+  RemedyKind,
+  RemedyRequest,
 } from "@/types/appointment";
 import { getApiBaseUrl } from "./config";
 
@@ -143,6 +145,21 @@ export const appointmentsApi = {
     await axios.delete(`${getBaseUrl()}/appointments/${id}`, {
       headers: await authHeaders(),
     });
+  },
+
+  // Claim a remedy for a consultation the attendance sweep recorded as missed.
+  // The API decides eligibility; this only carries the ask.
+  async requestRemedy(
+    id: string,
+    remedy: RemedyKind,
+    reason?: string
+  ): Promise<RemedyRequest> {
+    const { data } = await axios.post<{ request: RemedyRequest }>(
+      `${getBaseUrl()}/appointments/${id}/refund-request`,
+      { remedy, reason },
+      { headers: await authHeaders() }
+    );
+    return data.request;
   },
 
   async cancel(id: string, reason?: string): Promise<void> {

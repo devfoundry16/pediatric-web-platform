@@ -20,6 +20,8 @@ type EmailType =
   | "session_reminder"
   | "cancellation"
   | "reschedule"
+  | "refund_requested"
+  | "refund_resolved"
   | "other";
 
 interface EmailLog {
@@ -344,6 +346,90 @@ export async function sendRescheduleEmail(data: Omit<AppointmentEmailData, "pric
     emailType: "reschedule",
     relatedId: data.appointmentId,
     recipientUserId: data.parentUserId,
+  });
+}
+
+/**
+ * What a missed consultation leads to.
+ *
+ * Two templates, both keyed on the refund request rather than the appointment:
+ * a request is answered once, and email_logs dedupes on related_id — keying on
+ * the appointment would collide with the booking and cancellation mail already
+ * logged against it.
+ */
+
+export interface RemedyRequestEmailData {
+  requestId: string;
+  appointmentId: string;
+  /** "refund" | "free_session", already phrased for a reader. */
+  remedyLabel: string;
+  recipientEmail: string;
+  recipientName: string;
+  recipientUserId?: string | null;
+  childName: string;
+  scheduledDate: string;
+  scheduledTime: string;
+  timezone?: string;
+  reason?: string | null;
+  /** Deep link to where the recipient acts on it. */
+  actionUrl?: string;
+}
+
+export async function sendRemedyRequestedEmail(data: RemedyRequestEmailData): Promise<void> {
+  const html = `
+    <h2>A patient has requested ${data.remedyLabel}</h2>
+    <p>Hello ${data.recipientName},</p>
+    <p>The consultation for <strong>${data.childName}</strong> on <strong>${data.scheduledDate}</strong> at <strong>${data.scheduledTime}</strong> (${zoneLabel(data.timezone)}) was recorded as missed.</p>
+    <p>The parent has asked for <strong>${data.remedyLabel}</strong>.</p>
+    ${data.reason ? `<p><em>“${data.reason}”</em></p>` : ""}
+    <p>Nothing happens until you approve or decline the request.</p>
+    ${joinButton(data.actionUrl, "Review the request")}
+    <p>Thank you for using ${APP_NAME}.</p>
+  `;
+
+  await deliver({
+    to: data.recipientEmail,
+    subject: `${APP_NAME} – A patient requested ${data.remedyLabel}`,
+    html,
+    emailType: "refund_requested",
+    relatedId: data.requestId,
+    recipientUserId: data.recipientUserId,
+  });
+}
+
+export interface RemedyResolvedEmailData extends RemedyRequestEmailData {
+  approved: boolean;
+  /** What the parent actually got, phrased for a reader. Approved requests only. */
+  outcomeLabel?: string;
+  note?: string | null;
+}
+
+export async function sendRemedyResolvedEmail(data: RemedyResolvedEmailData): Promise<void> {
+  const heading = data.approved
+    ? "Your request has been approved"
+    : "Your request has not been approved";
+
+  const body = data.approved
+    ? `<p>${data.outcomeLabel ?? "Your remedy has been applied."}</p>`
+    : `<p>Your doctor has reviewed your request for ${data.remedyLabel} and was not able to approve it.</p>`;
+
+  const html = `
+    <h2>${heading}</h2>
+    <p>Hello ${data.recipientName},</p>
+    <p>This concerns the consultation for <strong>${data.childName}</strong> on <strong>${data.scheduledDate}</strong> at <strong>${data.scheduledTime}</strong> (${zoneLabel(data.timezone)}).</p>
+    ${body}
+    ${data.note ? `<p><em>“${data.note}”</em></p>` : ""}
+    ${joinButton(data.actionUrl, "View your appointments")}
+    <p>Thank you for using ${APP_NAME}.</p>
+  `;
+
+  await deliver({
+    to: data.recipientEmail,
+    subject: `${APP_NAME} – ${heading}`,
+    html,
+    emailType: "refund_resolved",
+    relatedId: data.requestId,
+    recipientUserId: data.recipientUserId,
   });
 }
 
