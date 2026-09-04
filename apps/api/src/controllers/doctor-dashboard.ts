@@ -5,6 +5,7 @@ import { fetchParentNames } from "../lib/parents";
 import { getStripe } from "../lib/stripe";
 import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
 import { notifyRemedyResolved } from "../lib/remedy-notifications";
+import { classifyAppointment } from "../lib/attendance";
 import {
   DEFAULT_TIMEZONE,
   hhmmToMinutes,
@@ -320,6 +321,13 @@ export async function completeAppointment(
     res.status(500).json({ error: error.message });
     return;
   }
+
+  // Completing declares the consultation over, so its attendance is final now.
+  // Settled here rather than left to the cron sweep so the parent sees the
+  // outcome -- and, if nobody joined, their claim -- immediately rather than up
+  // to ten minutes later. Awaited because the deployed API is frozen once the
+  // response goes out; it never throws.
+  await classifyAppointment(id as string);
 
   res.json({ appointment: updated });
 }

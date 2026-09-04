@@ -8,6 +8,7 @@ import {
   todayInTimezone,
 } from "../lib/timezone";
 import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
+import { classifyAppointment } from "../lib/attendance";
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
@@ -520,6 +521,14 @@ export async function updateAppointmentAdmin(req: Request, res: Response): Promi
   // Converge the mirrored Google Calendar event: cancel/no_show delete it,
   // reschedule moves it, complete leaves it as history (non-blocking).
   void syncAppointmentCalendarEvent(id as string);
+
+  // complete and no_show both end the consultation, so settle its attendance
+  // now. This matters most for no_show, which writes status 'cancelled' -- a
+  // status the sweep never revisits, so without this the very case the remedy
+  // flow exists for would never be classified at all.
+  if (action === "complete" || action === "no_show") {
+    await classifyAppointment(id as string);
+  }
 
   res.json({ appointment: data });
 }
