@@ -62,12 +62,11 @@ export function getAttendanceLabel(
 }
 
 /**
- * The request that currently speaks for this consultation.
+ * The request that speaks for this consultation.
  *
- * A declined request can be retried, so an appointment may carry several. The
- * newest is the one whose status the parent is waiting on -- and the only one
- * that can still be pending or approved, since the partial unique index allows
- * just one of those at a time.
+ * A consultation yields one request, enforced by a unique index. This still
+ * reads defensively and takes the newest, so a historical row set carrying
+ * more than one cannot render an arbitrary pick.
  */
 export function latestRefundRequest(
   requests: RefundRequest[] | undefined
@@ -78,7 +77,13 @@ export function latestRefundRequest(
   )[0];
 }
 
-/** Whether a fresh request may be raised: nothing open, decided or awaiting. */
+/**
+ * Whether a request may be raised at all.
+ *
+ * One per consultation, for good. A decline is the doctor's decision, not a
+ * retryable failure, so it closes the door like an approval does -- the note
+ * on the decision is what carries the recourse.
+ */
 export function canRaiseRefundRequest(latest: RefundRequest | null): boolean {
-  return latest === null || latest.status === "declined";
+  return latest === null;
 }
