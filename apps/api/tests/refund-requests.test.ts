@@ -395,3 +395,35 @@ describe("resolveRemedyRequest", () => {
     expect(update.calls).toContainEqual({ method: "eq", args: ["status", "pending"] });
   });
 });
+
+// ─── Completing settles attendance ────────────────────────────────────────────
+
+describe("completeAppointment", () => {
+  it("classifies attendance so a missed call is claimable straight away", async () => {
+    // The regression this guards: the doctor pressed Complete on a call nobody
+    // joined, the sweep skipped 'completed' rows, attendance_outcome stayed
+    // NULL, and the parent's claim button never appeared.
+    const mock = createSupabaseMock({
+      doctors: (q) =>
+        applyFilters([{ id: DOCTOR, profile_id: DOCTOR_PROFILE, timezone: "Asia/Dubai" }], q),
+      appointments: (q) =>
+        q.op === "update"
+          ? { data: q.calls.some((c) => c.method === "is") ? [{ id: "appt-1" }] : { id: "appt-1", status: "completed" } }
+          : applyFilters([{ id: "appt-1", status: "confirmed", doctor_id: DOCTOR }], q),
+      appointment_join_events: (q) => applyFilters([], q),
+    });
+    supabaseHolder.current = mock.client;
+
+    const { completeAppointment } = await import("../src/controllers/doctor-dashboard");
+    const res = makeRes();
+
+    await completeAppointment(makeReq({}, DOCTOR_PROFILE, { id: "appt-1" }), res);
+
+    expect(res.statusCode).toBe(200);
+
+    // Two writes: the status transition, then the attendance verdict.
+    const updates = mock.queries.filter((q) => q.table === "appointments" && q.op === "update");
+    expect(updates.map((u) => u.payload)).toContainEqual({ status: "completed" });
+    expect(updates.map((u) => u.payload)).toContainEqual({ attendance_outcome: "neither" });
+  });
+});

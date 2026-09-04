@@ -145,15 +145,59 @@ describe("sweepAttendance", () => {
     expect(await sweepAttendance(AFTER_WINDOW)).toEqual({ considered: 0, classified: 0 });
   });
 
-  it("only considers confirmed, unclassified appointments", async () => {
+  it("considers confirmed AND completed, unclassified appointments", async () => {
     const mock = setup([]);
     const { sweepAttendance } = await import("../src/lib/attendance");
 
     await sweepAttendance(AFTER_WINDOW);
 
     const read = mock.queries.find((q) => q.table === "appointments" && q.op === "select")!;
-    expect(read.calls).toContainEqual({ method: "eq", args: ["status", "confirmed"] });
+    // 'completed' must be in scope: it is the status the doctor's own
+    // "Complete Session" button writes, and excluding it let that button void
+    // every claim against them.
+    expect(read.calls).toContainEqual({
+      method: "in",
+      args: ["status", ["confirmed", "completed"]],
+    });
     expect(read.calls).toContainEqual({ method: "is", args: ["attendance_outcome", null] });
+  });
+
+  it("classifies a completed appointment even before its window shuts", async () => {
+    // The doctor scheduled a call, then immediately pressed Complete. Nobody
+    // joined, and nobody now can -- the parent should not wait until the
+    // original end time plus grace to be able to claim.
+    const mock = setup([], [{ ...APPT, status: "completed" }]);
+    const { sweepAttendance } = await import("../src/lib/attendance");
+
+    const run = await sweepAttendance(DURING_WINDOW);
+
+    expect(run).toEqual({ considered: 1, classified: 1 });
+    const update = mock.queries.find((q) => q.table === "appointments" && q.op === "update");
+    expect(update?.payload).toEqual({ attendance_outcome: "neither" });
+  });
+
+  it("still waits for the window on a confirmed appointment nobody ended", async () => {
+    const mock = setup([], [{ ...APPT, status: "confirmed" }]);
+    const { sweepAttendance } = await import("../src/lib/attendance");
+
+    expect(await sweepAttendance(DURING_WINDOW)).toEqual({ considered: 0, classified: 0 });
+    expect(mock.queries.some((q) => q.table === "appointments" && q.op === "update")).toBe(false);
+  });
+
+  it("does not call a completed consultation missed when both sides joined", async () => {
+    const mock = setup(
+      [
+        { appointment_id: "appt-1", role: "parent" },
+        { appointment_id: "appt-1", role: "doctor" },
+      ],
+      [{ ...APPT, status: "completed" }]
+    );
+    const { sweepAttendance } = await import("../src/lib/attendance");
+
+    await sweepAttendance(DURING_WINDOW);
+
+    const update = mock.queries.find((q) => q.table === "appointments" && q.op === "update");
+    expect(update?.payload).toEqual({ attendance_outcome: "both_joined" });
   });
 
   it("guards the write so two overlapping runs cannot both claim a row", async () => {
@@ -186,5 +230,42 @@ describe("sweepAttendance", () => {
 
     const read = mock.queries.find((q) => q.table === "appointments" && q.op === "select")!;
     expect(has(read, "limit")).toBe(true);
+  });
+});
+
+
+describe("classifyAppointment", () => {
+  it("writes the outcome for a single appointment", async () => {
+    const mock = setup([{ appointment_id: "appt-1", role: "doctor" }]);
+    const { classifyAppointment } = await import("../src/lib/attendance");
+
+    expect(await classifyAppointment("appt-1")).toBe("doctor_only");
+    const update = mock.queries.find((q) => q.table === "appointments" && q.op === "update");
+    expect(update?.payload).toEqual({ attendance_outcome: "doctor_only" });
+  });
+
+  it("guards on the outcome still being NULL, so a second caller is a no-op", async () => {
+    const mock = createSupabaseMock({
+      appointments: (q) => (q.op === "update" ? { data: [] } : applyFilters([APPT], q)),
+      appointment_join_events: (q) => applyFilters([], q),
+    });
+    supabaseHolder.current = mock.client;
+    const { classifyAppointment } = await import("../src/lib/attendance");
+
+    // Already classified by the sweep or the other caller: reports no change.
+    expect(await classifyAppointment("appt-1")).toBeNull();
+    const update = mock.queries.find((q) => q.table === "appointments" && q.op === "update")!;
+    expect(update.calls).toContainEqual({ method: "is", args: ["attendance_outcome", null] });
+  });
+
+  it("never throws, so it cannot fail the transition that called it", async () => {
+    const mock = createSupabaseMock({
+      appointment_join_events: () => ({ error: { message: "boom" } }),
+      appointments: () => ({ error: { message: "boom" } }),
+    });
+    supabaseHolder.current = mock.client;
+    const { classifyAppointment } = await import("../src/lib/attendance");
+
+    await expect(classifyAppointment("appt-1")).resolves.toBeNull();
   });
 });
