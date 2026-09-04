@@ -203,22 +203,26 @@ function ParentAppointmentsContent() {
   /**
    * What happened to a refund request, on the card it belongs to.
    *
-   * The parent previously had no way to see any of this: the request vanished
-   * into the doctor's queue and the only signal back was an email. The panel
-   * states what was asked for, where it stands, what was actually issued on
-   * approval, and the doctor's own words on a decline -- plus, on a decline,
-   * that asking again is allowed, since that is not obvious.
+   * Rendered as a continuation of the card — full width under the appointment,
+   * divided by the card's own hairline — rather than a second bordered box. It
+   * previously sat inside the card's flex row, which made it a third column
+   * floating beside the details.
+   *
+   * The surface stays neutral and the small chip carries the state, so the
+   * block reads as part of the appointment rather than an alert about it.
+   *
+   * On approval it leads with what actually arrived: "approved" does not answer
+   * the only question the parent has, and the three approvals are three
+   * different events — cash returned, a credit restored, a session granted.
    */
   const renderRefundOutcome = (request: RefundRequest) => {
-    const tone =
+    const chipClass =
       request.status === "approved"
-        ? "border-emerald-500/30 bg-emerald-500/5"
+        ? "border-transparent bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
         : request.status === "declined"
-          ? "border-destructive/30 bg-destructive/5"
-          : "border-border bg-muted/40";
+          ? "border-transparent bg-destructive/10 text-destructive"
+          : "border-transparent bg-amber-500/10 text-amber-700 dark:text-amber-400";
 
-    // On approval, say what actually arrived rather than "approved": money to a
-    // card, a returned credit and a granted session are three different things.
     let outcome: string | null = null;
     if (request.status === "approved") {
       if (request.requested_remedy === "free_session") {
@@ -234,16 +238,17 @@ function ParentAppointmentsContent() {
     }
 
     return (
-      <div className={cn("mt-3 flex flex-col gap-1.5 rounded-lg border p-3", tone)}>
-        <div className="flex items-center gap-2">
-          <LifeBuoy className="h-3.5 w-3.5 text-muted-foreground" />
-          <span className="text-xs font-medium text-foreground">
+      <div className="flex flex-col gap-1.5 border-t border-border px-5 pb-4 pt-3.5">
+        <div className="flex items-center gap-2.5">
+          <span className="text-[13px] font-medium text-foreground">
             {t.appointments.refundOutcomeHeading}
           </span>
-          <Badge variant="outline" className="ms-auto">
+          <Badge variant="outline" className={cn("ms-auto", chipClass)}>
             {getRefundRequestStatusLabel(t, request.status)}
           </Badge>
         </div>
+
+        {outcome && <p className="text-[13px] text-foreground">{outcome}</p>}
 
         <p className="text-xs text-muted-foreground">
           {t.appointments.refundAskedFor}{" "}
@@ -252,18 +257,10 @@ function ParentAppointmentsContent() {
           </span>
         </p>
 
-        {outcome && <p className="text-xs text-foreground">{outcome}</p>}
-
         {request.resolution_note && (
           <p className="text-xs text-muted-foreground">
             {t.appointments.refundDoctorNote}:{" "}
             <span className="italic">“{request.resolution_note}”</span>
-          </p>
-        )}
-
-        {request.status === "declined" && (
-          <p className="text-xs text-muted-foreground">
-            {t.appointments.refundDeclinedHelp}
           </p>
         )}
       </div>
@@ -278,8 +275,8 @@ function ParentAppointmentsContent() {
     const isUpcoming = isUpcomingAppointment(appt);
     const canReschedule = ["pending", "confirmed"].includes(appt.status) && isUpcoming;
 
-    // A declined request can be retried, so there may be several; the newest
-    // is the one that speaks for the consultation.
+    // One request per consultation, for good — but read defensively, since a
+    // historical row set could still carry more than one.
     const refundRequest = latestRefundRequest(appt.refund_requests);
     // Mirrors the server's eligibility rules; the API re-checks all of them.
     const canRequestRefund =
@@ -408,15 +405,13 @@ function ParentAppointmentsContent() {
                 }}
               >
                 <LifeBuoy className="h-3.5 w-3.5" />
-                {refundRequest
-                  ? t.appointments.refundAskAgain
-                  : t.appointments.refundRequest}
+                {t.appointments.refundRequest}
               </Button>
             )}
           </div>
-
-          {refundRequest && renderRefundOutcome(refundRequest)}
         </CardContent>
+
+        {refundRequest && renderRefundOutcome(refundRequest)}
       </Card>
     );
   };

@@ -931,11 +931,10 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
  *   3. attendance says somebody missed the call
  *   4. no request for it is currently open
  *
- * (4) is "open", not "ever". A declined request settled nothing, so the parent
- * may ask again — typically for the other option, having learnt the first was
- * refused. Only pending and approved rows block, and the partial unique index
- * from migration 032 is what actually enforces that; the read below exists to
- * return a friendlier 409 than a raw constraint violation.
+ * (4) is "ever", not "currently open". Whatever the doctor decides is final,
+ * a decline included: re-submitting would turn a decision into a negotiation.
+ * The unique index from migration 032 is what actually enforces it; the read
+ * below exists to return a friendlier 409 than a raw constraint violation.
  */
 export async function requestAppointmentRefund(req: Request, res: Response): Promise<void> {
   if (!supabaseAdmin) {
@@ -987,22 +986,23 @@ export async function requestAppointmentRefund(req: Request, res: Response): Pro
     return;
   }
 
-  // Only a live claim blocks. maybeSingle() would now throw once a declined
-  // row exists alongside a new one, so this filters to the open statuses the
-  // partial unique index actually protects.
-  const { data: open } = await supabaseAdmin
+  // Any request at all closes the consultation to further requests. The reply
+  // names which of the three states the parent is in, because "already
+  // requested" leaves them guessing whether anything is still coming.
+  const { data: existing } = await supabaseAdmin
     .from("refund_requests")
     .select("id, status")
     .eq("appointment_id", id)
-    .in("status", ["pending", "approved"])
     .maybeSingle();
 
-  if (open) {
+  if (existing) {
+    const message: Record<string, string> = {
+      pending: "You already have a request awaiting your doctor's decision",
+      approved: "This consultation has already been resolved",
+      declined: "Your doctor has already reviewed this consultation",
+    };
     res.status(409).json({
-      error:
-        open.status === "approved"
-          ? "This consultation has already been resolved"
-          : "You already have a request awaiting your doctor's decision",
+      error: message[existing.status as string] ?? "This consultation already has a request",
     });
     return;
   }
@@ -1023,7 +1023,7 @@ export async function requestAppointmentRefund(req: Request, res: Response): Pro
     // 23505: the unique constraint caught a double submit the read above raced.
     if ((error as { code?: string }).code === "23505") {
       res.status(409).json({
-        error: "You already have a request awaiting your doctor's decision",
+        error: "This consultation already has a request",
       });
       return;
     }

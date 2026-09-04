@@ -157,10 +157,9 @@ describe("requestAppointmentRefund", () => {
     expect(res.statusCode).toBe(409);
   });
 
-  it("lets a parent ask again after a decline, for the other option", async () => {
-    // The reported bug: a parent asked for a replacement session, the doctor
-    // declined, and the 409 then left them with no way to ask for their money
-    // instead. A declined request settled nothing and must not lock the claim.
+  it("refuses a further request once one has been declined", async () => {
+    // A decline is the doctor's decision, not a retryable failure. Allowing a
+    // resubmit would turn it into a negotiation, so the slot stays spent.
     const mock = setup(PAID_MISSED, [
       { id: "req-declined", appointment_id: "appt-1", status: "declined" },
     ]);
@@ -169,14 +168,31 @@ describe("requestAppointmentRefund", () => {
 
     await requestAppointmentRefund(makeReq({ requestedType: "refund" }, PARENT), res);
 
-    expect(res.statusCode).toBe(201);
-    const insert = mock.queries.find(
-      (q) => q.table === "refund_requests" && q.op === "insert"
-    );
-    expect(insert?.payload).toMatchObject({ requested_remedy: "refund" });
+    expect(res.statusCode).toBe(409);
+    expect(
+      mock.queries.some((q) => q.table === "refund_requests" && q.op === "insert")
+    ).toBe(false);
   });
 
-  it("only treats pending and approved requests as blocking", async () => {
+  it("names which state the consultation is in rather than refusing blankly", async () => {
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
+
+    for (const [status, fragment] of [
+      ["pending", "awaiting"],
+      ["approved", "resolved"],
+      ["declined", "reviewed"],
+    ] as const) {
+      setup(PAID_MISSED, [{ id: "r", appointment_id: "appt-1", status }]);
+      const res = makeRes();
+      await requestAppointmentRefund(makeReq({ requestedType: "refund" }, PARENT), res);
+      expect(res.statusCode).toBe(409);
+      expect(String((res.body as { error: string }).error).toLowerCase()).toContain(
+        fragment
+      );
+    }
+  });
+
+  it("does not filter the blocking read by status - any request blocks", async () => {
     const mock = setup(PAID_MISSED, []);
     const { requestAppointmentRefund } = await import("../src/controllers/appointments");
 
@@ -185,11 +201,9 @@ describe("requestAppointmentRefund", () => {
     const read = mock.queries.find(
       (q) => q.table === "refund_requests" && q.op === "select"
     )!;
-    expect(read.calls).toContainEqual({
-      method: "in",
-      args: ["status", ["pending", "approved"]],
-    });
+    expect(read.calls.some((c) => c.method === "in")).toBe(false);
   });
+
 
   it("turns the unique-constraint violation from a double submit into a 409", async () => {
     const mock = createSupabaseMock({
