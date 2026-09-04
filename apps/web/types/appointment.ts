@@ -60,17 +60,20 @@ export type AttendanceOutcome =
   | "neither";
 
 /** What a parent can ask for after a missed consultation. */
-export type RemedyKind = "refund" | "free_session";
+export type RefundOption = "refund" | "free_session";
 
-export type RemedyStatus = "pending" | "approved" | "declined";
+export type RefundRequestStatus = "pending" | "approved" | "declined";
 
-export interface RemedyRequest {
+export interface RefundRequest {
   id: string;
-  requested_remedy: RemedyKind;
-  status: RemedyStatus;
+  /** Column keeps its original name; the concept is "what was asked for". */
+  requested_remedy: RefundOption;
+  status: RefundRequestStatus;
   reason: string | null;
   resolution_note: string | null;
   resolved_at: string | null;
+  refund_amount_aed: number | null;
+  created_at: string;
 }
 
 export interface AppointmentChild {
@@ -97,11 +100,12 @@ export interface Appointment {
   payment_status: PaymentStatus;
   attendance_outcome?: AttendanceOutcome | null;
   /**
-   * The claim raised against this consultation, if any. Embedded as an array by
-   * PostgREST because the FK points this way, but the UNIQUE constraint on
-   * refund_requests.appointment_id means it holds at most one row.
+   * Refund requests raised against this consultation, newest last. More than
+   * one is possible: a declined request can be retried, so only pending and
+   * approved rows are constrained to one. Read the latest with
+   * latestRefundRequest().
    */
-  refund_requests?: RemedyRequest[];
+  refund_requests?: RefundRequest[];
   payment_reference?: string;
   meeting_url?: string | null;
   cancellation_reason?: string | null;

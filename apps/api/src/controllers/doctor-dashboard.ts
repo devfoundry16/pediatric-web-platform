@@ -4,7 +4,7 @@ import { ensureAppointmentRoom } from "../lib/appointment-room";
 import { fetchParentNames } from "../lib/parents";
 import { getStripe } from "../lib/stripe";
 import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
-import { notifyRemedyResolved } from "../lib/remedy-notifications";
+import { notifyRefundResolved } from "../lib/refund-notifications";
 import { classifyAppointment } from "../lib/attendance";
 import {
   DEFAULT_TIMEZONE,
@@ -166,7 +166,8 @@ export async function getDoctorAppointments(
       refund_requests (
         id,
         requested_remedy,
-        status
+        status,
+        created_at
       ),
       child_profiles!appointments_child_id_fkey (
         id,
@@ -677,7 +678,7 @@ export async function deleteDoctorHoliday(
   res.json({ message: "Holiday removed" });
 }
 
-// ─── Missed-consultation remedies ─────────────────────────────────────────────
+// ─── Refund requests ──────────────────────────────────────────────────────────
 
 /**
  * The claims waiting on this doctor.
@@ -688,7 +689,7 @@ export async function deleteDoctorHoliday(
  * service-role key bypasses RLS, so ownership is enforced in the query or not
  * at all.
  */
-export async function listRemedyRequests(req: Request, res: Response): Promise<void> {
+export async function listRefundRequests(req: Request, res: Response): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
@@ -762,7 +763,7 @@ async function grantReplacementCredit(
     .maybeSingle();
 
   if (!pkg) {
-    console.error("[remedy] consultation_packages row 'replacement_session' is missing");
+    console.error("[refund] consultation_packages row 'replacement_session' is missing");
     return null;
   }
 
@@ -787,7 +788,7 @@ async function grantReplacementCredit(
     .single();
 
   if (error) {
-    console.error(`[remedy] Could not grant replacement credit: ${error.message}`);
+    console.error(`[refund] Could not grant replacement credit: ${error.message}`);
     return null;
   }
 
@@ -799,12 +800,12 @@ async function grantReplacementCredit(
  *
  * PATCH /api/doctor/refund-requests/:id  { action: "approve" | "decline", note? }
  *
- * The remedy is applied BEFORE the request is marked approved, so a failed
+ * The request is settled BEFORE it is marked approved, so a failed
  * Stripe call leaves the request pending and retryable rather than closed with
  * nothing handed over. There is no path here that marks a request approved
  * without having moved something.
  */
-export async function resolveRemedyRequest(req: Request, res: Response): Promise<void> {
+export async function resolveRefundRequest(req: Request, res: Response): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
@@ -861,12 +862,12 @@ export async function resolveRemedyRequest(req: Request, res: Response): Promise
       return;
     }
 
-    await notifyRemedyResolved(id as string);
+    await notifyRefundResolved(id as string);
     res.json({ request: declined });
     return;
   }
 
-  // ── Approve: apply the remedy first ────────────────────────────────────────
+  // ── Approve: settle the request first ──────────────────────────────────────
 
   const { data: appt } = await supabaseAdmin
     .from("appointments")
@@ -961,7 +962,7 @@ export async function resolveRemedyRequest(req: Request, res: Response): Promise
     } catch (err) {
       // Left pending on purpose: the doctor can try again, and nothing claims
       // the parent was paid when they were not.
-      console.error(`[remedy] Stripe refund failed for request ${id}:`, err);
+      console.error(`[refund] Stripe refund failed for request ${id}:`, err);
       res.status(502).json({ error: "The refund could not be processed, please try again" });
       return;
     }
@@ -989,16 +990,16 @@ export async function resolveRemedyRequest(req: Request, res: Response): Promise
     .single();
 
   if (error) {
-    // The remedy landed but the row did not. Loud, because the parent has been
+    // The payout landed but the row did not. Loud, because the parent has been
     // given something the request no longer records.
     console.error(
-      `[remedy] Remedy applied but request ${id} could not be marked approved: ${error.message}`
+      `[refund] Request ${id} was settled but could not be marked approved: ${error.message}`
     );
     res.status(500).json({ error: error.message });
     return;
   }
 
-  await notifyRemedyResolved(id as string, outcomeLabel);
+  await notifyRefundResolved(id as string, outcomeLabel);
 
   res.json({ request: approved });
 }

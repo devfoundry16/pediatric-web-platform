@@ -4,8 +4,8 @@ import type {
   Appointment,
   CreateAppointmentPayload,
   Doctor,
-  RemedyKind,
-  RemedyRequest,
+  RefundOption,
+  RefundRequest,
 } from "@/types/appointment";
 import { getApiBaseUrl } from "./config";
 
@@ -147,16 +147,16 @@ export const appointmentsApi = {
     });
   },
 
-  // Claim a remedy for a consultation the attendance sweep recorded as missed.
+  // Ask for a refund on a consultation the attendance sweep recorded as missed.
   // The API decides eligibility; this only carries the ask.
-  async requestRemedy(
+  async requestRefund(
     id: string,
-    remedy: RemedyKind,
+    requestedType: RefundOption,
     reason?: string
-  ): Promise<RemedyRequest> {
-    const { data } = await axios.post<{ request: RemedyRequest }>(
+  ): Promise<RefundRequest> {
+    const { data } = await axios.post<{ request: RefundRequest }>(
       `${getBaseUrl()}/appointments/${id}/refund-request`,
-      { remedy, reason },
+      { requestedType, reason },
       { headers: await authHeaders() }
     );
     return data.request;

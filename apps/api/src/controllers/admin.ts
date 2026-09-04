@@ -524,7 +524,7 @@ export async function updateAppointmentAdmin(req: Request, res: Response): Promi
 
   // complete and no_show both end the consultation, so settle its attendance
   // now. This matters most for no_show, which writes status 'cancelled' -- a
-  // status the sweep never revisits, so without this the very case the remedy
+  // status the sweep never revisits, so without this the very case the refund
   // flow exists for would never be classified at all.
   if (action === "complete" || action === "no_show") {
     await classifyAppointment(id as string);

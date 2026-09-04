@@ -15,10 +15,10 @@ vi.mock("../src/lib/stripe", () => ({
 
 // Notifications are exercised by their own suites; here they must simply not
 // throw and not block the response.
-vi.mock("../src/lib/remedy-notifications", () => ({
-  notifyRemedyRequested: vi.fn(async () => {}),
-  notifyRemedyResolved: vi.fn(async () => {}),
-  remedyLabel: (r: string) => (r === "refund" ? "a refund" : "a replacement session"),
+vi.mock("../src/lib/refund-notifications", () => ({
+  notifyRefundRequested: vi.fn(async () => {}),
+  notifyRefundResolved: vi.fn(async () => {}),
+  refundOptionLabel: (r: string) => (r === "refund" ? "a refund" : "a replacement session"),
 }));
 vi.mock("../src/lib/google-calendar", () => ({
   syncAppointmentCalendarEvent: vi.fn(async () => {}),
@@ -50,9 +50,9 @@ beforeEach(() => {
   stripeHolder.current = null;
 });
 
-// ─── Parent: claiming a remedy ────────────────────────────────────────────────
+// ─── Parent: asking for a refund ──────────────────────────────────────────────
 
-describe("requestAppointmentRemedy", () => {
+describe("requestAppointmentRefund", () => {
   function setup(appt: Record<string, unknown> | null, existingRequests: unknown[] = []) {
     const mock = createSupabaseMock({
       appointments: (q) => applyFilters(appt ? [appt] : [], q),
@@ -67,10 +67,10 @@ describe("requestAppointmentRemedy", () => {
 
   it("creates a pending request for a missed, paid consultation", async () => {
     const mock = setup(PAID_MISSED);
-    const { requestAppointmentRemedy } = await import("../src/controllers/appointments");
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
     const res = makeRes();
 
-    await requestAppointmentRemedy(makeReq({ remedy: "refund", reason: " no one came " }, PARENT), res);
+    await requestAppointmentRefund(makeReq({ requestedType: "refund", reason: " no one came " }, PARENT), res);
 
     expect(res.statusCode).toBe(201);
     const insert = mock.queries.find((q) => q.table === "refund_requests" && q.op === "insert")!;
@@ -83,64 +83,112 @@ describe("requestAppointmentRemedy", () => {
     });
   });
 
-  it("rejects a remedy it does not recognise", async () => {
+  it("rejects a requested type it does not recognise", async () => {
     setup(PAID_MISSED);
-    const { requestAppointmentRemedy } = await import("../src/controllers/appointments");
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
     const res = makeRes();
 
-    await requestAppointmentRemedy(makeReq({ remedy: "store_credit" }, PARENT), res);
+    await requestAppointmentRefund(makeReq({ requestedType: "store_credit" }, PARENT), res);
 
     expect(res.statusCode).toBe(400);
   });
 
   it("will not let one parent claim against another parent's appointment", async () => {
     setup(PAID_MISSED);
-    const { requestAppointmentRemedy } = await import("../src/controllers/appointments");
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
     const res = makeRes();
 
-    await requestAppointmentRemedy(makeReq({ remedy: "refund" }, "someone-else"), res);
+    await requestAppointmentRefund(makeReq({ requestedType: "refund" }, "someone-else"), res);
 
     expect(res.statusCode).toBe(404);
   });
 
   it("refuses a consultation both sides attended", async () => {
     setup({ ...PAID_MISSED, attendance_outcome: "both_joined" });
-    const { requestAppointmentRemedy } = await import("../src/controllers/appointments");
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
     const res = makeRes();
 
-    await requestAppointmentRemedy(makeReq({ remedy: "refund" }, PARENT), res);
+    await requestAppointmentRefund(makeReq({ requestedType: "refund" }, PARENT), res);
 
     expect(res.statusCode).toBe(400);
   });
 
   it("refuses a consultation that has not been swept yet, rather than burning the claim", async () => {
     setup({ ...PAID_MISSED, attendance_outcome: null });
-    const { requestAppointmentRemedy } = await import("../src/controllers/appointments");
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
     const res = makeRes();
 
-    await requestAppointmentRemedy(makeReq({ remedy: "refund" }, PARENT), res);
+    await requestAppointmentRefund(makeReq({ requestedType: "refund" }, PARENT), res);
 
     expect(res.statusCode).toBe(409);
   });
 
   it("refuses a booking that was never paid for", async () => {
     setup({ ...PAID_MISSED, payment_status: "pending" });
-    const { requestAppointmentRemedy } = await import("../src/controllers/appointments");
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
     const res = makeRes();
 
-    await requestAppointmentRemedy(makeReq({ remedy: "refund" }, PARENT), res);
+    await requestAppointmentRefund(makeReq({ requestedType: "refund" }, PARENT), res);
 
     expect(res.statusCode).toBe(400);
   });
 
-  it("refuses a second claim on the same consultation", async () => {
-    setup(PAID_MISSED, [{ id: "req-existing", appointment_id: "appt-1" }]);
-    const { requestAppointmentRemedy } = await import("../src/controllers/appointments");
+  it("refuses a second request while one is still awaiting a decision", async () => {
+    setup(PAID_MISSED, [
+      { id: "req-existing", appointment_id: "appt-1", status: "pending" },
+    ]);
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
     const res = makeRes();
 
-    await requestAppointmentRemedy(makeReq({ remedy: "free_session" }, PARENT), res);
+    await requestAppointmentRefund(makeReq({ requestedType: "free_session" }, PARENT), res);
 
     expect(res.statusCode).toBe(409);
+  });
+
+  it("refuses a second request once one has been approved", async () => {
+    setup(PAID_MISSED, [
+      { id: "req-existing", appointment_id: "appt-1", status: "approved" },
+    ]);
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
+    const res = makeRes();
+
+    await requestAppointmentRefund(makeReq({ requestedType: "refund" }, PARENT), res);
+
+    expect(res.statusCode).toBe(409);
+  });
+
+  it("lets a parent ask again after a decline, for the other option", async () => {
+    // The reported bug: a parent asked for a replacement session, the doctor
+    // declined, and the 409 then left them with no way to ask for their money
+    // instead. A declined request settled nothing and must not lock the claim.
+    const mock = setup(PAID_MISSED, [
+      { id: "req-declined", appointment_id: "appt-1", status: "declined" },
+    ]);
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
+    const res = makeRes();
+
+    await requestAppointmentRefund(makeReq({ requestedType: "refund" }, PARENT), res);
+
+    expect(res.statusCode).toBe(201);
+    const insert = mock.queries.find(
+      (q) => q.table === "refund_requests" && q.op === "insert"
+    );
+    expect(insert?.payload).toMatchObject({ requested_remedy: "refund" });
+  });
+
+  it("only treats pending and approved requests as blocking", async () => {
+    const mock = setup(PAID_MISSED, []);
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
+
+    await requestAppointmentRefund(makeReq({ requestedType: "refund" }, PARENT), makeRes());
+
+    const read = mock.queries.find(
+      (q) => q.table === "refund_requests" && q.op === "select"
+    )!;
+    expect(read.calls).toContainEqual({
+      method: "in",
+      args: ["status", ["pending", "approved"]],
+    });
   });
 
   it("turns the unique-constraint violation from a double submit into a 409", async () => {
@@ -152,18 +200,18 @@ describe("requestAppointmentRemedy", () => {
           : applyFilters([], q),
     });
     supabaseHolder.current = mock.client;
-    const { requestAppointmentRemedy } = await import("../src/controllers/appointments");
+    const { requestAppointmentRefund } = await import("../src/controllers/appointments");
     const res = makeRes();
 
-    await requestAppointmentRemedy(makeReq({ remedy: "refund" }, PARENT), res);
+    await requestAppointmentRefund(makeReq({ requestedType: "refund" }, PARENT), res);
 
     expect(res.statusCode).toBe(409);
   });
 });
 
-// ─── Doctor: resolving a claim ────────────────────────────────────────────────
+// ─── Doctor: answering a request ──────────────────────────────────────────────
 
-describe("resolveRemedyRequest", () => {
+describe("resolveRefundRequest", () => {
   const REQUEST = {
     id: "req-1",
     appointment_id: "appt-1",
@@ -209,10 +257,10 @@ describe("resolveRemedyRequest", () => {
 
   it("refunds a directly-paid consultation through Stripe", async () => {
     const { mock, refundsCreate } = setup();
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
     const res = makeRes();
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
 
     expect(res.statusCode).toBe(200);
     expect(refundsCreate).toHaveBeenCalledTimes(1);
@@ -228,9 +276,9 @@ describe("resolveRemedyRequest", () => {
 
   it("leaves payment_status to the charge.refunded webhook rather than writing it twice", async () => {
     const { mock } = setup();
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), makeRes());
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), makeRes());
 
     const apptUpdates = mock.queries.filter((q) => q.table === "appointments" && q.op === "update");
     expect(apptUpdates).toHaveLength(0);
@@ -241,10 +289,10 @@ describe("resolveRemedyRequest", () => {
       throw new Error("card_declined");
     });
     const { mock } = setup({ refundsCreate });
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
     const res = makeRes();
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
 
     expect(res.statusCode).toBe(502);
     expect(mock.queries.some((q) => q.table === "refund_requests" && q.op === "update")).toBe(false);
@@ -260,10 +308,10 @@ describe("resolveRemedyRequest", () => {
         payment_reference: "PKG-up-7",
       },
     });
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
     const res = makeRes();
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
 
     expect(res.statusCode).toBe(200);
     expect(refundsCreate).not.toHaveBeenCalled();
@@ -282,9 +330,9 @@ describe("resolveRemedyRequest", () => {
         payment_reference: "PKG-up-7",
       },
     });
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), makeRes());
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), makeRes());
 
     expect(
       mock.queries.some((q) => q.table === "package_usage_logs" && q.op === "delete")
@@ -301,10 +349,10 @@ describe("resolveRemedyRequest", () => {
       },
       restoreError: { message: "row not found" },
     });
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
     const res = makeRes();
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
 
     expect(res.statusCode).toBe(500);
     expect(mock.queries.some((q) => q.table === "refund_requests" && q.op === "update")).toBe(false);
@@ -314,10 +362,10 @@ describe("resolveRemedyRequest", () => {
     const { mock, refundsCreate } = setup({
       request: { ...REQUEST, requested_remedy: "free_session" },
     });
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
     const res = makeRes();
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
 
     expect(res.statusCode).toBe(200);
     expect(refundsCreate).not.toHaveBeenCalled();
@@ -338,10 +386,10 @@ describe("resolveRemedyRequest", () => {
 
   it("declines without moving money or granting anything", async () => {
     const { mock, refundsCreate } = setup();
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
     const res = makeRes();
 
-    await resolveRemedyRequest(
+    await resolveRefundRequest(
       makeReq({ action: "decline", note: "Patient rebooked" }, DOCTOR_PROFILE, { id: "req-1" }),
       res
     );
@@ -356,9 +404,9 @@ describe("resolveRemedyRequest", () => {
 
   it("records who decided and when", async () => {
     const { mock } = setup();
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), makeRes());
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), makeRes());
 
     const update = mock.queries.find((q) => q.table === "refund_requests" && q.op === "update")!;
     expect((update.payload as any).resolved_by).toBe(DOCTOR_PROFILE);
@@ -367,9 +415,9 @@ describe("resolveRemedyRequest", () => {
 
   it("will not let a doctor resolve another doctor's request", async () => {
     const { mock } = setup();
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), makeRes());
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), makeRes());
 
     const read = mock.queries.find((q) => q.table === "refund_requests" && q.op === "select")!;
     expect(read.calls).toContainEqual({ method: "eq", args: ["doctor_id", DOCTOR] });
@@ -377,19 +425,19 @@ describe("resolveRemedyRequest", () => {
 
   it("refuses to answer a request that was already answered", async () => {
     setup({ request: { ...REQUEST, status: "approved" } });
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
     const res = makeRes();
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), res);
 
     expect(res.statusCode).toBe(400);
   });
 
   it("guards the approval write on the request still being pending", async () => {
     const { mock } = setup();
-    const { resolveRemedyRequest } = await import("../src/controllers/doctor-dashboard");
+    const { resolveRefundRequest } = await import("../src/controllers/doctor-dashboard");
 
-    await resolveRemedyRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), makeRes());
+    await resolveRefundRequest(makeReq({ action: "approve" }, DOCTOR_PROFILE, { id: "req-1" }), makeRes());
 
     const update = mock.queries.find((q) => q.table === "refund_requests" && q.op === "update")!;
     expect(update.calls).toContainEqual({ method: "eq", args: ["status", "pending"] });
