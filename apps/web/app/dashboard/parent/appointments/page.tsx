@@ -38,13 +38,17 @@ import { appointmentsApi, doctorsApi, type Slot } from "@/lib/api/appointments";
 import type {
   Appointment,
   AppointmentStatus,
-  RemedyKind,
+  RefundOption,
+  RefundRequest,
 } from "@/types/appointment";
 import {
-  getRemedyStatusLabel,
+  canRaiseRefundRequest,
+  getRefundOptionLabel,
+  getRefundRequestStatusLabel,
   isMissedOutcome,
   isSettled,
-} from "@/lib/remedy";
+  latestRefundRequest,
+} from "@/lib/refund";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 import { getAppointmentStatusLabel } from "@/lib/i18n/appointment-status";
@@ -109,11 +113,11 @@ function ParentAppointmentsContent() {
   const [isSlotsLoading, setIsSlotsLoading] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
 
-  // Remedy dialog — claiming a refund or a replacement for a missed call.
-  const [remedyAppt, setRemedyAppt] = useState<Appointment | null>(null);
-  const [remedyKind, setRemedyKind] = useState<RemedyKind>("refund");
-  const [remedyReason, setRemedyReason] = useState("");
-  const [isRequestingRemedy, setIsRequestingRemedy] = useState(false);
+  // Refund dialog — asking for money back or a replacement for a missed call.
+  const [refundAppt, setRefundAppt] = useState<Appointment | null>(null);
+  const [refundOption, setRefundOption] = useState<RefundOption>("refund");
+  const [refundReason, setRefundReason] = useState("");
+  const [isRequestingRefund, setIsRequestingRefund] = useState(false);
 
   const { timezone: viewerTimezone } = useViewerTimezone(DEFAULT_TIMEZONE);
   const rescheduleToday = parseLocalYMD(todayInTimezone(rescheduleTimezone));
@@ -180,21 +184,91 @@ function ParentAppointmentsContent() {
   const upcoming = appointments.filter((a) => isUpcomingAppointment(a));
   const past = appointments.filter((a) => !isUpcomingAppointment(a));
 
-  async function submitRemedyRequest() {
-    if (!remedyAppt) return;
-    setIsRequestingRemedy(true);
+  async function submitRefundRequest() {
+    if (!refundAppt) return;
+    setIsRequestingRefund(true);
     try {
-      await appointmentsApi.requestRemedy(remedyAppt.id, remedyKind, remedyReason);
-      toast.success(t.appointments.remedySent);
-      setRemedyAppt(null);
-      setRemedyReason("");
+      await appointmentsApi.requestRefund(refundAppt.id, refundOption, refundReason);
+      toast.success(t.appointments.refundSent);
+      setRefundAppt(null);
+      setRefundReason("");
       await loadAppointments(true);
     } catch {
-      toast.error(t.appointments.remedyFailed);
+      toast.error(t.appointments.refundFailed);
     } finally {
-      setIsRequestingRemedy(false);
+      setIsRequestingRefund(false);
     }
   }
+
+  /**
+   * What happened to a refund request, on the card it belongs to.
+   *
+   * The parent previously had no way to see any of this: the request vanished
+   * into the doctor's queue and the only signal back was an email. The panel
+   * states what was asked for, where it stands, what was actually issued on
+   * approval, and the doctor's own words on a decline -- plus, on a decline,
+   * that asking again is allowed, since that is not obvious.
+   */
+  const renderRefundOutcome = (request: RefundRequest) => {
+    const tone =
+      request.status === "approved"
+        ? "border-emerald-500/30 bg-emerald-500/5"
+        : request.status === "declined"
+          ? "border-destructive/30 bg-destructive/5"
+          : "border-border bg-muted/40";
+
+    // On approval, say what actually arrived rather than "approved": money to a
+    // card, a returned credit and a granted session are three different things.
+    let outcome: string | null = null;
+    if (request.status === "approved") {
+      if (request.requested_remedy === "free_session") {
+        outcome = t.appointments.refundSessionGranted;
+      } else if (request.refund_amount_aed != null) {
+        outcome = t.appointments.refundRefundedAmount.replace(
+          "{amount}",
+          String(Math.round(request.refund_amount_aed))
+        );
+      } else {
+        outcome = t.appointments.refundCreditReturned;
+      }
+    }
+
+    return (
+      <div className={cn("mt-3 flex flex-col gap-1.5 rounded-lg border p-3", tone)}>
+        <div className="flex items-center gap-2">
+          <LifeBuoy className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium text-foreground">
+            {t.appointments.refundOutcomeHeading}
+          </span>
+          <Badge variant="outline" className="ms-auto">
+            {getRefundRequestStatusLabel(t, request.status)}
+          </Badge>
+        </div>
+
+        <p className="text-xs text-muted-foreground">
+          {t.appointments.refundAskedFor}{" "}
+          <span className="font-medium text-foreground">
+            {getRefundOptionLabel(t, request.requested_remedy)}
+          </span>
+        </p>
+
+        {outcome && <p className="text-xs text-foreground">{outcome}</p>}
+
+        {request.resolution_note && (
+          <p className="text-xs text-muted-foreground">
+            {t.appointments.refundDoctorNote}:{" "}
+            <span className="italic">“{request.resolution_note}”</span>
+          </p>
+        )}
+
+        {request.status === "declined" && (
+          <p className="text-xs text-muted-foreground">
+            {t.appointments.refundDeclinedHelp}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const renderAppointmentCard = (appt: Appointment) => {
     const typeLabel = getConsultationTypeLabel(t, appt.consultation_type);
@@ -204,12 +278,13 @@ function ParentAppointmentsContent() {
     const isUpcoming = isUpcomingAppointment(appt);
     const canReschedule = ["pending", "confirmed"].includes(appt.status) && isUpcoming;
 
-    // At most one claim per consultation, guaranteed by a unique constraint.
-    const remedyRequest = appt.refund_requests?.[0] ?? null;
+    // A declined request can be retried, so there may be several; the newest
+    // is the one that speaks for the consultation.
+    const refundRequest = latestRefundRequest(appt.refund_requests);
     // Mirrors the server's eligibility rules; the API re-checks all of them.
-    const canRequestRemedy =
+    const canRequestRefund =
       !isUpcoming &&
-      !remedyRequest &&
+      canRaiseRefundRequest(refundRequest) &&
       isMissedOutcome(appt.attendance_outcome) &&
       isSettled(appt.payment_status);
     // Stored wall clock belongs to the doctor's zone; show it in the parent's.
@@ -321,27 +396,26 @@ function ParentAppointmentsContent() {
                 {t.appointments.reschedule}
               </Button>
             )}
-            {canRequestRemedy && (
+            {canRequestRefund && (
               <Button
                 size="sm"
                 variant="outline"
                 className="gap-1.5"
                 onClick={() => {
-                  setRemedyAppt(appt);
-                  setRemedyKind("refund");
-                  setRemedyReason("");
+                  setRefundAppt(appt);
+                  setRefundOption("refund");
+                  setRefundReason("");
                 }}
               >
                 <LifeBuoy className="h-3.5 w-3.5" />
-                {t.appointments.remedyRequest}
+                {refundRequest
+                  ? t.appointments.refundAskAgain
+                  : t.appointments.refundRequest}
               </Button>
             )}
-            {remedyRequest && (
-              <Badge variant="outline">
-                {getRemedyStatusLabel(t, remedyRequest.status)}
-              </Badge>
-            )}
           </div>
+
+          {refundRequest && renderRefundOutcome(refundRequest)}
         </CardContent>
       </Card>
     );
@@ -531,29 +605,29 @@ function ParentAppointmentsContent() {
         </DialogContent>
       </Dialog>
 
-      {/* Claim a remedy for a missed consultation */}
-      <Dialog open={!!remedyAppt} onOpenChange={(open) => !open && setRemedyAppt(null)}>
+      {/* Ask for a refund after a missed consultation */}
+      <Dialog open={!!refundAppt} onOpenChange={(open) => !open && setRefundAppt(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{t.appointments.remedyTitle}</DialogTitle>
+            <DialogTitle>{t.appointments.refundTitle}</DialogTitle>
           </DialogHeader>
 
           <div className="flex flex-col gap-4">
-            <p className="text-sm text-muted-foreground">{t.appointments.remedyBody}</p>
+            <p className="text-sm text-muted-foreground">{t.appointments.refundBody}</p>
 
             <RadioGroup
-              value={remedyKind}
-              onValueChange={(value) => setRemedyKind(value as RemedyKind)}
+              value={refundOption}
+              onValueChange={(value) => setRefundOption(value as RefundOption)}
               className="gap-3"
             >
               <div className="flex items-start gap-3 rounded-lg border p-3">
-                <RadioGroupItem value="refund" id="remedy-refund" className="mt-0.5" />
+                <RadioGroupItem value="refund" id="refund-money" className="mt-0.5" />
                 <div className="flex flex-col gap-0.5">
-                  <Label htmlFor="remedy-refund" className="font-medium">
-                    {t.appointments.remedyRefund}
+                  <Label htmlFor="refund-money" className="font-medium">
+                    {t.appointments.refundOptionMoney}
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    {t.appointments.remedyRefundHint}
+                    {t.appointments.refundOptionMoneyHint}
                   </p>
                 </div>
               </div>
@@ -561,43 +635,43 @@ function ParentAppointmentsContent() {
               <div className="flex items-start gap-3 rounded-lg border p-3">
                 <RadioGroupItem
                   value="free_session"
-                  id="remedy-free-session"
+                  id="refund-session"
                   className="mt-0.5"
                 />
                 <div className="flex flex-col gap-0.5">
-                  <Label htmlFor="remedy-free-session" className="font-medium">
-                    {t.appointments.remedyFreeSession}
+                  <Label htmlFor="refund-session" className="font-medium">
+                    {t.appointments.refundOptionSession}
                   </Label>
                   <p className="text-xs text-muted-foreground">
-                    {t.appointments.remedyFreeSessionHint}
+                    {t.appointments.refundOptionSessionHint}
                   </p>
                 </div>
               </div>
             </RadioGroup>
 
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="remedy-reason">{t.appointments.remedyReason}</Label>
+              <Label htmlFor="refund-reason">{t.appointments.refundReason}</Label>
               <Textarea
-                id="remedy-reason"
+                id="refund-reason"
                 rows={3}
-                value={remedyReason}
-                placeholder={t.appointments.remedyReasonPlaceholder}
-                onChange={(e) => setRemedyReason(e.target.value)}
+                value={refundReason}
+                placeholder={t.appointments.refundReasonPlaceholder}
+                onChange={(e) => setRefundReason(e.target.value)}
               />
             </div>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRemedyAppt(null)}>
+            <Button variant="outline" onClick={() => setRefundAppt(null)}>
               {t.common.cancel}
             </Button>
             <Button
-              onClick={submitRemedyRequest}
-              disabled={isRequestingRemedy}
+              onClick={submitRefundRequest}
+              disabled={isRequestingRefund}
               className="gap-2"
             >
-              {isRequestingRemedy && <Loader2 className="h-4 w-4 animate-spin" />}
-              {t.appointments.remedySubmit}
+              {isRequestingRefund && <Loader2 className="h-4 w-4 animate-spin" />}
+              {t.appointments.refundSubmit}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -9,7 +9,7 @@ import {
   abandonAppointment,
   cancelAppointment,
   rescheduleAppointment,
-  requestAppointmentRemedy,
+  requestAppointmentRefund,
   joinAppointment,
   listAppointmentFiles,
 } from "../controllers/appointments";
@@ -28,6 +28,6 @@ router.get("/:id/join", joinAppointment);
 router.get("/:id/files", listAppointmentFiles);
 router.patch("/:id/cancel", cancelAppointment);
 router.patch("/:id/reschedule", rescheduleAppointment);
-router.post("/:id/refund-request", requestAppointmentRemedy);
+router.post("/:id/refund-request", requestAppointmentRefund);
 
 export default router;

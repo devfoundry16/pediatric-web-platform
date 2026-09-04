@@ -9,7 +9,7 @@ import { DEFAULT_TIMEZONE, wallClockToInstant } from "./timezone";
  * Daily token and there are no Daily webhooks, so the only signal available is
  * that someone asked to be let in. That is what this records — intent to join,
  * not proven presence. Someone who opens the room and walks away counts as
- * having shown up, which is the right bias for a remedy flow: it never accuses
+ * having shown up, which is the right bias for a refund flow: it never accuses
  * a participant of missing a call they demonstrably tried to attend.
  *
  * The classification exists so a refund request can be gated on a call that was
@@ -24,8 +24,6 @@ export type AttendanceOutcome =
   | "doctor_only"
   | "neither";
 
-/** How far back the sweep will reach to classify a backlog. */
-const LOOKBACK_DAYS = 7;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Candidates examined per run, so one sweep cannot run unboundedly long. */
@@ -138,13 +136,17 @@ export async function sweepAttendance(now: Date = new Date()): Promise<Attendanc
   if (!supabaseAdmin) return run;
 
   // scheduled_date/scheduled_time are a bare wall clock with a per-row zone, so
-  // "the window has closed" cannot be expressed in SQL. Narrow by date to a
-  // range wide enough to drain a backlog, then resolve each candidate below.
-  // A day into the future covers zones ahead of UTC whose "today" has not
-  // started here yet.
-  const from = new Date(now.getTime() - LOOKBACK_DAYS * DAY_MS)
-    .toISOString()
-    .slice(0, 10);
+  // "the window has closed" cannot be expressed in SQL; each candidate is
+  // resolved below. A day into the future covers zones ahead of UTC whose
+  // "today" has not started here yet.
+  //
+  // There is deliberately no lower bound. A seven-day floor used to sit here,
+  // which quietly meant any appointment the sweep missed for a week -- the
+  // feature shipping after the booking, a cron outage, a backlog longer than
+  // one batch -- could never be classified at all, and its parent could never
+  // claim. Ordering by date oldest-first with a bounded batch drains a backlog
+  // over successive runs instead, and the partial index keeps the scan cheap
+  // because classified rows are not in it.
   const to = new Date(now.getTime() + DAY_MS).toISOString().slice(0, 10);
 
   const { data: appointments, error } = await supabaseAdmin
@@ -152,7 +154,6 @@ export async function sweepAttendance(now: Date = new Date()): Promise<Attendanc
     .select("id, status, scheduled_date, scheduled_time, timezone, duration_minutes")
     .in("status", ["confirmed", "completed"])
     .is("attendance_outcome", null)
-    .gte("scheduled_date", from)
     .lte("scheduled_date", to)
     .order("scheduled_date", { ascending: true })
     .limit(BATCH_LIMIT);
@@ -197,7 +198,7 @@ export function isMissedOutcome(outcome: string | null | undefined): boolean {
   );
 }
 
-/** Re-resolve an appointment's start instant. Exported for the remedy flow. */
+/** Re-resolve an appointment's start instant. Exported for the refund flow. */
 export function appointmentStartsAt(appt: {
   scheduled_date: string;
   scheduled_time: string;
