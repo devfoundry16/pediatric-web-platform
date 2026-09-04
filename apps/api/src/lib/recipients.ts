@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "./supabase";
+import { isFlagEnabled } from "../controllers/feature-flags";
 
 export interface Recipient {
   email: string;
@@ -11,9 +12,17 @@ export interface Recipient {
  * Resolved from profiles rather than configuration so the list follows
  * role changes and deactivation automatically. Addresses live in auth.users,
  * so this needs the admin API and a genuine service role key.
+ *
+ * Gated here rather than at each call site: this is the one place admin
+ * addresses are resolved, so a single check silences the admin copy of every
+ * notification at once, and any future one is covered without being
+ * remembered. Callers already treat an empty list as "no admin copy", so
+ * nothing downstream needs to know the switch exists.
  */
 export async function activeAdminRecipients(): Promise<Recipient[]> {
   if (!supabaseAdmin) return [];
+
+  if (!(await isFlagEnabled("admin_email_notifications"))) return [];
 
   const { data: admins } = await supabaseAdmin
     .from("profiles")

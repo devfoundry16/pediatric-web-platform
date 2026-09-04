@@ -10,12 +10,15 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { featureFlagsApi } from "@/lib/api/feature-flags";
-import type { FeatureFlagKey, FeatureFlags } from "@/lib/api/feature-flags";
+// SectionFlagKey, not FeatureFlagKey: this context is fed by the PUBLIC
+// endpoint, which returns section flags only. Operational settings are read
+// on the admin settings page and never reach here.
+import type { SectionFlagKey, FeatureFlags } from "@/lib/api/feature-flags";
 
 interface FeatureFlagsContextValue {
   flags: FeatureFlags;
   /** A section is hidden unless the API says it is on — unknown reads as off. */
-  isEnabled: (key: FeatureFlagKey) => boolean;
+  isEnabled: (key: SectionFlagKey) => boolean;
   refresh: () => Promise<void>;
 }
 
@@ -82,6 +85,6 @@ export function useFeatureFlags(): FeatureFlagsContextValue {
 }
 
 /** Convenience for the common single-flag case. */
-export function useFeatureFlag(key: FeatureFlagKey): boolean {
+export function useFeatureFlag(key: SectionFlagKey): boolean {
   return useFeatureFlags().isEnabled(key);
 }
