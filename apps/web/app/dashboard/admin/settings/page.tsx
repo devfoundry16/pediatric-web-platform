@@ -1,18 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { GraduationCap, AlertCircle } from "lucide-react";
+import { GraduationCap, AlertCircle, Mail } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { featureFlagsApi, type FeatureFlagKey } from "@/lib/api/feature-flags";
+import {
+  featureFlagsApi,
+  type AdminSettingKey,
+  type AdminSettings,
+  type FeatureFlagKey,
+  type SectionFlagKey,
+} from "@/lib/api/feature-flags";
 import { useFeatureFlags } from "@/lib/feature-flags/feature-flags-context";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import type { Dictionary } from "@/lib/i18n/get-dictionary";
 
 interface Section {
-  key: FeatureFlagKey;
+  key: SectionFlagKey;
   labelKey: keyof Dictionary["common"];
   descriptionKey: keyof Dictionary["admin"]["settings"];
   icon: LucideIcon;
@@ -33,7 +39,25 @@ export default function AdminSettingsPage() {
   const [savingKey, setSavingKey] = useState<FeatureFlagKey | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const handleToggle = async (key: FeatureFlagKey, enabled: boolean) => {
+  // Read separately from the section flags: the public feature-flags endpoint
+  // deliberately withholds operational settings, so these come from the admin
+  // route. Undefined until the first load, so the switch is not rendered in a
+  // state the server has not confirmed.
+  const [settings, setSettings] = useState<AdminSettings | null>(null);
+
+  const loadSettings = useCallback(async () => {
+    try {
+      setSettings(await featureFlagsApi.listAdminSettings());
+    } catch {
+      setSettings({});
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSettings();
+  }, [loadSettings]);
+
+  const handleToggle = async (key: SectionFlagKey, enabled: boolean) => {
     setSavingKey(key);
     setError(null);
     try {
@@ -46,6 +70,23 @@ export default function AdminSettingsPage() {
       setSavingKey(null);
     }
   };
+
+  const handleSettingToggle = async (key: AdminSettingKey, enabled: boolean) => {
+    setSavingKey(key);
+    setError(null);
+    try {
+      await featureFlagsApi.update(key, enabled);
+      await loadSettings();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t.admin.settings.saveError);
+    } finally {
+      setSavingKey(null);
+    }
+  };
+
+  // Defaults on, matching the API, so the control reads correctly while the
+  // first request is still in flight.
+  const adminEmailsOn = settings?.admin_email_notifications ?? true;
 
   return (
     <div className="flex flex-col gap-6">
@@ -100,6 +141,45 @@ export default function AdminSettingsPage() {
               </div>
             );
           })}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">
+            {t.admin.settings.notificationsTitle}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-1 p-0">
+          <div className="flex items-start justify-between gap-6 px-6 py-5">
+            <div className="flex gap-3">
+              <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <Mail className="h-4.5 w-4.5 text-primary" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-foreground">
+                    {t.admin.settings.adminEmailsLabel}
+                  </span>
+                  {!adminEmailsOn && (
+                    <Badge variant="secondary">{t.admin.settings.adminEmailsOffBadge}</Badge>
+                  )}
+                </div>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {t.admin.settings.adminEmailsDescription}
+                </p>
+              </div>
+            </div>
+
+            <Switch
+              checked={adminEmailsOn}
+              disabled={settings === null || savingKey === "admin_email_notifications"}
+              onCheckedChange={(checked) =>
+                handleSettingToggle("admin_email_notifications", checked)
+              }
+              aria-label={t.admin.settings.adminEmailsLabel}
+            />
+          </div>
         </CardContent>
       </Card>
 

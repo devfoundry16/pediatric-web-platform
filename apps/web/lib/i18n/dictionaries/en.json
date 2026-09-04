@@ -1192,7 +1192,11 @@
       "sectionLiveAria": "{section} live",
       "saveError": "Failed to save the change.",
       "flagsUnreachable": "Could not read the current settings — the API may be unreachable. Sections are hidden until it responds.",
-      "effectNote": "Changes take effect the next time a page loads."
+      "effectNote": "Changes take effect the next time a page loads.",
+      "notificationsTitle": "Email notifications",
+      "adminEmailsLabel": "Send admins a copy",
+      "adminEmailsDescription": "Admins receive an email for every confirmed booking and package purchase. Turn this off to stop those copies. Parents and doctors keep getting theirs.",
+      "adminEmailsOffBadge": "Off"
     }
   },
   "validation": {
