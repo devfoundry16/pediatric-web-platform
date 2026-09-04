@@ -495,17 +495,15 @@
     "refundSubmit": "Send request",
     "refundSent": "Your request has been sent",
     "refundFailed": "Your request could not be sent",
-    "refundPendingBadge": "Refund request pending",
-    "refundApprovedBadge": "Refund request approved",
-    "refundDeclinedBadge": "Refund request declined",
-    "refundOutcomeHeading": "Your refund request",
+    "refundPendingBadge": "Awaiting your doctor",
+    "refundApprovedBadge": "Approved",
+    "refundDeclinedBadge": "Declined",
+    "refundOutcomeHeading": "Refund request",
     "refundAskedFor": "You asked for",
     "refundDoctorNote": "Your doctor said",
     "refundRefundedAmount": "{amount} AED has been refunded to your card. It can take a few days to appear.",
     "refundSessionGranted": "A complimentary consultation has been added to your account.",
-    "refundCreditReturned": "Your consultation credit has been returned and is ready to use again.",
-    "refundAskAgain": "Ask again",
-    "refundDeclinedHelp": "You can send another request, for example asking for the other option."
+    "refundCreditReturned": "Your consultation credit has been returned and is ready to use again."
   },
   "patient": {
     "personalInfo": "Personal Information",
