@@ -1,23 +1,23 @@
 import { supabaseAdmin } from "./supabase";
 import {
   recordEmailFailure,
-  sendRemedyRequestedEmail,
-  sendRemedyResolvedEmail,
+  sendRefundRequestedEmail,
+  sendRefundResolvedEmail,
 } from "./resend";
 import { appointmentUrlFor } from "./booking-notifications";
 import { DEFAULT_TIMEZONE } from "./timezone";
 
 /**
- * Telling each side what happened to a missed-consultation claim.
+ * Telling each side what happened to a refund request.
  *
  * Both functions load everything they need from the request id, so a caller
  * only has to hand over the row it just wrote. Neither throws: the request has
  * already been committed, and failing to mail about it must not undo it.
  */
 
-/** How a remedy reads in a sentence. */
-export function remedyLabel(remedy: string): string {
-  return remedy === "refund" ? "a refund" : "a replacement session";
+/** How a requested option reads in a sentence. */
+export function refundOptionLabel(requestedType: string): string {
+  return requestedType === "refund" ? "a refund" : "a replacement session";
 }
 
 interface RequestContext {
@@ -86,7 +86,7 @@ async function loadContext(requestId: string): Promise<RequestContext | null> {
 }
 
 /** Tell the doctor a claim is waiting on them. */
-export async function notifyRemedyRequested(requestId: string): Promise<void> {
+export async function notifyRefundRequested(requestId: string): Promise<void> {
   try {
     const ctx = await loadContext(requestId);
     if (!ctx) return;
@@ -104,10 +104,10 @@ export async function notifyRemedyRequested(requestId: string): Promise<void> {
       return;
     }
 
-    await sendRemedyRequestedEmail({
+    await sendRefundRequestedEmail({
       requestId,
       appointmentId: ctx.appointment.id,
-      remedyLabel: remedyLabel(ctx.request.requested_remedy),
+      optionLabel: refundOptionLabel(ctx.request.requested_remedy),
       recipientEmail: ctx.doctorEmail,
       recipientName: ctx.doctorName,
       childName: ctx.childName,
@@ -118,12 +118,12 @@ export async function notifyRemedyRequested(requestId: string): Promise<void> {
       actionUrl: appointmentUrlFor("doctor", ctx.appointment.id),
     });
   } catch (err) {
-    console.error(`[remedy] Could not notify doctor of request ${requestId}:`, err);
+    console.error(`[refund] Could not notify doctor of request ${requestId}:`, err);
   }
 }
 
 /** Tell the parent what the doctor decided, and what they got. */
-export async function notifyRemedyResolved(
+export async function notifyRefundResolved(
   requestId: string,
   outcomeLabel?: string
 ): Promise<void> {
@@ -138,7 +138,7 @@ export async function notifyRemedyResolved(
       const reason = authError
         ? `Could not resolve parent address: ${authError.message}`
         : "Parent auth user has no email address";
-      console.error(`[remedy] ${reason} (request ${requestId})`);
+      console.error(`[refund] ${reason} (request ${requestId})`);
       await recordEmailFailure({
         emailType: "refund_resolved",
         relatedId: requestId,
@@ -154,10 +154,10 @@ export async function notifyRemedyResolved(
       .eq("id", ctx.request.parent_id)
       .maybeSingle();
 
-    await sendRemedyResolvedEmail({
+    await sendRefundResolvedEmail({
       requestId,
       appointmentId: ctx.appointment.id,
-      remedyLabel: remedyLabel(ctx.request.requested_remedy),
+      optionLabel: refundOptionLabel(ctx.request.requested_remedy),
       recipientEmail: authUser.user.email,
       recipientName: parentProfile?.full_name ?? "there",
       recipientUserId: ctx.request.parent_id,
@@ -171,6 +171,6 @@ export async function notifyRemedyResolved(
       actionUrl: appointmentUrlFor("parent", ctx.appointment.id),
     });
   } catch (err) {
-    console.error(`[remedy] Could not notify parent of resolution ${requestId}:`, err);
+    console.error(`[refund] Could not notify parent of resolution ${requestId}:`, err);
   }
 }

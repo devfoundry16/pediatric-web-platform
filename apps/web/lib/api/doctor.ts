@@ -3,8 +3,8 @@ import { createClient } from "@/lib/supabase/client";
 import { getApiBaseUrl } from "./config";
 import type {
   AttendanceOutcome,
-  RemedyKind,
-  RemedyStatus,
+  RefundOption,
+  RefundRequestStatus,
 } from "@/types/appointment";
 
 function getBaseUrl(): string {
@@ -38,8 +38,8 @@ export interface DoctorAppointment {
   /** At most one, per the UNIQUE constraint on refund_requests.appointment_id. */
   refund_requests?: Array<{
     id: string;
-    requested_remedy: RemedyKind;
-    status: RemedyStatus;
+    requested_remedy: RefundOption;
+    status: RefundRequestStatus;
   }>;
   meeting_url: string | null;
   created_at: string;
@@ -51,15 +51,15 @@ export interface DoctorAppointment {
   } | null;
 }
 
-/** A claim in the doctor's review queue, with the consultation it concerns. */
-export interface DoctorRemedyRequest {
+/** A request in the doctor's review queue, with the consultation it concerns. */
+export interface DoctorRefundRequest {
   id: string;
   appointment_id: string;
   parent_id: string;
   parent_name: string | null;
-  requested_remedy: RemedyKind;
+  requested_remedy: RefundOption;
   reason: string | null;
-  status: RemedyStatus;
+  status: RefundRequestStatus;
   resolution_note: string | null;
   resolved_at: string | null;
   refund_amount_aed: number | null;
@@ -174,17 +174,17 @@ export const doctorApi = {
     );
   },
 
-  // ── Missed-consultation remedies ──────────────────────────────────────────
+  // ── Refund requests ───────────────────────────────────────────────────────
 
-  async getRemedyRequests(status?: RemedyStatus): Promise<DoctorRemedyRequest[]> {
-    const { data } = await axios.get<{ requests: DoctorRemedyRequest[] }>(
+  async getRefundRequests(status?: RefundRequestStatus): Promise<DoctorRefundRequest[]> {
+    const { data } = await axios.get<{ requests: DoctorRefundRequest[] }>(
       `${getBaseUrl()}/doctor/refund-requests`,
       { headers: await authHeaders(), params: status ? { status } : undefined }
     );
     return data.requests;
   },
 
-  async resolveRemedyRequest(
+  async resolveRefundRequest(
     id: string,
     action: "approve" | "decline",
     note?: string

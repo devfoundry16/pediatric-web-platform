@@ -7,7 +7,7 @@ import {
   sendRescheduleEmail,
 } from "../lib/resend";
 import { notifyBookingConfirmed } from "../lib/booking-notifications";
-import { notifyRemedyRequested } from "../lib/remedy-notifications";
+import { notifyRefundRequested } from "../lib/refund-notifications";
 import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
 import { frontendUrl } from "../lib/app-url";
 import {
@@ -68,7 +68,9 @@ export async function listAppointments(req: Request, res: Response): Promise<voi
         status,
         reason,
         resolution_note,
-        resolved_at
+        resolved_at,
+        refund_amount_aed,
+        created_at
       ),
       child_profiles!appointments_child_id_fkey (
         id,
@@ -916,9 +918,9 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
 }
 
 /**
- * A parent claims a remedy for a consultation that was missed.
+ * A parent asks for a refund, or a replacement session, after a missed call.
  *
- * POST /api/appointments/:id/refund-request  { remedy, reason? }
+ * POST /api/appointments/:id/refund-request  { requestedType, reason? }
  *
  * Eligibility is decided here and nowhere else, because the parent is the
  * beneficiary and the doctor is the judge — neither may be trusted to bound the
@@ -927,23 +929,27 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
  *   1. the appointment is the caller's own
  *   2. it was actually paid for, in money or in credit
  *   3. attendance says somebody missed the call
- *   4. no remedy has been claimed for it before
+ *   4. no request for it is currently open
  *
- * (4) is ultimately guaranteed by the UNIQUE constraint on
- * refund_requests.appointment_id; the read below only exists to return a
- * friendlier 409 than a raw constraint violation.
+ * (4) is "open", not "ever". A declined request settled nothing, so the parent
+ * may ask again — typically for the other option, having learnt the first was
+ * refused. Only pending and approved rows block, and the partial unique index
+ * from migration 032 is what actually enforces that; the read below exists to
+ * return a friendlier 409 than a raw constraint violation.
  */
-export async function requestAppointmentRemedy(req: Request, res: Response): Promise<void> {
+export async function requestAppointmentRefund(req: Request, res: Response): Promise<void> {
   if (!supabaseAdmin) {
     res.status(500).json({ error: "Server misconfigured" });
     return;
   }
 
   const { id } = req.params;
-  const { remedy, reason } = req.body ?? {};
+  const { requestedType, reason } = req.body ?? {};
 
-  if (remedy !== "refund" && remedy !== "free_session") {
-    res.status(400).json({ error: "remedy must be 'refund' or 'free_session'" });
+  if (requestedType !== "refund" && requestedType !== "free_session") {
+    res
+      .status(400)
+      .json({ error: "requestedType must be 'refund' or 'free_session'" });
     return;
   }
 
@@ -976,19 +982,28 @@ export async function requestAppointmentRemedy(req: Request, res: Response): Pro
 
   if (!isMissedOutcome(appt.attendance_outcome as string)) {
     res.status(400).json({
-      error: "A remedy can only be claimed for a consultation that was missed",
+      error: "A refund can only be requested for a consultation that was missed",
     });
     return;
   }
 
-  const { data: existing } = await supabaseAdmin
+  // Only a live claim blocks. maybeSingle() would now throw once a declined
+  // row exists alongside a new one, so this filters to the open statuses the
+  // partial unique index actually protects.
+  const { data: open } = await supabaseAdmin
     .from("refund_requests")
-    .select("id")
+    .select("id, status")
     .eq("appointment_id", id)
+    .in("status", ["pending", "approved"])
     .maybeSingle();
 
-  if (existing) {
-    res.status(409).json({ error: "A request has already been made for this consultation" });
+  if (open) {
+    res.status(409).json({
+      error:
+        open.status === "approved"
+          ? "This consultation has already been resolved"
+          : "You already have a request awaiting your doctor's decision",
+    });
     return;
   }
 
@@ -998,7 +1013,7 @@ export async function requestAppointmentRemedy(req: Request, res: Response): Pro
       appointment_id: id,
       parent_id: req.userId,
       doctor_id: appt.doctor_id,
-      requested_remedy: remedy,
+      requested_remedy: requestedType,
       reason: typeof reason === "string" && reason.trim() ? reason.trim() : null,
     })
     .select("id, requested_remedy, status, reason, created_at")
@@ -1007,7 +1022,9 @@ export async function requestAppointmentRemedy(req: Request, res: Response): Pro
   if (error) {
     // 23505: the unique constraint caught a double submit the read above raced.
     if ((error as { code?: string }).code === "23505") {
-      res.status(409).json({ error: "A request has already been made for this consultation" });
+      res.status(409).json({
+        error: "You already have a request awaiting your doctor's decision",
+      });
       return;
     }
     res.status(500).json({ error: error.message });
@@ -1016,7 +1033,7 @@ export async function requestAppointmentRemedy(req: Request, res: Response): Pro
 
   // Awaited, not detached: on Vercel the function is frozen once the response
   // goes out. It never throws.
-  await notifyRemedyRequested(created.id as string);
+  await notifyRefundRequested(created.id as string);
 
   res.status(201).json({ request: created });
 }

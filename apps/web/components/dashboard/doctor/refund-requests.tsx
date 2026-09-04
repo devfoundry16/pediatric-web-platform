@@ -17,14 +17,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { doctorApi, type DoctorRemedyRequest } from "@/lib/api/doctor";
+import { doctorApi, type DoctorRefundRequest } from "@/lib/api/doctor";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
-import { getAttendanceLabel, getRemedyLabel } from "@/lib/remedy";
+import { getAttendanceLabel, getRefundOptionLabel } from "@/lib/refund";
 import { DEFAULT_TIMEZONE, formatStoredAppointment } from "@/lib/timezone";
 
 /**
- * The claims waiting on this doctor after a missed consultation.
+ * The refund requests waiting on this doctor after a missed consultation.
  *
  * Renders nothing at all when the queue is empty, so it costs the appointments
  * page no vertical space on the ordinary day where nobody missed anything.
@@ -33,13 +33,13 @@ export function RefundRequests({ onResolved }: { onResolved?: () => void }) {
   const { dictionary: t, dateLocale } = useI18n();
   const { timezone: viewerTimezone } = useViewerTimezone(DEFAULT_TIMEZONE);
 
-  const [requests, setRequests] = useState<DoctorRemedyRequest[]>([]);
+  const [requests, setRequests] = useState<DoctorRefundRequest[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // The request being answered, and how. Held together so the confirmation
   // dialog can describe the exact consequence of this particular decision.
   const [pending, setPending] = useState<{
-    request: DoctorRemedyRequest;
+    request: DoctorRefundRequest;
     action: "approve" | "decline";
   } | null>(null);
   const [note, setNote] = useState("");
@@ -47,7 +47,7 @@ export function RefundRequests({ onResolved }: { onResolved?: () => void }) {
 
   const load = useCallback(async () => {
     try {
-      setRequests(await doctorApi.getRemedyRequests("pending"));
+      setRequests(await doctorApi.getRefundRequests("pending"));
     } catch {
       // A failed queue load must not take the appointments page down with it.
       setRequests([]);
@@ -64,18 +64,18 @@ export function RefundRequests({ onResolved }: { onResolved?: () => void }) {
     if (!pending) return;
     setIsSaving(true);
     try {
-      await doctorApi.resolveRemedyRequest(pending.request.id, pending.action, note);
+      await doctorApi.resolveRefundRequest(pending.request.id, pending.action, note);
       toast.success(
         pending.action === "approve"
-          ? t.doctorDashboard.remedyApproved
-          : t.doctorDashboard.remedyDeclined
+          ? t.doctorDashboard.refundApproved
+          : t.doctorDashboard.refundDeclined
       );
       setPending(null);
       setNote("");
       await load();
       onResolved?.();
     } catch {
-      toast.error(t.doctorDashboard.remedyFailed);
+      toast.error(t.doctorDashboard.refundFailed);
     } finally {
       setIsSaving(false);
     }
@@ -85,17 +85,17 @@ export function RefundRequests({ onResolved }: { onResolved?: () => void }) {
   if (requests.length === 0) return null;
 
   /**
-   * What approving actually does, which differs by remedy and by how the
-   * consultation was paid for. A refund against a credit booking returns the
+   * What approving actually does, which differs by what was asked for and by
+   * how the consultation was paid for. A refund on a credit booking returns the
    * credit rather than money, and the doctor should know that before clicking.
    */
-  function approveBody(request: DoctorRemedyRequest): string {
+  function approveBody(request: DoctorRefundRequest): string {
     if (request.requested_remedy === "free_session") {
-      return t.doctorDashboard.remedyApproveSessionBody;
+      return t.doctorDashboard.refundApproveSessionBody;
     }
     return request.appointments?.payment_status === "package_credit"
-      ? t.doctorDashboard.remedyApproveCreditBody
-      : t.doctorDashboard.remedyApproveRefundBody;
+      ? t.doctorDashboard.refundApproveCreditBody
+      : t.doctorDashboard.refundApproveMoneyBody;
   }
 
   return (
@@ -103,7 +103,7 @@ export function RefundRequests({ onResolved }: { onResolved?: () => void }) {
       <div className="flex items-center gap-2">
         <LifeBuoy className="h-4 w-4 text-muted-foreground" />
         <h2 className="text-sm font-semibold text-foreground">
-          {t.doctorDashboard.remedyQueue}
+          {t.doctorDashboard.refundQueue}
         </h2>
         <Badge variant="secondary">{requests.length}</Badge>
       </div>
@@ -139,9 +139,9 @@ export function RefundRequests({ onResolved }: { onResolved?: () => void }) {
                   </p>
                 )}
                 <p className="text-xs text-muted-foreground">
-                  {t.doctorDashboard.remedyAsked}{" "}
+                  {t.doctorDashboard.refundAsked}{" "}
                   <span className="font-medium text-foreground">
-                    {getRemedyLabel(t, request.requested_remedy)}
+                    {getRefundOptionLabel(t, request.requested_remedy)}
                   </span>
                   {attendance ? ` · ${attendance}` : ""}
                 </p>
@@ -161,7 +161,7 @@ export function RefundRequests({ onResolved }: { onResolved?: () => void }) {
                     setNote("");
                   }}
                 >
-                  {t.doctorDashboard.remedyDecline}
+                  {t.doctorDashboard.refundDecline}
                 </Button>
                 <Button
                   size="sm"
@@ -170,7 +170,7 @@ export function RefundRequests({ onResolved }: { onResolved?: () => void }) {
                     setNote("");
                   }}
                 >
-                  {t.doctorDashboard.remedyApprove}
+                  {t.doctorDashboard.refundApprove}
                 </Button>
               </div>
             </CardContent>
@@ -183,22 +183,22 @@ export function RefundRequests({ onResolved }: { onResolved?: () => void }) {
           <DialogHeader>
             <DialogTitle>
               {pending?.action === "approve"
-                ? t.doctorDashboard.remedyApproveTitle
-                : t.doctorDashboard.remedyDeclineTitle}
+                ? t.doctorDashboard.refundApproveTitle
+                : t.doctorDashboard.refundDeclineTitle}
             </DialogTitle>
             <DialogDescription>
               {pending
                 ? pending.action === "approve"
                   ? approveBody(pending.request)
-                  : t.doctorDashboard.remedyDeclineBody
+                  : t.doctorDashboard.refundDeclineBody
                 : null}
             </DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="remedy-note">{t.doctorDashboard.remedyNote}</Label>
+            <Label htmlFor="refund-note">{t.doctorDashboard.refundNote}</Label>
             <Textarea
-              id="remedy-note"
+              id="refund-note"
               rows={3}
               value={note}
               onChange={(e) => setNote(e.target.value)}
@@ -212,8 +212,8 @@ export function RefundRequests({ onResolved }: { onResolved?: () => void }) {
             <Button onClick={confirm} disabled={isSaving} className="gap-2">
               {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
               {pending?.action === "approve"
-                ? t.doctorDashboard.remedyApprove
-                : t.doctorDashboard.remedyDecline}
+                ? t.doctorDashboard.refundApprove
+                : t.doctorDashboard.refundDecline}
             </Button>
           </DialogFooter>
         </DialogContent>
