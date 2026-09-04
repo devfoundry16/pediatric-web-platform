@@ -29,7 +29,10 @@ import {
   createDoctorAdmin,
   linkDoctorAccountAdmin,
 } from "../controllers/admin";
-import { updateFeatureFlag } from "../controllers/feature-flags";
+import {
+  listAdminSettings,
+  updateFeatureFlag,
+} from "../controllers/feature-flags";
 import { listCalendarAccounts, listCalendarLogs } from "../controllers/google-calendar";
 
 const router = Router();
@@ -90,8 +93,11 @@ router.get("/email-logs", listEmailLogs);
 router.get("/google-calendar/accounts", listCalendarAccounts);
 router.get("/calendar-logs", listCalendarLogs);
 
-// Feature flags ("coming soon" switches). Reading them is public — see
-// GET /api/feature-flags — so only the write lives here.
+// Switches an admin controls. The "coming soon" section flags are readable
+// publicly (GET /api/feature-flags) because the app needs them before anyone
+// signs in; the operational settings are not, so they are read here. Both
+// kinds are written through the same admin-only PATCH.
+router.get("/settings", listAdminSettings);
 router.patch("/feature-flags/:key", updateFeatureFlag);
 
 export default router;
