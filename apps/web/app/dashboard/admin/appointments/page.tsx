@@ -53,7 +53,11 @@ const STATUS_COLORS: Record<string, string> = {
   rescheduled: "bg-purple-100 text-purple-700",
 };
 
-const STATUSES = ["", "pending", "confirmed", "completed", "cancelled", "rescheduled"] as const;
+// "pending" is absent on purpose: it only ever occurs together with
+// payment_status "pending", i.e. the hold booking writes before Stripe
+// Checkout opens. The API does not return those, so the filter would only
+// ever produce an empty table.
+const STATUSES = ["", "confirmed", "completed", "cancelled", "rescheduled"] as const;
 
 export default function AdminAppointmentsPage() {
   // useSearchParams (via useHighlightedAppointment) needs a boundary, or the

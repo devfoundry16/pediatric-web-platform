@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
+import { BOOKED_PAYMENT_STATUSES } from "../lib/consultation";
 import { removeMedicalFile, signMedicalFiles } from "../lib/medical-storage";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -152,6 +153,11 @@ export async function createMedicalFile(req: Request, res: Response): Promise<vo
       .eq("doctor_id", doctorId)
       .eq("child_id", childId)
       .not("status", "in", '("cancelled","rescheduled")')
+      // An unpaid hold is an abandoned checkout, not a consultation, so it
+      // does not make the child this doctor's patient — getDoctorPatients
+      // excludes it too, and the two must agree or the doctor can write
+      // records for a child their own patient list does not show.
+      .in("payment_status", [...BOOKED_PAYMENT_STATUSES])
       .limit(1)
       .maybeSingle();
     if (!appt) {
