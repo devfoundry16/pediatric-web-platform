@@ -34,8 +34,12 @@ const TABS: readonly TabValue[] = ["all", "consultation", "package", "live_sessi
 
 /**
  * Each tab advertises only the statuses its own streams can hold, so switching
- * tabs cannot strand the table behind a filter that has nothing to return: a
- * package is never `pending`, and neither it nor a ticket has `package_credit`.
+ * tabs cannot strand the table behind a filter that has nothing to return.
+ *
+ * `pending` is offered by none of them. An unpaid consultation or ticket is an
+ * open Stripe Checkout, not a transaction, and the API excludes those from
+ * every stream (see COMPLETED_TRANSACTION_STATUSES in controllers/admin.ts), so
+ * the filter would only ever return an empty table.
  *
  * `package_credit` is a known exception, kept only because it predates the tabs.
  * A credit-booked consultation is written with `price_aed = 0` (see
@@ -45,10 +49,10 @@ const TABS: readonly TabValue[] = ["all", "consultation", "package", "live_sessi
  * purpose, is a product call rather than part of adding live sessions.
  */
 const STATUSES_BY_TAB: Record<TabValue, readonly string[]> = {
-  all: ["paid", "package_credit", "refunded", "pending"],
-  consultation: ["paid", "package_credit", "refunded", "pending"],
+  all: ["paid", "package_credit", "refunded"],
+  consultation: ["paid", "package_credit", "refunded"],
   package: ["paid", "refunded"],
-  live_session: ["paid", "pending", "refunded"],
+  live_session: ["paid", "refunded"],
 };
 
 const STATUS_COLORS: Record<string, string> = {
