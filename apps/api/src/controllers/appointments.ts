@@ -828,7 +828,7 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
 
   const { data: existing } = await supabaseAdmin
     .from("appointments")
-    .select("id, status, doctor_id, consultation_type")
+    .select("id, status, payment_status, doctor_id, consultation_type")
     .eq("id", id)
     .eq("parent_id", req.userId)
     .single();
@@ -840,6 +840,15 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
 
   if (["cancelled", "completed", "rescheduled"].includes(existing.status)) {
     res.status(400).json({ error: `Cannot reschedule an appointment with status: ${existing.status}` });
+    return;
+  }
+
+  // The update below force-sets status to "confirmed" without touching
+  // payment_status, so rescheduling an unpaid hold would mint a free confirmed
+  // booking — one that isBlockingAppointment no longer considers stale (it
+  // requires status "pending" too), so it would hold its slot forever.
+  if (existing.payment_status === "pending") {
+    res.status(400).json({ error: "This booking is still awaiting payment" });
     return;
   }
 
