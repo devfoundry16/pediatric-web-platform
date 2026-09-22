@@ -21,7 +21,11 @@ import {
   signMedicalFiles,
   validateAttachments,
 } from "../lib/medical-storage";
-import { CONSULTATION_CONFIG, isBlockingAppointment } from "../lib/consultation";
+import {
+  BOOKED_PAYMENT_STATUSES,
+  CONSULTATION_CONFIG,
+  isBlockingAppointment,
+} from "../lib/consultation";
 import { isMissedOutcome, recordJoinEvent } from "../lib/attendance";
 import { generateSlots } from "../lib/slots";
 import { hhmmToMinutes } from "../lib/timezone";
@@ -84,6 +88,10 @@ export async function listAppointments(req: Request, res: Response): Promise<voi
       )
     `)
     .eq("parent_id", req.userId)
+    // An unpaid row is the pre-checkout hold, not a booking. Abandoned ones are
+    // never cleaned up, so without this the parent's list accumulates grey
+    // "Pending" cards for checkouts they walked away from months ago.
+    .in("payment_status", [...BOOKED_PAYMENT_STATUSES])
     .order("scheduled_date", { ascending: false })
     .order("scheduled_time", { ascending: false });
 
