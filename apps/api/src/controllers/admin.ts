@@ -461,6 +461,10 @@ export async function listAllAppointments(req: Request, res: Response): Promise<
       child_profiles!appointments_child_id_fkey(id, first_name, last_name),
       doctors!appointments_doctor_id_fkey(id, full_name, specialty)
     `, { count: "exact" })
+    // An unpaid row is the hold booking writes before Stripe Checkout opens,
+    // not a scheduled appointment. Nothing clears an abandoned one, so without
+    // this the admin list fills with bookings nobody ever paid for.
+    .in("payment_status", [...BOOKED_PAYMENT_STATUSES])
     .order("scheduled_date", { ascending: false })
     .order("scheduled_time", { ascending: false })
     .range(offset, offset + limitNum - 1);
@@ -1356,6 +1360,7 @@ export async function getPatient(req: Request, res: Response): Promise<void> {
     supabaseAdmin.from("appointments")
       .select("id, scheduled_date, scheduled_time, status, consultation_type")
       .eq("child_id", id)
+      .in("payment_status", [...BOOKED_PAYMENT_STATUSES])
       .order("scheduled_date", { ascending: false })
       .limit(10),
   ]);

@@ -6,6 +6,7 @@ import { getStripe } from "../lib/stripe";
 import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
 import { notifyRefundResolved } from "../lib/refund-notifications";
 import { classifyAppointment } from "../lib/attendance";
+import { BOOKED_PAYMENT_STATUSES } from "../lib/consultation";
 import {
   DEFAULT_TIMEZONE,
   hhmmToMinutes,
@@ -100,17 +101,21 @@ export async function getDoctorStats(
       .select("id", { count: "exact", head: true })
       .eq("doctor_id", doctor.id)
       .eq("scheduled_date", today)
-      .not("status", "in", '("cancelled","rescheduled")'),
+      .not("status", "in", '("cancelled","rescheduled")')
+      .in("payment_status", [...BOOKED_PAYMENT_STATUSES]),
     supabaseAdmin
       .from("appointments")
       .select("child_id")
       .eq("doctor_id", doctor.id)
-      .not("status", "in", '("cancelled","rescheduled")'),
+      .not("status", "in", '("cancelled","rescheduled")')
+      // An abandoned checkout never made anyone this doctor's patient.
+      .in("payment_status", [...BOOKED_PAYMENT_STATUSES]),
     supabaseAdmin
       .from("appointments")
       .select("price_aed")
       .eq("doctor_id", doctor.id)
       .eq("status", "completed")
+      .in("payment_status", [...BOOKED_PAYMENT_STATUSES])
       .gte("scheduled_date", monthStart)
       .lt("scheduled_date", monthEnd),
   ]);
@@ -178,6 +183,10 @@ export async function getDoctorAppointments(
     `
     )
     .eq("doctor_id", doctor.id)
+    // An unpaid row is the hold booking writes before Stripe Checkout opens,
+    // not a scheduled appointment. Nothing clears an abandoned one, so without
+    // this the doctor's day fills with consultations nobody paid for.
+    .in("payment_status", [...BOOKED_PAYMENT_STATUSES])
     .order("scheduled_date", { ascending: false })
     .order("scheduled_time", { ascending: false });
 
@@ -229,7 +238,7 @@ export async function startSession(
 
   const { data: existing } = await supabaseAdmin
     .from("appointments")
-    .select("id, status, scheduled_date, scheduled_time, timezone, duration_minutes, meeting_url")
+    .select("id, status, payment_status, scheduled_date, scheduled_time, timezone, duration_minutes, meeting_url")
     .eq("id", id)
     .eq("doctor_id", doctor.id)
     .single();
@@ -243,6 +252,14 @@ export async function startSession(
     res
       .status(400)
       .json({ error: `Cannot start a session with status: ${existing.status}` });
+    return;
+  }
+
+  // Starting sets status to "confirmed", so on an unpaid hold it would hand out
+  // a free consultation. status "pending" only ever occurs together with
+  // payment_status "pending", so this is the only case the check above lets by.
+  if (existing.payment_status === "pending") {
+    res.status(400).json({ error: "This booking is still awaiting payment" });
     return;
   }
 
@@ -365,6 +382,7 @@ export async function getDoctorPatients(
     )
     .eq("doctor_id", doctor.id)
     .not("status", "in", '("cancelled","rescheduled")')
+    .in("payment_status", [...BOOKED_PAYMENT_STATUSES])
     .order("scheduled_date", { ascending: false });
 
   if (error) {
