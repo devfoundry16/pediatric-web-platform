@@ -21,7 +21,11 @@ import {
   signMedicalFiles,
   validateAttachments,
 } from "../lib/medical-storage";
-import { CONSULTATION_CONFIG, isBlockingAppointment } from "../lib/consultation";
+import {
+  BOOKED_PAYMENT_STATUSES,
+  CONSULTATION_CONFIG,
+  isBlockingAppointment,
+} from "../lib/consultation";
 import { isMissedOutcome, recordJoinEvent } from "../lib/attendance";
 import { generateSlots } from "../lib/slots";
 import { hhmmToMinutes } from "../lib/timezone";
@@ -84,6 +88,10 @@ export async function listAppointments(req: Request, res: Response): Promise<voi
       )
     `)
     .eq("parent_id", req.userId)
+    // An unpaid row is the pre-checkout hold, not a booking. Abandoned ones are
+    // never cleaned up, so without this the parent's list accumulates grey
+    // "Pending" cards for checkouts they walked away from months ago.
+    .in("payment_status", [...BOOKED_PAYMENT_STATUSES])
     .order("scheduled_date", { ascending: false })
     .order("scheduled_time", { ascending: false });
 
@@ -820,7 +828,7 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
 
   const { data: existing } = await supabaseAdmin
     .from("appointments")
-    .select("id, status, doctor_id, consultation_type")
+    .select("id, status, payment_status, doctor_id, consultation_type")
     .eq("id", id)
     .eq("parent_id", req.userId)
     .single();
@@ -832,6 +840,15 @@ export async function rescheduleAppointment(req: Request, res: Response): Promis
 
   if (["cancelled", "completed", "rescheduled"].includes(existing.status)) {
     res.status(400).json({ error: `Cannot reschedule an appointment with status: ${existing.status}` });
+    return;
+  }
+
+  // The update below force-sets status to "confirmed" without touching
+  // payment_status, so rescheduling an unpaid hold would mint a free confirmed
+  // booking — one that isBlockingAppointment no longer considers stale (it
+  // requires status "pending" too), so it would hold its slot forever.
+  if (existing.payment_status === "pending") {
+    res.status(400).json({ error: "This booking is still awaiting payment" });
     return;
   }
 
