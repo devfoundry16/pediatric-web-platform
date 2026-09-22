@@ -27,6 +27,10 @@ const CATALOGUE = { id: "pkg-1", slug: "monthly_followup", name: "Monthly Follow
 
 /** Appointments on even days, packages on odd days, so a correct merge interleaves them. */
 const APPOINTMENTS = [
+  // The reservation hold written before Stripe Checkout opens: it has a real
+  // price on it, so only the payment-status filter keeps it out. Nothing ever
+  // cleans an abandoned one up, which is why it must not count as a sale.
+  { id: "appt-hold", price_aed: 350, payment_status: "pending", payment_reference: null, created_at: "2026-01-09T00:00:00Z", scheduled_date: "2026-01-09", parent_id: BUYER_A, doctors: { full_name: "Dr. Sahar" }, child_profiles: { first_name: "Lina", last_name: "K" } },
   // Booked against a package credit, so no money moved and `price_aed` is 0
   // (see controllers/appointments.ts). The `.gt("price_aed", 0)` filter must
   // keep it out of the list AND out of `total`; nothing else here would notice
@@ -62,9 +66,12 @@ const REGISTRATIONS = [
   { id: "reg-2", user_id: BUYER_B, payment_status: "refunded", registered_at: "2026-01-02T12:00:00Z", stripe_session_id: "cs_reg_2", group_sessions: SESSION },
 ];
 
-/** Every transaction, newest first — the free seat is never one of them. */
+/**
+ * Every transaction, newest first. Neither the free seat nor an unpaid row —
+ * `appt-hold` and `reg-5` are open checkouts, not sales.
+ */
 const MERGED = [
-  "reg-7", "appt-6", "reg-5", "pkg-5", "appt-4", "pkg-3", "reg-2", "appt-2", "pkg-1",
+  "reg-7", "appt-6", "pkg-5", "appt-4", "pkg-3", "reg-2", "appt-2", "pkg-1",
 ];
 
 const PROFILES = [
@@ -80,6 +87,8 @@ function streamHandler(rows: any[], statusField: string): TableHandler {
     if (eq !== undefined) out = out.filter((r) => r[statusField] === eq);
     const neq = argOf(q, "neq", statusField);
     if (neq !== undefined) out = out.filter((r) => r[statusField] !== neq);
+    const inList = argOf(q, "in", statusField) as string[] | undefined;
+    if (inList) out = out.filter((r) => inList.includes(r[statusField]));
     for (const call of q.calls.filter((c) => c.method === "gt")) {
       const [field, value] = call.args as [string, number];
       out = out.filter((r) => Number(r[field]) > value);
@@ -138,9 +147,13 @@ describe("listPayments — merging consultations, package sales and session tick
     const res = await call(listPayments, {});
 
     expect(res.statusCode).toBe(200);
-    expect((res.body as any).payments.map((p: any) => p.id)).toEqual(MERGED);
+    const ids = (res.body as any).payments.map((p: any) => p.id);
+    expect(ids).toEqual(MERGED);
+    // An open checkout is not a transaction, on either side that can hold one.
+    expect(ids).not.toContain("appt-hold");
+    expect(ids).not.toContain("reg-5");
     // Every stream's count, not just the appointments the old query could see.
-    expect((res.body as any).total).toBe(9);
+    expect((res.body as any).total).toBe(8);
   });
 
   it("prices a package from the catalogue, multiplied by the quantity bought", async () => {
@@ -169,7 +182,7 @@ describe("listPayments — merging consultations, package sales and session tick
 
   it("pages across the merge without dropping or repeating a row", async () => {
     mount();
-    // 2 per page over 9 rows keeps every stream TRUNCATED by its prefix on the
+    // 2 per page over 8 rows keeps every stream TRUNCATED by its prefix on the
     // early pages (each holds 3 matching rows), which is the whole point: the
     // merge has to come out right from partial reads. A page size that happens
     // to reach past every stream's last row would prove nothing.
@@ -180,15 +193,15 @@ describe("listPayments — merging consultations, package sales and session tick
 
     const seen = pages.flat().map((p: any) => p.id);
     expect(seen).toEqual(MERGED);
-    expect(new Set(seen).size).toBe(9);
+    expect(new Set(seen).size).toBe(8);
   });
 
   it("builds a page that falls inside one stream's rows", async () => {
     mount();
-    // MERGED[6..7] — a boundary that splits the registrations stream rather
-    // than landing on a stream edge.
-    const rows = ((await call(listPayments, { page: "4", limit: "2" })).body as any).payments;
-    expect(rows.map((p: any) => p.id)).toEqual(["reg-2", "appt-2"]);
+    // MERGED[4..5] — a boundary that splits the registrations stream (it takes
+    // reg-2 without reg-7) rather than landing on a stream edge.
+    const rows = ((await call(listPayments, { page: "3", limit: "2" })).body as any).payments;
+    expect(rows.map((p: any) => p.id)).toEqual(["pkg-3", "reg-2"]);
   });
 
   it("reads only the prefix each page can need", async () => {
@@ -226,7 +239,7 @@ describe("listPayments — merging consultations, package sales and session tick
 
     // No cash moved, so it is not a transaction — and it must not inflate the count.
     expect(all.payments.some((p: any) => p.id === "appt-credit")).toBe(false);
-    expect(all.total).toBe(9);
+    expect(all.total).toBe(8);
     // Consequently this status can never return a row, on any tab.
     expect(credit.payments).toEqual([]);
     expect(credit.total).toBe(0);
@@ -248,16 +261,32 @@ describe("listPayments — merging consultations, package sales and session tick
     ]);
   });
 
-  it("filtering to pending reaches consultations and tickets but not packages", async () => {
+  it("pending is an open checkout, not a transaction — no stream answers it", async () => {
     const mock = mount();
     const res = await call(listPayments, { status: "pending" });
 
-    // A package is never pending, so that stream is skipped outright; the other
-    // two are asked. No appointment fixture is pending, hence the query check
-    // rather than an assertion on the returned rows.
+    // A consultation and a ticket can each sit unpaid in Stripe Checkout, but
+    // such a row is a reservation hold rather than a sale and is listed
+    // nowhere, so every stream is skipped outright — as for 'free' below.
+    expect(mock.queries.some((q) => q.table === "appointments")).toBe(false);
     expect(mock.queries.some((q) => q.table === "user_packages")).toBe(false);
-    expect(mock.queries.some((q) => q.table === "appointments")).toBe(true);
-    expect((res.body as any).payments.map((p: any) => p.id)).toEqual(["reg-5"]);
+    expect(mock.queries.some((q) => q.table === "session_registrations")).toBe(false);
+    expect((res.body as any).payments).toEqual([]);
+    expect((res.body as any).total).toBe(0);
+  });
+
+  it("never counts an unpaid hold, with or without a status filter", async () => {
+    mount();
+    const unfiltered = (await call(listPayments, {})).body as any;
+    const paid = (await call(listPayments, { status: "paid" })).body as any;
+    const consultations = (await call(listPayments, { type: "consultation" })).body as any;
+
+    // The `if (status) …eq(…)` narrowing looks like it covers this, but it does
+    // not run on the default view — the unconditional .in() is what does.
+    expect(unfiltered.payments.some((p: any) => p.id === "appt-hold")).toBe(false);
+    expect(paid.payments.some((p: any) => p.id === "appt-hold")).toBe(false);
+    expect(consultations.payments.some((p: any) => p.id === "appt-hold")).toBe(false);
+    expect(consultations.total).toBe(3);
   });
 
   it("filtering to refunded interleaves the two streams that can hold one", async () => {
@@ -337,8 +366,8 @@ describe("listPayments — merging consultations, package sales and session tick
 
     // The old gating tested by exclusion (`type !== "package"`), which would
     // have let both other streams through for an unrecognised third type.
-    expect((res.body as any).payments.map((p: any) => p.id)).toEqual(["reg-7", "reg-5", "reg-2"]);
-    expect((res.body as any).total).toBe(3);
+    expect((res.body as any).payments.map((p: any) => p.id)).toEqual(["reg-7", "reg-2"]);
+    expect((res.body as any).total).toBe(2);
     expect(mock.queries.some((q) => q.table === "appointments")).toBe(false);
     expect(mock.queries.some((q) => q.table === "user_packages")).toBe(false);
   });

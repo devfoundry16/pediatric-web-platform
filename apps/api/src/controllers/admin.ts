@@ -9,6 +9,20 @@ import {
 } from "../lib/timezone";
 import { syncAppointmentCalendarEvent } from "../lib/google-calendar";
 import { classifyAppointment } from "../lib/attendance";
+import { BOOKED_PAYMENT_STATUSES } from "../lib/consultation";
+
+/**
+ * Payment states that represent a completed transaction — money that moved, in
+ * or back out. Shared vocabulary for appointments.payment_status and
+ * session_registrations.payment_status: both also carry a `pending` that is an
+ * open Stripe Checkout, not a sale, and nothing clears those rows when the buyer
+ * walks away.
+ *
+ * Listed positively so a new state must opt in; the exclusion filter this
+ * replaced (`.not(... in ("refunded"))`) is exactly how `pending` came to be
+ * counted as revenue.
+ */
+const COMPLETED_TRANSACTION_STATUSES = ["paid", "refunded"] as const;
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
 
@@ -27,11 +41,19 @@ export async function getAdminStats(req: Request, res: Response): Promise<void> 
     { count: newUsers },
     { data: recentAppointments },
   ] = await Promise.all([
-    supabaseAdmin.from("appointments").select("*", { count: "exact", head: true }),
-    supabaseAdmin.from("appointments").select("*", { count: "exact", head: true }).eq("scheduled_date", today),
+    // Unpaid rows are abandoned checkout holds, not bookings, and nothing ever
+    // clears them — counting them inflates every tile on this dashboard.
+    supabaseAdmin.from("appointments").select("*", { count: "exact", head: true })
+      .in("payment_status", [...BOOKED_PAYMENT_STATUSES]),
+    supabaseAdmin.from("appointments").select("*", { count: "exact", head: true })
+      .eq("scheduled_date", today)
+      .in("payment_status", [...BOOKED_PAYMENT_STATUSES]),
     supabaseAdmin.from("appointments")
       .select("id, price_aed, payment_status, payment_reference, scheduled_date, scheduled_time, created_at")
-      .not("payment_status", "in", '("refunded")')
+      // These five rows are both summed into the Revenue tile and listed as
+      // "Recent payments", so this is `paid` alone rather than the completed-
+      // transaction set: admitting `refunded` would add refunds TO revenue.
+      .eq("payment_status", "paid")
       .gt("price_aed", 0)
       .order("created_at", { ascending: false })
       .limit(5),
@@ -39,6 +61,9 @@ export async function getAdminStats(req: Request, res: Response): Promise<void> 
     supabaseAdmin.from("appointments")
       .select("id, status, scheduled_date, scheduled_time, consultation_type, price_aed, parent_id")
       .eq("scheduled_date", today)
+      // Matches todayAppointments above: the count and the list it sits over
+      // have to agree on what a booking is.
+      .in("payment_status", [...BOOKED_PAYMENT_STATUSES])
       .order("scheduled_time", { ascending: true })
       .limit(10),
   ]);
@@ -1114,17 +1139,16 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
   const wantPackages = !type || type === "package";
   const wantSessions = !type || type === "live_session";
 
-  // A package sale is only ever money in or money back — it has no equivalent of
-  // an appointment's `pending`/`package_credit`, so those filters exclude it.
-  const packageStatusMatches = !status || status === "paid" || status === "refunded";
-
-  // A ticket can sit unpaid in checkout, so unlike a package it does have a
-  // `pending`; only `package_credit` has no meaning for one.
-  const sessionStatusMatches =
-    !status || status === "paid" || status === "pending" || status === "refunded";
+  // Every stream now speaks the same two words. A consultation and a ticket can
+  // each sit unpaid in checkout, but such a row is an open checkout rather than
+  // a transaction and is never listed, so `pending` matches nothing anywhere —
+  // as does `package_credit`, which moves no cash (and whose consultation rows
+  // the price filter below drops in any case).
+  const statusMatches =
+    !status || (COMPLETED_TRANSACTION_STATUSES as readonly string[]).includes(status);
 
   const appointmentsQuery = async () => {
-    if (!wantConsultations) return { rows: [] as PaymentTransaction[], count: 0 };
+    if (!wantConsultations || !statusMatches) return { rows: [] as PaymentTransaction[], count: 0 };
     let query = db
       .from("appointments")
       .select(`
@@ -1134,6 +1158,9 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
         child_profiles!appointments_child_id_fkey(first_name, last_name)
       `, { count: "exact" })
       .gt("price_aed", 0)
+      // The price filter drops credit-booked consultations; this drops the
+      // unpaid hold, which has a price on it and was being counted as revenue.
+      .in("payment_status", [...COMPLETED_TRANSACTION_STATUSES])
       .order("created_at", { ascending: false })
       .limit(prefix);
 
@@ -1165,7 +1192,7 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
   };
 
   const packagesQuery = async () => {
-    if (!wantPackages || !packageStatusMatches) return { rows: [] as PaymentTransaction[], count: 0 };
+    if (!wantPackages || !statusMatches) return { rows: [] as PaymentTransaction[], count: 0 };
     let query = db
       .from("user_packages")
       .select(USER_PACKAGE_SELECT, { count: "exact" })
@@ -1204,16 +1231,16 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
   };
 
   const sessionRegistrationsQuery = async () => {
-    if (!wantSessions || !sessionStatusMatches) return { rows: [] as PaymentTransaction[], count: 0 };
+    if (!wantSessions || !statusMatches) return { rows: [] as PaymentTransaction[], count: 0 };
     let query = db
       .from("session_registrations")
       .select(`
         id, user_id, payment_status, registered_at, stripe_session_id,
         group_sessions (id, title, scheduled_at, price_aed, doctors (full_name))
       `, { count: "exact" })
-      // A free seat is not a transaction — the same reason the consultation
-      // stream above only reads rows with a price on them.
-      .neq("payment_status", "free")
+      // Listed positively, like the consultation stream above: a free seat is
+      // not a transaction, and neither is a ticket still sitting in checkout.
+      .in("payment_status", [...COMPLETED_TRANSACTION_STATUSES])
       .order("registered_at", { ascending: false })
       .limit(prefix);
 

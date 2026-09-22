@@ -36,3 +36,18 @@ export function isBlockingAppointment(
     new Date(appt.created_at).getTime() < now - PENDING_HOLD_MINUTES * 60 * 1000;
   return !isStalePending;
 }
+
+/**
+ * Appointment payment states that mean the row is a booking the parent made.
+ *
+ * `pending` is the reservation hold written before Stripe Checkout opens (see
+ * controllers/appointments.ts) — a lock on a slot, not a booking. It is real
+ * only to the checkout handshake (checkout / verify / abandon, which address it
+ * by id) and to isBlockingAppointment above, which lets it hold its slot for
+ * PENDING_HOLD_MINUTES and no longer. Nothing ever clears an abandoned one, so
+ * every other reader has to exclude it explicitly.
+ *
+ * Listed positively: a payment state added later must opt in here rather than
+ * silently defaulting to "shown to the parent".
+ */
+export const BOOKED_PAYMENT_STATUSES = ["paid", "package_credit", "refunded"] as const;
