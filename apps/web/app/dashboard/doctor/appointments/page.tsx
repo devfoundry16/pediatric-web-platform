@@ -183,17 +183,6 @@ function DoctorAppointmentsContent() {
     load();
   }, [load]);
 
-  async function handleStart(id: string) {
-    setActionLoading(id);
-    try {
-      await doctorApi.startSession(id);
-      await load();
-      router.push(`/appointments/${id}/room`);
-    } finally {
-      setActionLoading(null);
-    }
-  }
-
   async function handleComplete(id: string) {
     setActionLoading(id);
     try {
@@ -293,10 +282,12 @@ function DoctorAppointmentsContent() {
               const childName = apt.child_profiles
                 ? `${apt.child_profiles.first_name} ${apt.child_profiles.last_name}`
                 : t.appointments.dash;
-              // Start confirms a pending booking; a confirmed one is simply
-              // joined. Neither depends on meeting_url any more, which is
-              // filled in asynchronously once the booking is confirmed.
-              const showStart = apt.status === "pending";
+              // A paid booking arrives already "confirmed" — status "pending"
+              // only ever occurs together with payment_status "pending", the
+              // hold written before Stripe Checkout opens, and those are no
+              // longer returned here. So there is nothing left to Start, and
+              // Join no longer depends on meeting_url, which is filled in
+              // asynchronously once the booking is confirmed.
               const showJoin = apt.status === "confirmed";
               const showComplete = apt.status === "confirmed";
 
@@ -357,17 +348,6 @@ function DoctorAppointmentsContent() {
                         {badge.label}
                       </span>
 
-                      {showStart && (
-                        <Button
-                          size="sm"
-                          className="gap-1.5"
-                          disabled={actionLoading === apt.id}
-                          onClick={() => handleStart(apt.id)}
-                        >
-                          <Video className="h-3.5 w-3.5" />
-                          {t.doctorDashboard.startSession}
-                        </Button>
-                      )}
                       {showJoin && (
                         <Button
                           size="sm"
