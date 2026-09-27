@@ -12,7 +12,7 @@ import { useI18n } from "@/lib/i18n/i18n-context";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, isRtl } = useI18n();
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -31,7 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 <span className="sr-only">{t.admin.nav.toggleSidebar}</span>
               </Button>
             </SheetTrigger>
-            <SheetContent aria-describedby={undefined} side="left" className="w-64 p-0">
+            <SheetContent aria-describedby={undefined} side={isRtl ? "right" : "left"} className="w-64 p-0">
               <VisuallyHidden asChild>
                 <SheetHeader>
                   <SheetTitle>{t.admin.nav.navigationLabel}</SheetTitle>
