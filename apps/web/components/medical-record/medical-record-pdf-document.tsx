@@ -1,58 +1,86 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import type { MedicalRecord, Vitals } from "@/types/medical-record";
 import { formatDateDisplayDubai } from "@/lib/timezone";
+import { PDF_FONT_FAMILY, registerPdfFonts } from "@/lib/pdf-fonts";
 
-const styles = StyleSheet.create({
-  page: {
-    padding: 40,
-    fontFamily: "Helvetica",
-    fontSize: 10,
-    color: "#111827",
-  },
-  docTitle: {
-    fontSize: 16,
-    fontWeight: "bold",
-    marginBottom: 16,
-    color: "#0f766e",
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#e5e7eb",
-  },
-  headerCol: { maxWidth: "48%" },
-  label: {
-    fontSize: 8,
-    color: "#6b7280",
-    marginBottom: 3,
-    textTransform: "uppercase",
-  },
-  value: { fontSize: 10, marginBottom: 4 },
-  metaRow: { flexDirection: "row", gap: 16, marginBottom: 12, flexWrap: "wrap" },
-  sectionTitle: {
-    fontSize: 9,
-    fontWeight: "bold",
-    color: "#6b7280",
-    marginTop: 10,
-    marginBottom: 4,
-    textTransform: "uppercase",
-  },
-  body: { fontSize: 10, lineHeight: 1.45 },
-  vitalRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 6 },
-  vitalBox: {
-    borderWidth: 1,
-    borderColor: "#e5e7eb",
-    borderRadius: 4,
-    padding: 8,
-    width: "30%",
-    minWidth: 120,
-  },
-  vitalLabel: { fontSize: 8, color: "#6b7280", marginBottom: 2 },
-  vitalValue: { fontSize: 10, fontWeight: "bold" },
-});
+registerPdfFonts();
+
+type PdfDir = "ltr" | "rtl";
+
+// react-pdf has no document-level direction: `direction` is not inherited, so
+// every Text carries it (it sets the bidi base level), and rows are mirrored by
+// hand with row-reverse. textAlign must be explicit: react-pdf only compensates
+// alignment in shrink-to-fit boxes for an explicit textAlign, so the implicit
+// right alignment of RTL text would be drawn outside its box.
+function createStyles(dir: PdfDir) {
+  const rtl = dir === "rtl";
+  const text = { direction: dir, textAlign: rtl ? "right" : "left" } as const;
+  // Uppercase is Latin-only styling; skip it for Arabic.
+  const caps = rtl ? {} : { textTransform: "uppercase" as const };
+  const row = rtl ? ("row-reverse" as const) : ("row" as const);
+
+  return StyleSheet.create({
+    page: {
+      padding: 40,
+      fontFamily: PDF_FONT_FAMILY,
+      fontSize: 10,
+      color: "#111827",
+    },
+    docTitle: {
+      ...text,
+      fontSize: 16,
+      fontWeight: "bold",
+      marginBottom: 16,
+      color: "#0f766e",
+    },
+    headerRow: {
+      flexDirection: row,
+      justifyContent: "space-between",
+      marginBottom: 16,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: "#e5e7eb",
+    },
+    headerCol: { maxWidth: "48%" },
+    // The trailing header column is aligned to the page's far edge.
+    endAligned: { textAlign: rtl ? "left" : "right" },
+    label: {
+      ...text,
+      ...caps,
+      fontSize: 8,
+      color: "#6b7280",
+      marginBottom: 3,
+    },
+    value: { ...text, fontSize: 10, marginBottom: 4 },
+    metaRow: { flexDirection: row, gap: 16, marginBottom: 12, flexWrap: "wrap" },
+    sectionTitle: {
+      ...text,
+      ...caps,
+      fontSize: 9,
+      fontWeight: "bold",
+      color: "#6b7280",
+      marginTop: 10,
+      marginBottom: 4,
+    },
+    body: { ...text, fontSize: 10, lineHeight: 1.45 },
+    vitalRow: { flexDirection: row, flexWrap: "wrap", gap: 8, marginTop: 6 },
+    vitalBox: {
+      borderWidth: 1,
+      borderColor: "#e5e7eb",
+      borderRadius: 4,
+      padding: 8,
+      width: "30%",
+      minWidth: 120,
+    },
+    vitalLabel: { ...text, fontSize: 8, color: "#6b7280", marginBottom: 2 },
+    vitalValue: { ...text, fontSize: 10, fontWeight: "bold" },
+  });
+}
+
+const stylesByDir: Record<PdfDir, ReturnType<typeof createStyles>> = {
+  ltr: createStyles("ltr"),
+  rtl: createStyles("rtl"),
+};
 
 export interface MedicalRecordPdfLabels {
   documentHeader: string;
@@ -72,15 +100,24 @@ export interface MedicalRecordPdfLabels {
   oxygenSaturation: string;
 }
 
+export interface MedicalRecordPdfDocumentProps {
+  record: MedicalRecord;
+  typeLabel: string;
+  labels: MedicalRecordPdfLabels;
+  /** Locale for dates: `dateLocale` from useI18n() ("ar-AE" / "en-AE"). */
+  dateLocale: string;
+  /** Text direction: `dir` from useI18n(). */
+  dir: PdfDir;
+}
+
 export function MedicalRecordPdfDocument({
   record,
   typeLabel,
   labels,
-}: {
-  record: MedicalRecord;
-  typeLabel: string;
-  labels: MedicalRecordPdfLabels;
-}) {
+  dateLocale,
+  dir,
+}: MedicalRecordPdfDocumentProps) {
+  const styles = stylesByDir[dir];
   const childName = record.child_profiles
     ? `${record.child_profiles.first_name} ${record.child_profiles.last_name}`
     : "—";
@@ -109,8 +146,8 @@ export function MedicalRecordPdfDocument({
             <Text style={styles.value}>{childName}</Text>
           </View>
           <View style={styles.headerCol}>
-            <Text style={[styles.label, { textAlign: "right" }]}>{labels.doctor}</Text>
-            <Text style={[styles.value, { textAlign: "right" }]}>{doctorName}</Text>
+            <Text style={[styles.label, styles.endAligned]}>{labels.doctor}</Text>
+            <Text style={[styles.value, styles.endAligned]}>{doctorName}</Text>
           </View>
         </View>
 
@@ -121,7 +158,9 @@ export function MedicalRecordPdfDocument({
           </View>
           <View>
             <Text style={styles.label}>{labels.date}</Text>
-            <Text style={styles.value}>{formatDateDisplayDubai(record.created_at)}</Text>
+            <Text style={styles.value}>
+              {formatDateDisplayDubai(record.created_at, dateLocale)}
+            </Text>
           </View>
         </View>
 

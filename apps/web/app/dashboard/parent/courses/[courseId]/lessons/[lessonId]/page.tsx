@@ -31,7 +31,7 @@ interface PageProps {
 
 export default function LessonPlayerPage({ params }: PageProps) {
   const { courseId, lessonId } = use(params);
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale, dir } = useI18n();
   const tc = t.courses;
   // Loading is triggered from a useCallback keyed on the route params; a ref
   // keeps the toast/error copy current without retriggering the fetch on
@@ -156,10 +156,20 @@ export default function LessonPlayerPage({ params }: PageProps) {
                   recipientName:
                     user?.user_metadata?.full_name ??
                     user?.email ??
-                    "Participant",
+                    tc.certificateParticipant,
                   courseTitle: course.title,
                   instructorName: course.doctors?.full_name ?? null,
                   completedAt: new Date().toISOString(),
+                  labels: {
+                    heading: tc.certificateHeading,
+                    certify: tc.certificateCertify,
+                    presentedTo: tc.certificatePresentedTo,
+                    completed: tc.certificateCompleted,
+                    instructedBy: tc.certificateInstructedBy,
+                    dateLabel: tc.certificateDateLabel,
+                  },
+                  dateLocale,
+                  dir,
                 });
               }}
             >

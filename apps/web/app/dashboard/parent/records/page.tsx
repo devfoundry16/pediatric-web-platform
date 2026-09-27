@@ -70,7 +70,7 @@ function toPdfLabels(mr: Dictionary["medicalRecords"]): MedicalRecordPdfLabels {
 const ALL_TAB = "__all__";
 
 export default function ParentRecordsPage() {
-  const { dictionary: t, dateLocale } = useI18n();
+  const { dictionary: t, dateLocale, dir } = useI18n();
   const mr = t.medicalRecords;
 
   const [children, setChildren] = useState<ChildProfile[]>([]);
@@ -113,7 +113,8 @@ export default function ParentRecordsPage() {
       await downloadMedicalRecordPdf(
         record,
         getTypeLabelKey(record.record_type),
-        pdfLabels
+        pdfLabels,
+        { dateLocale, dir }
       );
       toast.success(mr.pdfDownloadSuccess);
     } catch {
@@ -245,6 +246,8 @@ export default function ParentRecordsPage() {
                 record={pdfRecord}
                 typeLabel={getTypeLabelKey(pdfRecord.record_type)}
                 labels={pdfLabels}
+                dateLocale={dateLocale}
+                dir={dir}
               />
             )}
           </div>
