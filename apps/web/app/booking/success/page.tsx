@@ -86,13 +86,13 @@ export default function BookingSuccessPage() {
                 <div className="flex w-full flex-col gap-2">
                   <Button asChild className="w-full">
                     <Link href="/dashboard/parent/appointments">
-                      <CalendarDays className="mr-2 h-4 w-4" />
+                      <CalendarDays className="me-2 h-4 w-4" />
                       {t.booking.viewAppointments}
                     </Link>
                   </Button>
                   <Button variant="outline" asChild className="w-full">
                     <Link href="/dashboard/parent">
-                      <ArrowLeft className="mr-2 h-4 w-4" />
+                      <ArrowLeft className="me-2 h-4 w-4 rtl:rotate-180" />
                       {t.booking.backToDashboard}
                     </Link>
                   </Button>

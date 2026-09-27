@@ -172,11 +172,11 @@ export default function AdminNotificationsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.notifications.colRecipient}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.type}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.notifications.colSentAt}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.notifications.colResendId}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.notifications.colRecipient}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.common.type}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.notifications.colSentAt}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.notifications.colResendId}</th>
                   </tr>
                 </thead>
                 <tbody>

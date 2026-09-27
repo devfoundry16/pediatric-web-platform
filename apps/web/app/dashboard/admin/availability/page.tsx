@@ -311,7 +311,7 @@ export default function AdminAvailabilityPage() {
                     <li key={h.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
                       <div>
                         <span className="font-medium text-foreground">{h.holiday_date}</span>
-                        {h.reason && <span className="ml-2 text-sm text-muted-foreground">{h.reason}</span>}
+                        {h.reason && <span className="ms-2 text-sm text-muted-foreground">{h.reason}</span>}
                       </div>
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteHoliday(h.id)}>
                         <Trash2 className="h-3.5 w-3.5" />

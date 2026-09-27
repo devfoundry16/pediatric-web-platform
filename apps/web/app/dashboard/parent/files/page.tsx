@@ -315,7 +315,7 @@ export default function ParentFilesPage() {
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isDeleting && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
               {mr.deleteFile}
             </AlertDialogAction>
           </AlertDialogFooter>

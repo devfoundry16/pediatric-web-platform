@@ -240,7 +240,7 @@ function PaymentsTable({
         <thead>
           <tr className="border-b border-border">
             {columns.map((c) => (
-              <th key={c.key} className="px-4 py-3 text-left font-medium text-muted-foreground">
+              <th key={c.key} className="px-4 py-3 text-start font-medium text-muted-foreground">
                 {c.header}
               </th>
             ))}

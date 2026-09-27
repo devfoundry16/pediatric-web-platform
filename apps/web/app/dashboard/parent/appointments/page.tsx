@@ -424,7 +424,7 @@ function ParentAppointmentsContent() {
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" asChild className="gap-1">
               <Link href="/dashboard/parent">
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
                 {t.common.dashboard}
               </Link>
             </Button>

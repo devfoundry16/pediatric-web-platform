@@ -53,7 +53,7 @@ export default function ChildDetailPage() {
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" asChild className="gap-1">
             <Link href="/dashboard/parent/children">
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
               {t.childForm.backToList}
             </Link>
           </Button>

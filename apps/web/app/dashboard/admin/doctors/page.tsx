@@ -213,7 +213,7 @@ export default function AdminDoctorsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
+                  <tr className="border-b border-border text-start text-muted-foreground">
                     <th className="pb-2 font-medium">{t.common.name}</th>
                     <th className="pb-2 font-medium">{t.doctorDashboard.specialty}</th>
                     <th className="pb-2 font-medium">{t.admin.doctors.colNotifications}</th>
@@ -265,7 +265,7 @@ export default function AdminDoctorsPage() {
                           {d.is_active ? t.admin.common.active : t.admin.common.off}
                         </button>
                       </td>
-                      <td className="py-3 text-right">
+                      <td className="py-3 text-end">
                         <Button
                           variant="ghost"
                           size="icon"

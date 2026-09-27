@@ -124,11 +124,11 @@ export default function AdminConsultationTypesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.consultationTypes.colSlug}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.name}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.duration}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.courses.priceAed}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.consultationTypes.colSlug}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.name}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.duration}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.courses.priceAed}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.status}</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>

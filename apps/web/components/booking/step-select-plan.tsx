@@ -248,7 +248,7 @@ export function StepSelectPlan({
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <>
-                            <ShoppingCart className="mr-1.5 h-4 w-4" />
+                            <ShoppingCart className="me-1.5 h-4 w-4" />
                             {t.booking.buyAndContinue}
                           </>
                         )}

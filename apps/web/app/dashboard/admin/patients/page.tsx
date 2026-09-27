@@ -50,12 +50,12 @@ export default function AdminPatientsPage() {
       </div>
 
       <div className="relative max-w-xs">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder={t.admin.common.searchByName}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="pl-9"
+          className="ps-9"
         />
       </div>
 
@@ -87,7 +87,7 @@ export default function AdminPatientsPage() {
                         {p.date_of_birth ? calcAge(p.date_of_birth, t.admin.patients.ageMonthsShort, t.admin.patients.ageYearsShort) : "—"} · {getGenderLabel(t, p.gender)}
                       </p>
                     </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground rtl:rotate-180" />
                   </Link>
                 </li>
               ))}

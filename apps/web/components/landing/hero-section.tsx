@@ -40,7 +40,7 @@ export function HeroSection() {
               <Link href="/booking">
                 <Button size="lg" className="gap-2 text-base">
                   {t.landing.heroAction}
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-4 w-4 rtl:rotate-180" />
                 </Button>
               </Link>
               <Link href="/#services">
@@ -74,7 +74,7 @@ export function HeroSection() {
               <Link href={`/booking?plan=${emergencyPackage.slug}`} className="shrink-0">
                 <Button size="sm" className="w-full gap-1.5 sm:w-auto">
                   {t.common.bookNow}
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="h-4 w-4 rtl:rotate-180" />
                 </Button>
               </Link>
             </div>

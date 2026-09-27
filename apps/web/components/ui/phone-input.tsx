@@ -123,7 +123,7 @@ function CountrySelect({
           type="button"
           variant="outline"
           className={cn(
-            "flex gap-1 rounded-e-none rtl:rounded-s-none rtl:rounded-e-md border-r-0 rtl:border-r rtl:border-l-0 px-3 focus:z-10"
+            "flex gap-1 rounded-e-none border-e-0 px-3 focus:z-10"
           )}
           disabled={disabled}
         >
@@ -133,7 +133,7 @@ function CountrySelect({
           />
           <ChevronsUpDownIcon
             className={cn(
-              "-mr-1 size-4 opacity-50",
+              "-me-1 size-4 opacity-50",
               disabled ? "hidden" : "opacity-100"
             )}
           />
@@ -159,12 +159,12 @@ function CountrySelect({
                         countryName={option.label}
                       />
                       <span className="flex-1 text-sm">{option.label}</span>
-                      <span className="text-muted-foreground text-sm">
+                      <span className="text-muted-foreground text-sm" dir="ltr">
                         {`+${RPNInput.getCountryCallingCode(option.value)}`}
                       </span>
                       <CheckIcon
                         className={cn(
-                          "ml-auto size-4",
+                          "ms-auto size-4",
                           option.value === value ? "opacity-100" : "opacity-0"
                         )}
                       />

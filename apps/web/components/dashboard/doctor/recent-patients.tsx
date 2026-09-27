@@ -97,7 +97,7 @@ export function RecentPatients() {
                   <span className="text-xs text-muted-foreground">
                     {patient.last_visit}
                   </span>
-                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  <ChevronRight className="h-4 w-4 text-muted-foreground rtl:rotate-180" />
                 </div>
               </Link>
             );

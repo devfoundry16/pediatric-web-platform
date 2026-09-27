@@ -127,7 +127,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
           href={`/dashboard/parent/courses/${courseId}`}
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
           {tc.backToCourse}
         </Link>
 
@@ -225,7 +225,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
                       )}
                       {isCompleted && (
                         <Badge variant="secondary" className="text-xs">
-                          <CheckCircle className="mr-1 h-3 w-3 text-green-500" />
+                          <CheckCircle className="me-1 h-3 w-3 text-green-500" />
                           {tc.lessonCompleted}
                         </Badge>
                       )}
@@ -248,21 +248,21 @@ export default function LessonPlayerPage({ params }: PageProps) {
                       size="sm"
                     >
                       {isMarkingComplete ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="me-2 h-4 w-4 animate-spin" />
                       ) : (
-                        <CheckCircle className="mr-2 h-4 w-4" />
+                        <CheckCircle className="me-2 h-4 w-4" />
                       )}
                       {tc.lessonComplete}
                     </Button>
                   )}
 
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="ms-auto flex items-center gap-2">
                     {prevLesson && (
                       <Button asChild variant="outline" size="sm">
                         <Link
                           href={`/dashboard/parent/courses/${courseId}/lessons/${prevLesson.id}`}
                         >
-                          <ChevronLeft className="mr-1 h-4 w-4" />
+                          <ChevronLeft className="me-1 h-4 w-4 rtl:rotate-180" />
                           {t.common.previous}
                         </Link>
                       </Button>
@@ -273,7 +273,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
                           href={`/dashboard/parent/courses/${courseId}/lessons/${nextLesson.id}`}
                         >
                           {t.common.next}
-                          <ChevronRight className="ml-1 h-4 w-4" />
+                          <ChevronRight className="ms-1 h-4 w-4 rtl:rotate-180" />
                         </Link>
                       </Button>
                     )}

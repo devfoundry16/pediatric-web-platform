@@ -30,13 +30,13 @@ export default function PackageCancelPage() {
             <div className="flex w-full flex-col gap-2">
               <Button asChild className="w-full">
                 <Link href="/dashboard/parent/packages">
-                  <Package className="mr-2 h-4 w-4" />
+                  <Package className="me-2 h-4 w-4" />
                   {t.packages.browsePackages}
                 </Link>
               </Button>
               <Button variant="outline" asChild className="w-full">
                 <Link href="/dashboard/parent">
-                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  <ArrowLeft className="me-2 h-4 w-4 rtl:rotate-180" />
                   {t.booking.backToDashboard}
                 </Link>
               </Button>

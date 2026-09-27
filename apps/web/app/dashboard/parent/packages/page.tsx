@@ -92,7 +92,7 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
   return (
     <Card className="relative flex flex-col overflow-hidden transition-shadow hover:shadow-md">
       {isEmergency && (
-        <div className="absolute right-0 top-0 rounded-bl-lg bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white">
+        <div className="absolute end-0 top-0 rounded-es-lg bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white">
           {t.landing.priorityBadge}
         </div>
       )}
@@ -188,7 +188,7 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
               <span className="text-2xl font-bold text-foreground">
                 {total.toFixed(0)}
               </span>
-              <span className="ml-1 text-sm text-muted-foreground">
+              <span className="ms-1 text-sm text-muted-foreground">
                 {t.common.aed}
               </span>
             </div>
@@ -201,7 +201,7 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <>
-                  <ShoppingCart className="mr-1.5 h-4 w-4" />
+                  <ShoppingCart className="me-1.5 h-4 w-4" />
                   {t.packages.buyNow}
                 </>
               )}

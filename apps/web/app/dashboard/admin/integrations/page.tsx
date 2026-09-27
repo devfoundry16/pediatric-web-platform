@@ -231,11 +231,11 @@ function IntegrationsPageInner() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colGoogleAccount}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colOwner}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.role}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colConnectedAt}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.integrations.colGoogleAccount}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.integrations.colOwner}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.common.role}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.integrations.colConnectedAt}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -335,11 +335,11 @@ function IntegrationsPageInner() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colAction}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.type}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colAt}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.integrations.colDetail}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.integrations.colAction}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.common.type}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.integrations.colAt}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.integrations.colDetail}</th>
                   </tr>
                 </thead>
                 <tbody>

@@ -109,7 +109,7 @@ function CourseCard({
         <div className="mt-auto pt-1">
           <Button asChild variant="outline" size="sm" className="w-full">
             <Link href={`/dashboard/doctor/courses/${course.id}`}>
-              <Settings className="mr-2 h-4 w-4" />
+              <Settings className="me-2 h-4 w-4" />
               {tc.editCourse}
             </Link>
           </Button>
@@ -169,7 +169,7 @@ export default function DoctorCoursesPage() {
           </div>
           <Button asChild>
             <Link href="/dashboard/doctor/courses/new">
-              <Plus className="mr-2 h-4 w-4" />
+              <Plus className="me-2 h-4 w-4" />
               {tc.createCourse}
             </Link>
           </Button>
@@ -198,7 +198,7 @@ export default function DoctorCoursesPage() {
               </p>
               <Button asChild className="mt-2">
                 <Link href="/dashboard/doctor/courses/new">
-                  <Plus className="mr-2 h-4 w-4" />
+                  <Plus className="me-2 h-4 w-4" />
                   {tc.createCourse}
                 </Link>
               </Button>

@@ -544,7 +544,7 @@ export default function DoctorNotesPage() {
               onClick={handleSave}
               disabled={isSaving || !form.childId || !form.title.trim()}
             >
-              {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSaving && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
               {t.common.save}
             </Button>
           </DialogFooter>
@@ -565,7 +565,7 @@ export default function DoctorNotesPage() {
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isDeleting && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
               {mr.deleteRecord}
             </AlertDialogAction>
           </AlertDialogFooter>

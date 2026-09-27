@@ -66,7 +66,7 @@ export default function EditLiveSessionPage({ params }: PageProps) {
             href="/dashboard/doctor/live-sessions"
             className="mb-2 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
             {t.liveSessions.manageSessions}
           </Link>
           <h1 className="text-2xl font-bold text-foreground">

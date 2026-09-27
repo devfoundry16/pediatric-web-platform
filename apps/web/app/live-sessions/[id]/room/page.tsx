@@ -137,7 +137,7 @@ export default function SessionRoomPage() {
             router.push(`/live-sessions/${params.id}`);
           }}
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           {t.common.back}
         </Button>
         <span className="text-sm font-medium text-foreground">

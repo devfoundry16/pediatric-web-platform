@@ -224,12 +224,12 @@ export default function AdminUsersPage() {
           ))}
         </div>
         <div className="relative max-w-xs flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder={t.admin.common.searchByName}
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="pl-9"
+            className="ps-9"
           />
         </div>
       </div>
@@ -250,11 +250,11 @@ export default function AdminUsersPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.name}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.email}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.role}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.users.colJoined}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.name}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.email}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.common.role}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.users.colJoined}</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
@@ -283,20 +283,20 @@ export default function AdminUsersPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={() => openEdit(u)}>
-                              <Pencil className="mr-2 h-4 w-4" /> {t.admin.users.editInfo}
+                              <Pencil className="me-2 h-4 w-4" /> {t.admin.users.editInfo}
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => handleToggleActive(u)}>
                               {u.is_active ? (
-                                <><UserX className="mr-2 h-4 w-4" /> {t.admin.users.deactivate}</>
+                                <><UserX className="me-2 h-4 w-4" /> {t.admin.users.deactivate}</>
                               ) : (
-                                <><UserCheck className="mr-2 h-4 w-4" /> {t.admin.users.activate}</>
+                                <><UserCheck className="me-2 h-4 w-4" /> {t.admin.users.activate}</>
                               )}
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               onClick={() => setDeleting(u)}
                               className="text-destructive focus:text-destructive"
                             >
-                              <Trash2 className="mr-2 h-4 w-4" /> {t.admin.users.delete}
+                              <Trash2 className="me-2 h-4 w-4" /> {t.admin.users.delete}
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

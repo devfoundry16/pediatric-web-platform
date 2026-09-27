@@ -60,7 +60,7 @@ export default function NewCoursePage() {
           href="/dashboard/doctor/courses"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
           {t.common.back}
         </Link>
 
@@ -144,7 +144,7 @@ export default function NewCoursePage() {
 
               <div className="flex items-center gap-3 pt-2">
                 <Button type="submit" disabled={isSubmitting || !title.trim()}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isSubmitting && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
                   {tc.saveCourse}
                 </Button>
                 <Button asChild variant="outline" type="button">

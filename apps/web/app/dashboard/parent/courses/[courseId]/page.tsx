@@ -104,7 +104,7 @@ export default function CourseDetailPage({ params }: PageProps) {
           href="/dashboard/parent/courses"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
           {tc.backToCourses}
         </Link>
 
@@ -134,7 +134,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                   </Badge>
                   {isEnrolled && enrollment?.completed_at && (
                     <Badge variant="default" className="bg-green-600">
-                      <CheckCircle className="mr-1 h-3 w-3" />
+                      <CheckCircle className="me-1 h-3 w-3" />
                       {tc.courseCompleted}
                     </Badge>
                   )}
@@ -213,7 +213,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                         <div className="flex items-center gap-2 shrink-0">
                           {lesson.is_preview && !isEnrolled && (
                             <Badge variant="outline" className="text-xs">
-                              <Eye className="mr-1 h-3 w-3" />
+                              <Eye className="me-1 h-3 w-3" />
                               {tc.preview}
                             </Badge>
                           )}
@@ -269,7 +269,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                             course.course_lessons[0]?.id ?? ""
                           }`}
                         >
-                          <Play className="mr-2 h-4 w-4" />
+                          <Play className="me-2 h-4 w-4" />
                           {progressPercent > 0 ? tc.continueLearning : tc.startLearning}
                         </Link>
                       </Button>
@@ -287,7 +287,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                         disabled={isEnrolling}
                       >
                         {isEnrolling ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <Loader2 className="me-2 h-4 w-4 animate-spin" />
                         ) : null}
                         {course.is_free ? tc.enrollFree : tc.enrollNow}
                       </Button>

@@ -102,14 +102,14 @@ function CatalogCard({ course, isEnrolled, enrollment }: CatalogCardProps) {
             <Link href={`/dashboard/parent/courses/${course.id}`}>
               {isEnrolled ? (
                 <>
-                  <Play className="mr-1.5 h-3.5 w-3.5" />
+                  <Play className="me-1.5 h-3.5 w-3.5" />
                   {tc.continueLearning}
                 </>
               ) : (
                 <>
                   {course.is_free ? (
                     <>
-                      <Lock className="mr-1.5 h-3.5 w-3.5" />
+                      <Lock className="me-1.5 h-3.5 w-3.5" />
                       {tc.enrollFree}
                     </>
                   ) : (

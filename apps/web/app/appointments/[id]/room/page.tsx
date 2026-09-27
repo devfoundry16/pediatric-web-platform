@@ -134,7 +134,7 @@ export default function AppointmentRoomPage() {
     <div className="flex h-screen flex-col bg-background">
       <div className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-4">
         <Button variant="ghost" size="sm" className="gap-1.5" onClick={leave}>
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           {t.common.back}
         </Button>
         <span className="text-sm font-medium text-foreground">
