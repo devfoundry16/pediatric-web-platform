@@ -65,7 +65,6 @@
     "tzRegionOceania": "Oceania",
     "tzRegionOther": "Other",
     "tzRegionDetected": "Detected",
-    "lastUpdated": "Last updated: {date}",
     "readInEnglish": "Read the English version",
     "legalTranslationNote": "This is a translation. If it differs from the English version, the English version applies."
   },
