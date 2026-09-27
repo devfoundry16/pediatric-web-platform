@@ -134,13 +134,13 @@ export default function AdminPackagesPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.packages.colPurchased}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.packages.colBuyer}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.packages.colPackage}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.packages.colCredits}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.amount}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.packages.colExpires}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.packages.colPurchased}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.packages.colBuyer}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.packages.colPackage}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.packages.colCredits}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.common.amount}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.packages.colExpires}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.status}</th>
                   </tr>
                 </thead>
                 <tbody>

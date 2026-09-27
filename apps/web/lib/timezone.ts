@@ -1,3 +1,5 @@
+import { TIMEZONE_CITIES_AR } from "./timezone-cities-ar";
+
 /**
  * Timezone handling.
  *
@@ -163,26 +165,40 @@ export function getSystemTimezone(): string {
   }
 }
 
-/** Short offset for a zone at a given instant, e.g. "GMT+4". */
-export function getTimezoneOffsetLabel(tz: string, at: Date = new Date()): string {
+function timeZoneNamePart(
+  tz: string,
+  locale: string,
+  timeZoneName: "shortOffset" | "longGeneric",
+  at: Date
+): string {
   try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: tz,
-      timeZoneName: "shortOffset",
-    }).formatToParts(at);
+    const parts = new Intl.DateTimeFormat(locale, { timeZone: tz, timeZoneName }).formatToParts(at);
     return parts.find((p) => p.type === "timeZoneName")?.value ?? "";
   } catch {
     return "";
   }
 }
 
+/** Short offset for a zone at a given instant, e.g. "GMT+4" or "غرينتش+4". */
+export function getTimezoneOffsetLabel(tz: string, at: Date = new Date(), locale = "en-AE"): string {
+  return timeZoneNamePart(tz, locale, "shortOffset", at);
+}
+
+function timezoneCity(tz: string, locale: string, at: Date): string {
+  if (locale.startsWith("ar")) {
+    // No Arabic city names in Intl; fall back to its (regional) zone name.
+    return TIMEZONE_CITIES_AR[tz] ?? (timeZoneNamePart(tz, locale, "longGeneric", at) || tz);
+  }
+  return tz.split("/").pop()?.replace(/_/g, " ") ?? tz;
+}
+
 /**
  * Human label for a zone, e.g. "Dubai (GMT+4)". The live offset is what makes a
  * long list scannable — people match on the offset, not the city.
  */
-export function formatTimezoneLabel(tz: string, at: Date = new Date()): string {
-  const city = tz.split("/").pop()?.replace(/_/g, " ") ?? tz;
-  const offset = getTimezoneOffsetLabel(tz, at);
+export function formatTimezoneLabel(tz: string, locale = "en-AE", at: Date = new Date()): string {
+  const city = timezoneCity(tz, locale, at);
+  const offset = getTimezoneOffsetLabel(tz, at, locale);
   return offset ? `${city} (${offset})` : city;
 }
 
@@ -197,7 +213,10 @@ export interface TimezoneOptionGroup {
  * under "Detected" so a zone outside the curated list is still selectable and
  * still renders with a label rather than blank.
  */
-export function buildTimezoneOptions(extra: (string | undefined | null)[] = []): TimezoneOptionGroup[] {
+export function buildTimezoneOptions(
+  extra: (string | undefined | null)[] = [],
+  locale = "en-AE"
+): TimezoneOptionGroup[] {
   const at = new Date();
   const curated = new Set(TIMEZONE_GROUPS.flatMap((g) => g.zones));
 
@@ -207,13 +226,13 @@ export function buildTimezoneOptions(extra: (string | undefined | null)[] = []):
 
   const groups: TimezoneOptionGroup[] = TIMEZONE_GROUPS.map((g) => ({
     region: g.region,
-    options: g.zones.map((tz) => ({ value: tz, label: formatTimezoneLabel(tz, at) })),
+    options: g.zones.map((tz) => ({ value: tz, label: formatTimezoneLabel(tz, locale, at) })),
   }));
 
   if (pinned.length > 0) {
     groups.unshift({
       region: "Detected",
-      options: pinned.map((tz) => ({ value: tz, label: formatTimezoneLabel(tz, at) })),
+      options: pinned.map((tz) => ({ value: tz, label: formatTimezoneLabel(tz, locale, at) })),
     });
   }
 

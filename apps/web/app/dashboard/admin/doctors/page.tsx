@@ -24,6 +24,7 @@ import {
   type CreateDoctorPayload,
 } from "@/lib/api/admin";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 
 /** Shape shared by the create and edit dialogs. */
 interface DoctorForm {
@@ -46,14 +47,8 @@ const emptyForm = (): DoctorForm => ({
   account_password: "",
 });
 
-function apiError(err: unknown, fallback: string): string {
-  return (
-    (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? fallback
-  );
-}
-
 export default function AdminDoctorsPage() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   // `load` must stay referentially stable across locale changes (re-creating
   // it would refetch the list and re-show skeletons on a language toggle), so
   // its toast copy is read through a ref that always holds the current
@@ -114,7 +109,7 @@ export default function AdminDoctorsPage() {
       setCreateForm(emptyForm());
       await load();
     } catch (err) {
-      toast.error(apiError(err, t.admin.doctors.addError));
+      toast.error(getErrorMessage(err, t, t.admin.doctors.addError));
     } finally {
       setSaving(false);
     }
@@ -135,7 +130,7 @@ export default function AdminDoctorsPage() {
       setEditing(null);
       await load();
     } catch (err) {
-      toast.error(apiError(err, t.admin.doctors.updateError));
+      toast.error(getErrorMessage(err, t, t.admin.doctors.updateError));
     } finally {
       setSaving(false);
     }
@@ -155,7 +150,7 @@ export default function AdminDoctorsPage() {
       setLinkPassword("");
       await load();
     } catch (err) {
-      toast.error(apiError(err, t.admin.doctors.linkError));
+      toast.error(getErrorMessage(err, t, t.admin.doctors.linkError));
     } finally {
       setSaving(false);
     }
@@ -167,7 +162,7 @@ export default function AdminDoctorsPage() {
       toast.success(doctor.is_active ? t.admin.doctors.deactivated : t.admin.doctors.activated);
       await load();
     } catch (err) {
-      toast.error(apiError(err, t.admin.doctors.toggleError));
+      toast.error(getErrorMessage(err, t, t.admin.doctors.toggleError));
     }
   };
 
@@ -218,7 +213,7 @@ export default function AdminDoctorsPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="border-b border-border text-left text-muted-foreground">
+                  <tr className="border-b border-border text-start text-muted-foreground">
                     <th className="pb-2 font-medium">{t.common.name}</th>
                     <th className="pb-2 font-medium">{t.doctorDashboard.specialty}</th>
                     <th className="pb-2 font-medium">{t.admin.doctors.colNotifications}</th>
@@ -237,7 +232,7 @@ export default function AdminDoctorsPage() {
                         {d.email ?? <span className="text-amber-600">{t.admin.doctors.notSet}</span>}
                       </td>
                       <td className="py-3 text-muted-foreground">
-                        {formatTimezoneLabel(d.timezone || DEFAULT_TIMEZONE)}
+                        {formatTimezoneLabel(d.timezone || DEFAULT_TIMEZONE, dateLocale)}
                       </td>
                       <td className="py-3">
                         {d.profile_id ? (
@@ -270,7 +265,7 @@ export default function AdminDoctorsPage() {
                           {d.is_active ? t.admin.common.active : t.admin.common.off}
                         </button>
                       </td>
-                      <td className="py-3 text-right">
+                      <td className="py-3 text-end">
                         <Button
                           variant="ghost"
                           size="icon"

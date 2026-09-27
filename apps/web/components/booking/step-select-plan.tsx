@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { formatUnit } from "@/lib/i18n/format-unit";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,7 +41,7 @@ export function StepSelectPlan({
   onSelectOneTime,
   restrictToSlug,
 }: StepSelectPlanProps) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const consult = CONSULTATION_TYPES[0];
 
   const [packages, setPackages] = useState<ConsultationPackage[]>([]);
@@ -179,7 +180,7 @@ export function StepSelectPlan({
                       </div>
                       <div>
                         <p className="font-semibold text-foreground">
-                          {pkg.duration_minutes}m
+                          {formatUnit(dateLocale, pkg.duration_minutes, "minute", "short")}
                         </p>
                         <p className="text-muted-foreground">
                           {t.booking.eachLabel}
@@ -187,7 +188,7 @@ export function StepSelectPlan({
                       </div>
                       <div>
                         <p className="font-semibold text-foreground">
-                          {pkg.validity_days}d
+                          {formatUnit(dateLocale, pkg.validity_days, "day", "short")}
                         </p>
                         <p className="text-muted-foreground">
                           {t.booking.validLabel}
@@ -247,7 +248,7 @@ export function StepSelectPlan({
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <>
-                            <ShoppingCart className="mr-1.5 h-4 w-4" />
+                            <ShoppingCart className="me-1.5 h-4 w-4" />
                             {t.booking.buyAndContinue}
                           </>
                         )}

@@ -3,15 +3,10 @@
 import { PDFViewer } from "@react-pdf/renderer";
 import {
   MedicalRecordPdfDocument,
-  type MedicalRecordPdfLabels,
+  type MedicalRecordPdfDocumentProps,
 } from "@/components/medical-record/medical-record-pdf-document";
-import type { MedicalRecord } from "@/types/medical-record";
 
-interface MedicalRecordPdfPreviewProps {
-  record: MedicalRecord;
-  typeLabel: string;
-  labels: MedicalRecordPdfLabels;
-}
+type MedicalRecordPdfPreviewProps = MedicalRecordPdfDocumentProps;
 
 const VIEWER_HEIGHT = 520;
 
@@ -22,6 +17,8 @@ export function MedicalRecordPdfPreview({
   record,
   typeLabel,
   labels,
+  dateLocale,
+  dir,
 }: MedicalRecordPdfPreviewProps) {
   return (
     <div
@@ -33,6 +30,8 @@ export function MedicalRecordPdfPreview({
           record={record}
           typeLabel={typeLabel}
           labels={labels}
+          dateLocale={dateLocale}
+          dir={dir}
         />
       </PDFViewer>
     </div>

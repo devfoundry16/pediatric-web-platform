@@ -265,7 +265,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
           href="/dashboard/doctor/courses"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
           {t.common.back}
         </Link>
 
@@ -327,7 +327,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
                       className="w-fit"
                       onClick={() => setIsEditingCourse(true)}
                     >
-                      <Pencil className="mr-2 h-4 w-4" />
+                      <Pencil className="me-2 h-4 w-4" />
                       {tc.editCourse}
                     </Button>
                   </div>
@@ -386,7 +386,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
                     )}
                     <div className="flex gap-2">
                       <Button type="submit" size="sm" disabled={isSavingCourse}>
-                        {isSavingCourse && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {isSavingCourse && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
                         {tc.saveCourse}
                       </Button>
                       <Button
@@ -410,7 +410,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">{tc.courseContent}</h2>
                 <Button size="sm" onClick={openAddLesson}>
-                  <Plus className="mr-2 h-4 w-4" />
+                  <Plus className="me-2 h-4 w-4" />
                   {tc.addLesson}
                 </Button>
               </div>
@@ -420,7 +420,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
                   <CardContent className="flex flex-col items-center gap-2 py-10 text-center">
                     <p className="text-sm text-muted-foreground">{tc.noLessons}</p>
                     <Button variant="outline" size="sm" onClick={openAddLesson}>
-                      <Plus className="mr-2 h-4 w-4" />
+                      <Plus className="me-2 h-4 w-4" />
                       {tc.addLesson}
                     </Button>
                   </CardContent>
@@ -543,9 +543,9 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
                   onClick={() => fileInputRef.current?.click()}
                 >
                   {isUploading ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="me-2 h-4 w-4 animate-spin" />
                   ) : (
-                    <Upload className="mr-2 h-4 w-4" />
+                    <Upload className="me-2 h-4 w-4" />
                   )}
                   {isUploading ? tc.uploadingVideo : tc.uploadVideo}
                 </Button>
@@ -588,7 +588,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
                 {t.common.cancel}
               </Button>
               <Button type="submit" disabled={isSavingLesson || !lessonForm.title.trim()}>
-                {isSavingLesson && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {isSavingLesson && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
                 {tc.saveLesson}
               </Button>
             </DialogFooter>
@@ -615,7 +615,7 @@ export default function DoctorCourseDetailPage({ params }: PageProps) {
               disabled={isDeletingLesson}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeletingLesson && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isDeletingLesson && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
               {tc.deleteLesson}
             </AlertDialogAction>
           </AlertDialogFooter>

@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { coursesApi } from "@/lib/api/courses";
 import { downloadCourseCertificate } from "@/lib/course-certificate-download";
 import { useAuthStore } from "@/lib/stores/auth-store";
@@ -31,7 +32,7 @@ interface PageProps {
 
 export default function LessonPlayerPage({ params }: PageProps) {
   const { courseId, lessonId } = use(params);
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale, dir } = useI18n();
   const tc = t.courses;
   // Loading is triggered from a useCallback keyed on the route params; a ref
   // keeps the toast/error copy current without retriggering the fetch on
@@ -80,9 +81,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
         setCourseCompleted(true);
       }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : tRef.current.courses.loadLessonError;
-      setError(message);
+      setError(getErrorMessage(err, tRef.current, tRef.current.courses.loadLessonError));
     } finally {
       setIsLoading(false);
     }
@@ -128,7 +127,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
           href={`/dashboard/parent/courses/${courseId}`}
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
           {tc.backToCourse}
         </Link>
 
@@ -156,10 +155,20 @@ export default function LessonPlayerPage({ params }: PageProps) {
                   recipientName:
                     user?.user_metadata?.full_name ??
                     user?.email ??
-                    "Participant",
+                    tc.certificateParticipant,
                   courseTitle: course.title,
                   instructorName: course.doctors?.full_name ?? null,
                   completedAt: new Date().toISOString(),
+                  labels: {
+                    heading: tc.certificateHeading,
+                    certify: tc.certificateCertify,
+                    presentedTo: tc.certificatePresentedTo,
+                    completed: tc.certificateCompleted,
+                    instructedBy: tc.certificateInstructedBy,
+                    dateLabel: tc.certificateDateLabel,
+                  },
+                  dateLocale,
+                  dir,
                 });
               }}
             >
@@ -216,7 +225,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
                       )}
                       {isCompleted && (
                         <Badge variant="secondary" className="text-xs">
-                          <CheckCircle className="mr-1 h-3 w-3 text-green-500" />
+                          <CheckCircle className="me-1 h-3 w-3 text-green-500" />
                           {tc.lessonCompleted}
                         </Badge>
                       )}
@@ -239,21 +248,21 @@ export default function LessonPlayerPage({ params }: PageProps) {
                       size="sm"
                     >
                       {isMarkingComplete ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        <Loader2 className="me-2 h-4 w-4 animate-spin" />
                       ) : (
-                        <CheckCircle className="mr-2 h-4 w-4" />
+                        <CheckCircle className="me-2 h-4 w-4" />
                       )}
                       {tc.lessonComplete}
                     </Button>
                   )}
 
-                  <div className="ml-auto flex items-center gap-2">
+                  <div className="ms-auto flex items-center gap-2">
                     {prevLesson && (
                       <Button asChild variant="outline" size="sm">
                         <Link
                           href={`/dashboard/parent/courses/${courseId}/lessons/${prevLesson.id}`}
                         >
-                          <ChevronLeft className="mr-1 h-4 w-4" />
+                          <ChevronLeft className="me-1 h-4 w-4 rtl:rotate-180" />
                           {t.common.previous}
                         </Link>
                       </Button>
@@ -264,7 +273,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
                           href={`/dashboard/parent/courses/${courseId}/lessons/${nextLesson.id}`}
                         >
                           {t.common.next}
-                          <ChevronRight className="ml-1 h-4 w-4" />
+                          <ChevronRight className="ms-1 h-4 w-4 rtl:rotate-180" />
                         </Link>
                       </Button>
                     )}

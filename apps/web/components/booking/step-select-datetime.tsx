@@ -154,7 +154,7 @@ export function StepSelectDateTime({
               <p className="text-center text-xs text-muted-foreground">
                 {t.booking.doctorTimezoneNote.replace(
                   "{timezone}",
-                  formatTimezoneLabel(doctorTimezone)
+                  formatTimezoneLabel(doctorTimezone, dateLocale)
                 )}
               </p>
             )}

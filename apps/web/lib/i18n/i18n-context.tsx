@@ -8,9 +8,21 @@ import {
   useEffect,
   type ReactNode,
 } from "react";
+import { z } from "zod";
+import zodAr from "zod/v4/locales/ar.js";
+import zodEn from "zod/v4/locales/en.js";
+import { DirectionProvider } from "@/components/ui/direction";
 import type { Locale } from "./config";
-import { defaultLocale, localeDirections, locales } from "./config";
+import { localeDirections, locales } from "./config";
 import type { Dictionary } from "./get-dictionary";
+
+// Zod's built-in messages cover checks that have no custom message (vitals
+// ranges, max lengths, enums). Configured globally because schemas are built
+// once at module scope.
+const zodLocales: Record<Locale, () => Parameters<typeof z.config>[0]> = {
+  en: zodEn,
+  ar: zodAr,
+};
 
 interface I18nContextType {
   locale: Locale;
@@ -49,7 +61,7 @@ export function I18nProvider({
       const stored = localStorage.getItem("locale");
       if (stored && locales.includes(stored as Locale) && stored !== locale) {
         void setLocale(stored as Locale).catch((err) => {
-          // A failed dictionary chunk load falls back to English; leave a
+          // A failed dictionary chunk load keeps the default locale; leave a
           // trace so "the site ignores my language" reports are debuggable.
           console.warn("Failed to restore saved locale", err);
         });
@@ -60,20 +72,15 @@ export function I18nProvider({
   }, [locale, setLocale]);
 
   useEffect(() => {
+    // The font follows `dir` through the [dir] rules in globals.css.
     const html = document.documentElement;
     html.setAttribute("lang", locale);
     html.setAttribute("dir", localeDirections[locale]);
-
-    // Swap font class on body for Arabic (Cairo) vs English (Inter)
-    const body = document.body;
-    if (localeDirections[locale] === "rtl") {
-      body.classList.add("font-cairo");
-      body.classList.remove("font-sans");
-    } else {
-      body.classList.add("font-sans");
-      body.classList.remove("font-cairo");
-    }
   }, [locale]);
+
+  // Set during render, not in an effect, so a form validated in the same
+  // render as a language switch already gets the new language.
+  z.config(zodLocales[locale]());
 
   const dir = localeDirections[locale];
   const isRtl = dir === "rtl";
@@ -83,7 +90,9 @@ export function I18nProvider({
     <I18nContext.Provider
       value={{ locale, dictionary, setLocale, dir, isRtl, dateLocale }}
     >
-      {children}
+      {/* Radix primitives (Tabs, Select, DropdownMenu, RadioGroup) read their
+          direction from this, not from <html dir>. */}
+      <DirectionProvider dir={dir}>{children}</DirectionProvider>
     </I18nContext.Provider>
   );
 }

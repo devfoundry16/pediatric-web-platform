@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
 import { BookingStepper } from "@/components/booking/booking-stepper";
@@ -270,8 +271,7 @@ export default function BookingPage() {
       setConfirmedAppointmentId(appointment.id);
       setShowConfirmation(true);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : t.booking.bookingFailedError;
+      const message = getErrorMessage(err, t, t.booking.bookingFailedError);
       setSubmitError(message);
     } finally {
       setIsSubmitting(false);

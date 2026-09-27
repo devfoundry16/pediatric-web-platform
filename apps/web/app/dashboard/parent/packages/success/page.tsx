@@ -57,7 +57,7 @@ export default function PackageSuccessPage() {
             {isLoading ? (
               <Skeleton className="h-20 w-full rounded-xl" />
             ) : latestPackage ? (
-              <div className="w-full rounded-xl border bg-muted/50 p-4 text-left">
+              <div className="w-full rounded-xl border bg-muted/50 p-4 text-start">
                 <div className="flex items-center gap-3">
                   <Package className="h-5 w-5 text-primary" />
                   <div>
@@ -78,13 +78,13 @@ export default function PackageSuccessPage() {
             <div className="flex w-full flex-col gap-2">
               <Button asChild className="w-full">
                 <Link href="/booking">
-                  <CalendarDays className="mr-2 h-4 w-4" />
+                  <CalendarDays className="me-2 h-4 w-4" />
                   {t.booking.title}
                 </Link>
               </Button>
               <Button variant="outline" asChild className="w-full">
                 <Link href="/dashboard/parent/packages">
-                  <ArrowRight className="mr-2 h-4 w-4" />
+                  <ArrowRight className="me-2 h-4 w-4 rtl:rotate-180" />
                   {t.packages.viewMyPackages}
                 </Link>
               </Button>

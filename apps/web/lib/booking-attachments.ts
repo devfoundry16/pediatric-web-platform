@@ -36,12 +36,6 @@ export interface BookingAttachment {
   fileSizeBytes: number;
 }
 
-export function describeFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 /** Why this file cannot be attached, or null when it is fine. */
 export function rejectionReason(file: File): "type" | "size" | null {
   // Some browsers report an empty type for .heic and .doc; fall back to the

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { differenceInMonths, differenceInYears, parseISO } from "date-fns";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { formatUnit } from "@/lib/i18n/format-unit";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,15 +19,15 @@ import { Plus, ChevronRight } from "lucide-react";
 import { childrenApi } from "@/lib/api/children";
 import type { ChildProfile } from "@/types/child";
 
-function formatAge(dob: string): string {
+function formatAge(dob: string, locale: string): string {
   const d = parseISO(dob);
   const now = new Date();
   const years = differenceInYears(now, d);
   if (years >= 1) {
-    return `${years} ${years === 1 ? "year" : "years"}`;
+    return formatUnit(locale, years, "year");
   }
   const months = differenceInMonths(now, d);
-  return `${Math.max(0, months)} ${months === 1 ? "month" : "months"}`;
+  return formatUnit(locale, Math.max(0, months), "month");
 }
 
 function initials(profile: ChildProfile): string {
@@ -51,7 +52,7 @@ interface ChildrenListProps {
 }
 
 export function ChildrenList({ title }: ChildrenListProps) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const [children, setChildren] = useState<ChildProfile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -119,7 +120,7 @@ export function ChildrenList({ title }: ChildrenListProps) {
         ) : (
           children.map((child) => {
             const name = `${child.personalInfo.firstName} ${child.personalInfo.lastName}`;
-            const age = formatAge(child.personalInfo.dateOfBirth);
+            const age = formatAge(child.personalInfo.dateOfBirth, dateLocale);
             const gender = genderLabel(child, t.patient);
             const allergyNote =
               child.healthBackground.allergiesPresent &&
@@ -153,7 +154,7 @@ export function ChildrenList({ title }: ChildrenListProps) {
                     ) : null}
                   </div>
                 </div>
-                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-180" />
               </Link>
             );
           })

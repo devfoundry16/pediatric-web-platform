@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { formatFileSize } from "@/lib/i18n/format-unit";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -44,13 +45,6 @@ import type { ChildProfile } from "@/types/child";
 import { formatDateDisplayDubai } from "@/lib/timezone";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatFileSize(bytes: number | null): string {
-  if (bytes == null) return "—";
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
 
 function FileIcon({ mimeType }: { mimeType: string }) {
   if (mimeType.startsWith("image/")) {
@@ -295,7 +289,7 @@ export default function ParentFilesPage() {
                         <p className="text-xs text-muted-foreground">{childName}</p>
                       )}
                       <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                        <span>{formatFileSize(file.file_size_bytes)}</span>
+                        <span>{file.file_size_bytes == null ? "—" : formatFileSize(dateLocale, file.file_size_bytes)}</span>
                         <span>{formatDateDisplayDubai(file.created_at, dateLocale)}</span>
                       </div>
                     </div>
@@ -321,7 +315,7 @@ export default function ParentFilesPage() {
               disabled={isDeleting}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
-              {isDeleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isDeleting && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
               {mr.deleteFile}
             </AlertDialogAction>
           </AlertDialogFooter>

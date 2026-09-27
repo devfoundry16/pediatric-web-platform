@@ -30,6 +30,7 @@ import {
 import { packagesApi } from "@/lib/api/packages";
 import type { ConsultationPackage, UserPackage, PackageUsageLog } from "@/types/packages";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { DEFAULT_TIMEZONE, formatStoredAppointment } from "@/lib/timezone";
 import type { Dictionary } from "@/lib/i18n/get-dictionary";
 
 const PACKAGE_ICONS: Record<string, typeof Package> = {
@@ -91,7 +92,7 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
   return (
     <Card className="relative flex flex-col overflow-hidden transition-shadow hover:shadow-md">
       {isEmergency && (
-        <div className="absolute right-0 top-0 rounded-bl-lg bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white">
+        <div className="absolute end-0 top-0 rounded-es-lg bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white">
           {t.landing.priorityBadge}
         </div>
       )}
@@ -187,7 +188,7 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
               <span className="text-2xl font-bold text-foreground">
                 {total.toFixed(0)}
               </span>
-              <span className="ml-1 text-sm text-muted-foreground">
+              <span className="ms-1 text-sm text-muted-foreground">
                 {t.common.aed}
               </span>
             </div>
@@ -200,7 +201,7 @@ function PackageCard({ pkg, onPurchase, isPurchasing }: PackageCardProps) {
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <>
-                  <ShoppingCart className="mr-1.5 h-4 w-4" />
+                  <ShoppingCart className="me-1.5 h-4 w-4" />
                   {t.packages.buyNow}
                 </>
               )}
@@ -283,15 +284,25 @@ function UsageLogRow({ log }: { log: PackageUsageLog }) {
   const appt = log.appointments;
   const pkgName =
     log.user_packages?.consultation_packages?.name ?? t.packages.packageFallback;
+  // The usage log does not carry the appointment's zone, so this is the stored
+  // wall clock (the clinic's zone), only formatted for the locale.
+  const shownAt = appt
+    ? formatStoredAppointment(
+        appt.scheduled_date,
+        appt.scheduled_time,
+        DEFAULT_TIMEZONE,
+        DEFAULT_TIMEZONE,
+        dateLocale
+      )
+    : null;
 
   return (
     <div className="flex items-center justify-between py-2 text-sm">
       <div className="flex flex-col gap-0.5">
         <span className="font-medium text-foreground">{pkgName}</span>
-        {appt ? (
+        {appt && shownAt ? (
           <span className="text-xs text-muted-foreground">
-            {formatDate(appt.scheduled_date, dateLocale)} {t.booking.dateTimeAt}{" "}
-            {appt.scheduled_time.slice(0, 5)}
+            {shownAt.date} {t.booking.dateTimeAt} {shownAt.time}
             {appt.doctors?.full_name ? ` · ${appt.doctors.full_name}` : ""}
           </span>
         ) : (

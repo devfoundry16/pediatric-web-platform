@@ -20,7 +20,7 @@ export default function EditChildPage() {
   const [profile, setProfile] = useState<ChildProfile | null>(null);
   const [loading, setLoading] = useState(() => !invalidId);
   const [error, setError] = useState<string | null>(() =>
-    invalidId ? "Invalid id" : null
+    invalidId ? t.childForm.loadError : null
   );
 
   useEffect(() => {
@@ -59,7 +59,7 @@ export default function EditChildPage() {
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" asChild className="gap-1">
             <Link href={`/dashboard/parent/children/${id}`}>
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
               {t.childForm.backToList}
             </Link>
           </Button>

@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/feature-flags";
 import { useFeatureFlags } from "@/lib/feature-flags/feature-flags-context";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import type { Dictionary } from "@/lib/i18n/get-dictionary";
 
 interface Section {
@@ -65,7 +66,7 @@ export default function AdminSettingsPage() {
       // Pull the saved value back so the switch reflects the server, not the click.
       await refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t.admin.settings.saveError);
+      setError(getErrorMessage(err, t, t.admin.settings.saveError));
     } finally {
       setSavingKey(null);
     }
@@ -78,7 +79,7 @@ export default function AdminSettingsPage() {
       await featureFlagsApi.update(key, enabled);
       await loadSettings();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t.admin.settings.saveError);
+      setError(getErrorMessage(err, t, t.admin.settings.saveError));
     } finally {
       setSavingKey(null);
     }

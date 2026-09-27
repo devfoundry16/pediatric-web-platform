@@ -10,6 +10,8 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { formatDurationSeconds } from "@/lib/i18n/format-unit";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { coursesApi } from "@/lib/api/courses";
 import type { CourseDetail, CourseEnrollment } from "@/types/courses";
 import { toast } from "sonner";
@@ -25,20 +27,13 @@ import {
   Eye,
 } from "lucide-react";
 
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  if (m === 0) return `${s}s`;
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
-}
-
 interface PageProps {
   params: Promise<{ courseId: string }>;
 }
 
 export default function CourseDetailPage({ params }: PageProps) {
   const { courseId } = use(params);
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const tc = t.courses;
 
   const [course, setCourse] = useState<CourseDetail | null>(null);
@@ -90,8 +85,7 @@ export default function CourseDetailPage({ params }: PageProps) {
       toast.success(tc.enrolled);
       await loadData();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : tc.enrollError;
+      const message = getErrorMessage(err, t, tc.enrollError);
       toast.error(message);
     } finally {
       setIsEnrolling(false);
@@ -110,7 +104,7 @@ export default function CourseDetailPage({ params }: PageProps) {
           href="/dashboard/parent/courses"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
           {tc.backToCourses}
         </Link>
 
@@ -140,7 +134,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                   </Badge>
                   {isEnrolled && enrollment?.completed_at && (
                     <Badge variant="default" className="bg-green-600">
-                      <CheckCircle className="mr-1 h-3 w-3" />
+                      <CheckCircle className="me-1 h-3 w-3" />
                       {tc.courseCompleted}
                     </Badge>
                   )}
@@ -211,7 +205,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                           </span>
                           {lesson.duration_seconds > 0 && (
                             <span className="text-xs text-muted-foreground">
-                              {formatDuration(lesson.duration_seconds)}
+                              {formatDurationSeconds(dateLocale, lesson.duration_seconds)}
                             </span>
                           )}
                         </div>
@@ -219,7 +213,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                         <div className="flex items-center gap-2 shrink-0">
                           {lesson.is_preview && !isEnrolled && (
                             <Badge variant="outline" className="text-xs">
-                              <Eye className="mr-1 h-3 w-3" />
+                              <Eye className="me-1 h-3 w-3" />
                               {tc.preview}
                             </Badge>
                           )}
@@ -275,7 +269,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                             course.course_lessons[0]?.id ?? ""
                           }`}
                         >
-                          <Play className="mr-2 h-4 w-4" />
+                          <Play className="me-2 h-4 w-4" />
                           {progressPercent > 0 ? tc.continueLearning : tc.startLearning}
                         </Link>
                       </Button>
@@ -293,7 +287,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                         disabled={isEnrolling}
                       >
                         {isEnrolling ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          <Loader2 className="me-2 h-4 w-4 animate-spin" />
                         ) : null}
                         {course.is_free ? tc.enrollFree : tc.enrollNow}
                       </Button>

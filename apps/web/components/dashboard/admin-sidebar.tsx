@@ -6,6 +6,7 @@ import { useAuthStore } from "@/lib/stores/auth-store";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import type { Dictionary } from "@/lib/i18n/get-dictionary";
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { LanguageSwitcher } from "@/components/language-switcher";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -99,15 +100,20 @@ export function AdminSidebar() {
       </nav>
 
       <div className="border-t border-border p-3">
-        <button
-          type="button"
-          onClick={handleSignOut}
-          disabled={isSigningOut}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-        >
-          <LogOut className="h-4 w-4 shrink-0" />
-          {isSigningOut ? t.admin.nav.signingOut : t.admin.nav.signOut}
-        </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <LanguageSwitcher />
+          </div>
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={isSigningOut}
+            className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          >
+            <LogOut className="h-4 w-4 shrink-0" />
+            {isSigningOut ? t.admin.nav.signingOut : t.admin.nav.signOut}
+          </button>
+        </div>
       </div>
     </aside>
   );

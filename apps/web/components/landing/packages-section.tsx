@@ -82,7 +82,7 @@ export function PackagesSection() {
                     className="w-full gap-2 bg-transparent"
                   >
                     {t.common.bookNow}
-                    <ArrowRight className="h-4 w-4" />
+                    <ArrowRight className="h-4 w-4 rtl:rotate-180" />
                   </Button>
                 </Link>
               </CardContent>

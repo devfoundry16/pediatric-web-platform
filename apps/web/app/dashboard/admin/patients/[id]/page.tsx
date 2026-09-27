@@ -87,7 +87,7 @@ export default function AdminPatientDetailPage() {
       <div className="flex items-center gap-2">
         <Button variant="ghost" size="sm" asChild className="gap-1">
           <Link href="/dashboard/admin/patients">
-            <ChevronLeft className="h-4 w-4" /> {t.admin.nav.patients}
+            <ChevronLeft className="h-4 w-4 rtl:rotate-180" /> {t.admin.nav.patients}
           </Link>
         </Button>
       </div>
@@ -180,9 +180,9 @@ export default function AdminPatientDetailPage() {
                     <li key={r.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
                       <div>
                         <span className="font-medium text-foreground">{r.title}</span>
-                        <span className="ml-2 text-xs text-muted-foreground capitalize">{getRecordTypeLabel(t, r.record_type)}</span>
+                        <span className="ms-2 text-xs text-muted-foreground capitalize">{getRecordTypeLabel(t, r.record_type)}</span>
                       </div>
-                      <div className="text-right text-xs text-muted-foreground">
+                      <div className="text-end text-xs text-muted-foreground">
                         <div>{r.doctors?.full_name ?? "—"}</div>
                         <div>{formatDateInTimezone(r.created_at, timezone, dateLocale)}</div>
                       </div>
@@ -210,7 +210,7 @@ export default function AdminPatientDetailPage() {
                       <a href={f.signed_url ?? "#"} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline truncate max-w-xs">
                         {f.file_name}
                       </a>
-                      <div className="text-right text-xs text-muted-foreground">
+                      <div className="text-end text-xs text-muted-foreground">
                         <div>{f.file_type}</div>
                         <div>{f.file_size_bytes ? t.admin.patients.fileSizeKb.replace("{size}", String(Math.round(f.file_size_bytes / 1024))) : ""}</div>
                       </div>
@@ -230,7 +230,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-2">
       <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-foreground text-right">{value}</span>
+      <span className="font-medium text-foreground text-end">{value}</span>
     </div>
   );
 }

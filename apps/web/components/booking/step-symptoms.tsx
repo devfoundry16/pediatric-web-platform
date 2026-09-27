@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { formatFileSize } from "@/lib/i18n/format-unit";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,6 @@ import { FileText, Loader2, Paperclip, X } from "lucide-react";
 import {
   ACCEPT_ATTRIBUTE,
   MAX_FILES,
-  describeFileSize,
   discardBookingAttachment,
   rejectionReason,
   uploadBookingAttachment,
@@ -32,7 +32,7 @@ export function StepSymptoms({
   attachments,
   onAttachmentsChange,
 }: StepSymptomsProps) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const b = t.booking;
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -114,7 +114,7 @@ export function StepSymptoms({
                   <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
                   <span className="truncate text-sm text-foreground">{file.fileName}</span>
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {describeFileSize(file.fileSizeBytes)}
+                    {formatFileSize(dateLocale, file.fileSizeBytes)}
                   </span>
                 </div>
                 <button

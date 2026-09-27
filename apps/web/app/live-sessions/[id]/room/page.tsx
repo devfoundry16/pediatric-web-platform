@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { translateApiMessage } from "@/lib/i18n/error-message";
 import { liveSessionsApi } from "@/lib/api/live-sessions";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { formatDateInTimezone, formatTimeInTimezone } from "@/lib/timezone";
@@ -76,10 +77,8 @@ export default function SessionRoomPage() {
       setLoading(false);
 
       // Fire join without blocking — Daily emits events for errors internally.
-      call.join({ url: joinInfo.roomUrl, token: joinInfo.token }).catch((err: unknown) => {
-        const msg =
-          err instanceof Error ? err.message : "Failed to join room";
-        setError(msg);
+      call.join({ url: joinInfo.roomUrl, token: joinInfo.token }).catch(() => {
+        setError("");
       });
     },
     [params.id, router]
@@ -94,10 +93,9 @@ export default function SessionRoomPage() {
         const DailyIframe = (await import("@daily-co/daily-js")).default as unknown as DailyFactory;
         if (!mounted) return;
         await startCall(DailyIframe);
-      } catch (err: unknown) {
+      } catch {
         if (!mounted) return;
-        const msg = err instanceof Error ? err.message : "Failed to join session";
-        setError(msg);
+        setError("");
         setLoading(false);
       }
     }
@@ -113,22 +111,16 @@ export default function SessionRoomPage() {
     };
   }, [startCall]);
 
-  // Known errors (the API's join-gate messages and our own fallbacks) are
-  // translated here at render rather than in the callbacks: the dictionary
-  // swaps shortly after mount for a stored non-default locale, and having it
-  // in the callbacks' hook deps would tear down and re-join the call.
+  // `error` holds the API's untranslated message ("" for any other failure).
+  // It is translated here at render rather than in the callbacks: the
+  // dictionary swaps shortly after mount for a stored non-default locale, and
+  // having it in the callbacks' hook deps would tear down and re-join the call.
   const displayError =
     error === null
       ? null
       : opensAt
         ? t.liveSessions.joinNotOpenYet
-        : error === "This session has ended"
-          ? t.liveSessions.joinEnded
-          : error === "Failed to join room" ||
-              error === "Failed to join session" ||
-              error === "Could not join the session"
-            ? t.liveSessions.joinFailed
-            : error;
+        : (translateApiMessage(t, error) ?? t.liveSessions.joinFailed);
 
   return (
     <div className="flex h-screen flex-col bg-background">
@@ -145,7 +137,7 @@ export default function SessionRoomPage() {
             router.push(`/live-sessions/${params.id}`);
           }}
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4 rtl:rotate-180" />
           {t.common.back}
         </Button>
         <span className="text-sm font-medium text-foreground">

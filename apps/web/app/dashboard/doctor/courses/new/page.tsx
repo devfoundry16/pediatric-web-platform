@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { coursesApi } from "@/lib/api/courses";
 import { toast } from "sonner";
 import { ChevronLeft, Loader2, AlertCircle } from "lucide-react";
@@ -45,7 +46,7 @@ export default function NewCoursePage() {
       toast.success(tc.courseCreated);
       router.push(`/dashboard/doctor/courses/${course.id}`);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : tc.createError;
+      const message = getErrorMessage(err, t, tc.createError);
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -59,7 +60,7 @@ export default function NewCoursePage() {
           href="/dashboard/doctor/courses"
           className="flex w-fit items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 rtl:rotate-180" />
           {t.common.back}
         </Link>
 
@@ -143,7 +144,7 @@ export default function NewCoursePage() {
 
               <div className="flex items-center gap-3 pt-2">
                 <Button type="submit" disabled={isSubmitting || !title.trim()}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {isSubmitting && <Loader2 className="me-2 h-4 w-4 animate-spin" />}
                   {tc.saveCourse}
                 </Button>
                 <Button asChild variant="outline" type="button">

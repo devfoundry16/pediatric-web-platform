@@ -205,12 +205,12 @@ function AdminAppointmentsContent() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.booking.dateTime}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.appointments.colPatientParent}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.doctor}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.type}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.common.status}</th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t.admin.common.amount}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.booking.dateTime}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.appointments.colPatientParent}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.common.doctor}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.common.type}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.common.status}</th>
+                    <th className="px-4 py-3 text-start font-medium text-muted-foreground">{t.admin.common.amount}</th>
                     <th className="px-4 py-3" />
                   </tr>
                 </thead>
@@ -258,17 +258,17 @@ function AdminAppointmentsContent() {
                             {!["completed", "cancelled"].includes(a.status) && (
                               <>
                                 <DropdownMenuItem onClick={() => quickAction(a.id, "complete")}>
-                                  <CheckCircle className="mr-2 h-4 w-4 text-green-600" /> {t.admin.appointments.markCompleted}
+                                  <CheckCircle className="me-2 h-4 w-4 text-green-600" /> {t.admin.appointments.markCompleted}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => quickAction(a.id, "no_show")}>
-                                  <UserMinus className="mr-2 h-4 w-4 text-orange-500" /> {t.admin.appointments.markNoShow}
+                                  <UserMinus className="me-2 h-4 w-4 text-orange-500" /> {t.admin.appointments.markNoShow}
                                 </DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem onClick={() => { setActionAppt(a); setActionType("reschedule"); setRescheduleDate(""); setRescheduleTime(""); }}>
-                                  <CalendarClock className="mr-2 h-4 w-4" /> {t.appointments.reschedule}
+                                  <CalendarClock className="me-2 h-4 w-4" /> {t.appointments.reschedule}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => { setActionAppt(a); setActionType("cancel"); setCancelReason(""); }} className="text-destructive">
-                                  <XCircle className="mr-2 h-4 w-4" /> {t.common.cancel}
+                                  <XCircle className="me-2 h-4 w-4" /> {t.common.cancel}
                                 </DropdownMenuItem>
                               </>
                             )}

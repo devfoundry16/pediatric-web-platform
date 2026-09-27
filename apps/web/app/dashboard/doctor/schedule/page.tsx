@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -431,12 +432,7 @@ export default function DoctorSchedulePage() {
       );
       toast.success(d.holidayAdded);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data
-          ?.error ?? d.loadError;
-      toast.error(
-        msg.includes("already") ? d.holidayDuplicate : msg
-      );
+      toast.error(getErrorMessage(err, t, d.loadError));
       throw err;
     }
   }

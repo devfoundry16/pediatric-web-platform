@@ -210,7 +210,8 @@ export const appointmentsApi = {
         : undefined;
       return {
         ok: false,
-        error: body?.error ?? "Could not join the consultation",
+        // The API's message, untranslated; "" when there is none.
+        error: body?.error ?? "",
         opensAt: body?.opensAt,
       };
     }

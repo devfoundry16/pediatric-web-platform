@@ -4,6 +4,7 @@ import * as React from "react"
 import { CheckIcon, ChevronsUpDownIcon } from "lucide-react"
 import * as RPNInput from "react-phone-number-input"
 import flags from "react-phone-number-input/flags"
+import ar from "react-phone-number-input/locale/ar.json"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -41,10 +42,13 @@ const PhoneInput = React.forwardRef<
   React.ElementRef<typeof RPNInput.default>,
   PhoneInputProps
 >(({ className, onChange, searchPlaceholder, emptyText, ...props }, ref) => {
+  const { locale } = useI18n()
   return (
     <RPNInput.default
       ref={ref}
       className={cn("flex", className)}
+      // Country names in the selector; the library defaults to English.
+      labels={locale === "ar" ? ar : undefined}
       flagComponent={FlagComponent}
       countrySelectComponent={(selectProps) => (
         <CountrySelect
@@ -69,6 +73,9 @@ const InputComponent = React.forwardRef<
   ({ className, ...props }, ref) => (
     <Input
       className={cn("rounded-s-none rtl:rounded-e-none rtl:rounded-s-md", className)}
+      // Phone numbers read left to right in Arabic too; without this the
+      // leading "+" jumps to the end.
+      dir="ltr"
       {...props}
       ref={ref}
     />
@@ -116,7 +123,7 @@ function CountrySelect({
           type="button"
           variant="outline"
           className={cn(
-            "flex gap-1 rounded-e-none rtl:rounded-s-none rtl:rounded-e-md border-r-0 rtl:border-r rtl:border-l-0 px-3 focus:z-10"
+            "flex gap-1 rounded-e-none border-e-0 px-3 focus:z-10"
           )}
           disabled={disabled}
         >
@@ -126,7 +133,7 @@ function CountrySelect({
           />
           <ChevronsUpDownIcon
             className={cn(
-              "-mr-1 size-4 opacity-50",
+              "-me-1 size-4 opacity-50",
               disabled ? "hidden" : "opacity-100"
             )}
           />
@@ -152,12 +159,12 @@ function CountrySelect({
                         countryName={option.label}
                       />
                       <span className="flex-1 text-sm">{option.label}</span>
-                      <span className="text-muted-foreground text-sm">
+                      <span className="text-muted-foreground text-sm" dir="ltr">
                         {`+${RPNInput.getCountryCallingCode(option.value)}`}
                       </span>
                       <CheckIcon
                         className={cn(
-                          "ml-auto size-4",
+                          "ms-auto size-4",
                           option.value === value ? "opacity-100" : "opacity-0"
                         )}
                       />

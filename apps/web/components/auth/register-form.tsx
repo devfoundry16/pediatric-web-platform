@@ -10,6 +10,7 @@ import { Eye, EyeOff } from "lucide-react";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
 import type { Dictionary } from "@/lib/i18n/get-dictionary";
+import { getAuthErrorMessage } from "@/lib/i18n/error-message";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,7 +96,7 @@ export function RegisterForm() {
     >
       {error && (
         <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
+          {getAuthErrorMessage(t, error)}
         </p>
       )}
 
