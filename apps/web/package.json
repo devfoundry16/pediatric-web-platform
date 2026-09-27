@@ -6,7 +6,8 @@
     "dev": "next dev -p 3333",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "node scripts/check-i18n.mjs && eslint",
+    "check-i18n": "node scripts/check-i18n.mjs",
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
