@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { coursesApi } from "@/lib/api/courses";
 import { downloadCourseCertificate } from "@/lib/course-certificate-download";
 import { useAuthStore } from "@/lib/stores/auth-store";
@@ -80,9 +81,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
         setCourseCompleted(true);
       }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : tRef.current.courses.loadLessonError;
-      setError(message);
+      setError(getErrorMessage(err, tRef.current, tRef.current.courses.loadLessonError));
     } finally {
       setIsLoading(false);
     }
