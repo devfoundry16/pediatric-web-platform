@@ -8,6 +8,7 @@ import { LiveSessionForm } from "@/components/dashboard/doctor/live-session-form
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { calendarDayInTimezone, clockTimeInTimezone } from "@/lib/timezone";
 import { liveSessionsApi, type GroupSession } from "@/lib/api/live-sessions";
@@ -133,10 +134,7 @@ export default function EditLiveSessionPage({ params }: PageProps) {
                 toast.success(t.liveSessions.sessionUpdated);
                 router.push("/dashboard/doctor/live-sessions");
               } catch (err: unknown) {
-                const msg =
-                  err instanceof Error
-                    ? err.message
-                    : t.liveSessions.updateFailed;
+                const msg = getErrorMessage(err, t, t.liveSessions.updateFailed);
                 toast.error(msg);
               }
             }}

@@ -1,13 +1,15 @@
 "use client";
 
 import { create } from "zustand";
-import type { User, Session } from "@supabase/supabase-js";
+import { isAuthRetryableFetchError, type AuthError, type User, type Session } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
+import { AUTH_ERROR_CODES } from "@/lib/i18n/error-message";
 
 interface AuthState {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
+  /** An error code, not a message: display it with getAuthErrorMessage(). */
   error: string | null;
 }
 
@@ -30,6 +32,7 @@ interface AuthActions {
     fullName: string,
     phone: string,
   ) => Promise<{ error: string | null }>;
+  // The `error` these return is a code, as with AuthState.error.
   updateUserEmail: (email: string) => Promise<{ error: string | null }>;
   updateUserPassword: (password: string) => Promise<{ error: string | null }>;
 }
@@ -38,10 +41,19 @@ type AuthStore = AuthState & AuthActions;
 
 /**
  * Sentinel stored in `error` when sign-in is refused because the account was
- * deactivated. The store has no access to the i18n dictionary, so the form
- * translates this rather than showing a raw (English-only) Supabase message.
+ * deactivated.
  */
-export const ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED";
+export const ACCOUNT_DEACTIVATED = AUTH_ERROR_CODES.accountDeactivated;
+
+/**
+ * The store has no access to the i18n dictionary, so it keeps Supabase's error
+ * code and the UI translates it (getAuthErrorMessage). Supabase's messages are
+ * English-only.
+ */
+function errorCode(error: AuthError): string {
+  if (isAuthRetryableFetchError(error)) return "network";
+  return error.code ?? "unexpected_failure";
+}
 
 export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
@@ -93,11 +105,11 @@ export const useAuthStore = create<AuthStore>((set) => ({
     });
 
     if (error) {
-      // Deactivating an account bans it in auth.users, which Supabase reports
-      // as a generic error. Map it so the UI can localize it.
+      // Deactivating an account bans it in auth.users. Older Supabase
+      // versions report that without the user_banned code.
       set({
         isLoading: false,
-        error: /banned/i.test(error.message) ? ACCOUNT_DEACTIVATED : error.message,
+        error: /banned/i.test(error.message) ? ACCOUNT_DEACTIVATED : errorCode(error),
       });
       return;
     }
@@ -146,7 +158,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     // On success the browser is redirected to Google's consent screen, so no
     // further state update runs here. Only surface a failure to start the flow.
     if (error) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: errorCode(error) });
     }
   },
 
@@ -173,7 +185,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     });
 
     if (error) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: errorCode(error) });
       return;
     }
 
@@ -196,7 +208,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const { error } = await supabase.auth.signOut();
 
     if (error) {
-      set({ isLoading: false, error: error.message });
+      set({ isLoading: false, error: errorCode(error) });
       return;
     }
 
@@ -211,7 +223,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     } = await supabase.auth.getUser();
 
     if (getUserError || !user) {
-      return { error: "Not signed in" };
+      return { error: AUTH_ERROR_CODES.notSignedIn };
     }
 
     const { data, error } = await supabase.auth.updateUser({
@@ -223,7 +235,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     });
 
     if (error) {
-      return { error: error.message };
+      return { error: errorCode(error) };
     }
 
     if (data.user) {
@@ -248,7 +260,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     );
 
     if (error) {
-      return { error: error.message };
+      return { error: errorCode(error) };
     }
 
     if (data.user) {
@@ -266,7 +278,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     const { data, error } = await supabase.auth.updateUser({ password });
 
     if (error) {
-      return { error: error.message };
+      return { error: errorCode(error) };
     }
 
     if (data.user) {

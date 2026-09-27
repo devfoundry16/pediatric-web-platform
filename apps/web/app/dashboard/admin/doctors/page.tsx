@@ -24,6 +24,7 @@ import {
   type CreateDoctorPayload,
 } from "@/lib/api/admin";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 
 /** Shape shared by the create and edit dialogs. */
 interface DoctorForm {
@@ -45,12 +46,6 @@ const emptyForm = (): DoctorForm => ({
   account_email: "",
   account_password: "",
 });
-
-function apiError(err: unknown, fallback: string): string {
-  return (
-    (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? fallback
-  );
-}
 
 export default function AdminDoctorsPage() {
   const { dictionary: t } = useI18n();
@@ -114,7 +109,7 @@ export default function AdminDoctorsPage() {
       setCreateForm(emptyForm());
       await load();
     } catch (err) {
-      toast.error(apiError(err, t.admin.doctors.addError));
+      toast.error(getErrorMessage(err, t, t.admin.doctors.addError));
     } finally {
       setSaving(false);
     }
@@ -135,7 +130,7 @@ export default function AdminDoctorsPage() {
       setEditing(null);
       await load();
     } catch (err) {
-      toast.error(apiError(err, t.admin.doctors.updateError));
+      toast.error(getErrorMessage(err, t, t.admin.doctors.updateError));
     } finally {
       setSaving(false);
     }
@@ -155,7 +150,7 @@ export default function AdminDoctorsPage() {
       setLinkPassword("");
       await load();
     } catch (err) {
-      toast.error(apiError(err, t.admin.doctors.linkError));
+      toast.error(getErrorMessage(err, t, t.admin.doctors.linkError));
     } finally {
       setSaving(false);
     }
@@ -167,7 +162,7 @@ export default function AdminDoctorsPage() {
       toast.success(doctor.is_active ? t.admin.doctors.deactivated : t.admin.doctors.activated);
       await load();
     } catch (err) {
-      toast.error(apiError(err, t.admin.doctors.toggleError));
+      toast.error(getErrorMessage(err, t, t.admin.doctors.toggleError));
     }
   };
 

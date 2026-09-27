@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { liveSessionsApi, type GroupSession } from "@/lib/api/live-sessions";
 import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
@@ -486,7 +487,7 @@ export default function DoctorLiveSessionsPage() {
       );
       toast.success(t.liveSessions.statusEnded);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t.liveSessions.endFailed;
+      const msg = getErrorMessage(err, t, t.liveSessions.endFailed);
       toast.error(msg);
     }
   }
@@ -501,8 +502,7 @@ export default function DoctorLiveSessionsPage() {
       );
       toast.success(t.liveSessions.sessionRescheduled);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : t.liveSessions.rescheduleFailed;
+      const msg = getErrorMessage(err, t, t.liveSessions.rescheduleFailed);
       toast.error(msg);
     }
   }
@@ -518,8 +518,7 @@ export default function DoctorLiveSessionsPage() {
       );
       toast.success(t.liveSessions.sessionCancelled);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : t.liveSessions.cancelFailed;
+      const msg = getErrorMessage(err, t, t.liveSessions.cancelFailed);
       toast.error(msg);
     }
   }
@@ -534,8 +533,7 @@ export default function DoctorLiveSessionsPage() {
       );
       toast.success(t.liveSessions.sessionPublished);
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : t.liveSessions.publishFailed;
+      const msg = getErrorMessage(err, t, t.liveSessions.publishFailed);
       toast.error(msg);
     }
   }

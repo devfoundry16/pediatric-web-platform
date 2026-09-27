@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { adminApi, type AdminUser } from "@/lib/api/admin";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { useViewerTimezone } from "@/hooks/use-viewer-timezone";
 import { formatDateInTimezone } from "@/lib/timezone";
 
@@ -47,13 +48,6 @@ type RoleTab = (typeof ROLE_TABS)[number];
 
 const ROLES = ["parent", "doctor", "admin"] as const;
 type Role = (typeof ROLES)[number];
-
-// Surface the backend's guard messages (e.g. "At least one active admin must
-// remain.") instead of a generic failure.
-function extractError(e: unknown, fallback: string): string {
-  const resp = (e as { response?: { data?: { error?: string } } })?.response;
-  return resp?.data?.error ?? fallback;
-}
 
 export default function AdminUsersPage() {
   const { dictionary: t, dateLocale } = useI18n();
@@ -118,7 +112,7 @@ export default function AdminUsersPage() {
       await adminApi.updateUser(user.id, { is_active: !user.is_active });
       load();
     } catch (e) {
-      toast.error(extractError(e, t.admin.users.updateError));
+      toast.error(getErrorMessage(e, t, t.admin.users.updateError));
     }
   };
 
@@ -147,7 +141,7 @@ export default function AdminUsersPage() {
       setEditing(null);
       load();
     } catch (e) {
-      toast.error(extractError(e, t.admin.users.updateError));
+      toast.error(getErrorMessage(e, t, t.admin.users.updateError));
     } finally {
       setIsSaving(false);
     }
@@ -179,7 +173,7 @@ export default function AdminUsersPage() {
       setCreating(false);
       load();
     } catch (e) {
-      toast.error(extractError(e, t.admin.users.createError));
+      toast.error(getErrorMessage(e, t, t.admin.users.createError));
     } finally {
       setIsCreating(false);
     }
@@ -194,7 +188,7 @@ export default function AdminUsersPage() {
       setDeleting(null);
       load();
     } catch (e) {
-      toast.error(extractError(e, t.admin.users.deleteError));
+      toast.error(getErrorMessage(e, t, t.admin.users.deleteError));
     } finally {
       setIsDeleting(false);
     }

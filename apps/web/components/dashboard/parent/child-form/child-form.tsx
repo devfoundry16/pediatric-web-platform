@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
-import axios from "axios";
 import { Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +14,7 @@ import { StepIndicator } from "@/components/forms/step-indicator";
 import { setZodErrors } from "@/lib/forms/set-zod-errors";
 import { childrenApi } from "@/lib/api/children";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import {
   createChildProfileFormSchema,
   createChildFormStepSchemas,
@@ -95,12 +95,7 @@ export function ChildForm({
       router.push("/dashboard/parent/children");
       router.refresh();
     } catch (e: unknown) {
-      if (axios.isAxiosError(e)) {
-        const err = e.response?.data as { error?: string } | undefined;
-        toast.error(err?.error ?? e.message ?? t.childForm.requestFailed);
-      } else {
-        toast.error(t.childForm.requestFailed);
-      }
+      toast.error(getErrorMessage(e, t, t.childForm.requestFailed));
     }
   };
 

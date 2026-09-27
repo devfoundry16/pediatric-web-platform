@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { LiveSessionForm } from "@/components/dashboard/doctor/live-session-form";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { liveSessionsApi } from "@/lib/api/live-sessions";
 import { toast } from "sonner";
 import { ArrowLeft } from "lucide-react";
@@ -37,8 +38,7 @@ export default function NewLiveSessionPage() {
               toast.success(t.liveSessions.sessionCreated);
               router.push("/dashboard/doctor/live-sessions");
             } catch (err: unknown) {
-              const msg =
-                err instanceof Error ? err.message : t.liveSessions.createFailed;
+              const msg = getErrorMessage(err, t, t.liveSessions.createFailed);
               toast.error(msg);
             }
           }}

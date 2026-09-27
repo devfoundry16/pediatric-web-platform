@@ -15,6 +15,7 @@ import {
 import { Plus, Pencil, Loader2 } from "lucide-react";
 import { adminApi, type ConsultationType } from "@/lib/api/admin";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 
 type FormData = Omit<ConsultationType, "id" | "created_at" | "updated_at">;
 
@@ -83,7 +84,7 @@ export default function AdminConsultationTypesPage() {
       setDialogOpen(false);
       load();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t.admin.consultationTypes.saveError;
+      const msg = getErrorMessage(err, t, t.admin.consultationTypes.saveError);
       setError(msg);
     } finally {
       setIsSaving(false);

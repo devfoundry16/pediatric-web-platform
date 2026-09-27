@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { coursesApi } from "@/lib/api/courses";
 import { toast } from "sonner";
 import { ChevronLeft, Loader2, AlertCircle } from "lucide-react";
@@ -45,7 +46,7 @@ export default function NewCoursePage() {
       toast.success(tc.courseCreated);
       router.push(`/dashboard/doctor/courses/${course.id}`);
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : tc.createError;
+      const message = getErrorMessage(err, t, tc.createError);
       setError(message);
     } finally {
       setIsSubmitting(false);

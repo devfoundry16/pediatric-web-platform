@@ -64,7 +64,10 @@
     "tzRegionAmericas": "Americas",
     "tzRegionOceania": "Oceania",
     "tzRegionOther": "Other",
-    "tzRegionDetected": "Detected"
+    "tzRegionDetected": "Detected",
+    "lastUpdated": "Last updated: {date}",
+    "readInEnglish": "Read the English version",
+    "legalTranslationNote": "This is a translation. If it differs from the English version, the English version applies."
   },
   "landing": {
     "heroTitle": "Expert Pediatric Care for Your Child",
@@ -689,7 +692,14 @@
     "saveLessonError": "Failed to save lesson.",
     "deleteLessonError": "Failed to delete lesson.",
     "markCompleteError": "Failed to mark lesson as complete.",
-    "enrollError": "Enrollment failed. Please try again."
+    "enrollError": "Enrollment failed. Please try again.",
+    "certificateHeading": "Certificate of Completion",
+    "certificateCertify": "This is to certify that",
+    "certificatePresentedTo": "presented to",
+    "certificateCompleted": "has successfully completed the course",
+    "certificateInstructedBy": "Instructed by {name}",
+    "certificateDateLabel": "Date of Completion",
+    "certificateParticipant": "Participant"
   },
   "packages": {
     "title": "Consultation Packages",
@@ -1232,5 +1242,46 @@
     "participantsMin": "At least 2 participants",
     "participantsMax": "Maximum 500 participants",
     "priceNegative": "Price cannot be negative"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "network": "Could not reach the server. Check your connection and try again.",
+    "tooManyRequests": "Too many attempts. Please wait a few minutes and try again.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "auth": {
+      "invalidCredentials": "Incorrect email or password.",
+      "emailNotConfirmed": "Please confirm your email address before signing in. Check your inbox for the link.",
+      "emailExists": "An account with this email already exists.",
+      "weakPassword": "This password is too weak. Choose a longer password with a mix of letters and numbers.",
+      "samePassword": "The new password must be different from your current one.",
+      "invalidEmail": "Please enter a valid email address.",
+      "signupDisabled": "New sign-ups are currently closed.",
+      "reauthNeeded": "For your security, please sign in again before making this change."
+    },
+    "api": {
+      "slotUnavailable": "This time slot is no longer available. Please choose another time.",
+      "alreadyEnrolled": "You are already enrolled in this course.",
+      "mustEnroll": "Enroll in this course to track your progress.",
+      "accountLinkedToDoctor": "That account is already linked to another doctor.",
+      "sessionEnded": "This session has already ended.",
+      "sessionFull": "This session is full.",
+      "sessionUnavailable": "This session is no longer available.",
+      "alreadyRegistered": "You are already registered for this session.",
+      "youAreHost": "You are the host of this session.",
+      "notAuthorizedToJoin": "You are not allowed to join this consultation.",
+      "appointmentNoLongerScheduled": "This appointment is no longer scheduled.",
+      "bookingAwaitingPayment": "This booking is still awaiting payment.",
+      "paymentNotCompleted": "The payment was not completed.",
+      "consultationNotReviewed": "This consultation has not been reviewed yet.",
+      "childNotFound": "This child profile was not found.",
+      "deleteOwnFilesOnly": "You can only delete files you uploaded.",
+      "lastAdmin": "At least one active admin must remain.",
+      "cannotDeactivateSelf": "You cannot deactivate your own account.",
+      "cannotDeleteSelf": "You cannot delete your own account.",
+      "cannotRemoveOwnAdmin": "You cannot remove your own admin role.",
+      "passwordTooShort": "The password must be at least 6 characters.",
+      "endAfterStart": "The end time must be after the start time.",
+      "invalidTimezone": "Please choose a valid time zone."
+    }
   }
 }

@@ -12,6 +12,7 @@ import { BrandLogo } from "@/components/layout/brand-logo";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
 import type { Dictionary } from "@/lib/i18n/get-dictionary";
+import { getAuthErrorMessage } from "@/lib/i18n/error-message";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { Button } from "@/components/ui/button";
@@ -64,7 +65,7 @@ export default function ResetPasswordPage() {
     setSubmitting(true);
     const { error } = await updateUserPassword(values.password);
     if (error) {
-      toast.error(error);
+      toast.error(getAuthErrorMessage(t, error));
       setSubmitting(false);
       return;
     }

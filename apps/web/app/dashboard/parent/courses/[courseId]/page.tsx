@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { coursesApi } from "@/lib/api/courses";
 import type { CourseDetail, CourseEnrollment } from "@/types/courses";
 import { toast } from "sonner";
@@ -90,8 +91,7 @@ export default function CourseDetailPage({ params }: PageProps) {
       toast.success(tc.enrolled);
       await loadData();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : tc.enrollError;
+      const message = getErrorMessage(err, t, tc.enrollError);
       toast.error(message);
     } finally {
       setIsEnrolling(false);

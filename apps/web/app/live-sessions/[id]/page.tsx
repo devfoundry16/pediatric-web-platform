@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getErrorMessage } from "@/lib/i18n/error-message";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { SiteHeader } from "@/components/layout/site-header";
 import { SiteFooter } from "@/components/layout/site-footer";
@@ -154,8 +155,7 @@ export default function SessionDetailPage() {
         setSuccessMsg(t.liveSessions.alreadyRegistered);
       }
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : t.liveSessions.registrationFailed;
+      const msg = getErrorMessage(err, t, t.liveSessions.registrationFailed);
       setError(msg);
     } finally {
       setRegistering(false);

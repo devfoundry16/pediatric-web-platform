@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { useI18n } from "@/lib/i18n/i18n-context";
 import type { Dictionary } from "@/lib/i18n/get-dictionary";
+import { getAuthErrorMessage } from "@/lib/i18n/error-message";
 import { useAuthStore } from "@/lib/stores/auth-store";
 import { profileApi } from "@/lib/api/profile";
 import { Button } from "@/components/ui/button";
@@ -96,7 +97,7 @@ export function DashboardProfile({ role }: DashboardProfileProps) {
   const onPersonalSubmit = async (values: PersonalValues) => {
     const { error } = await updateProfileMetadata(values.fullName, values.phone);
     if (error) {
-      toast.error(error);
+      toast.error(getAuthErrorMessage(t, error));
       return;
     }
     try {
@@ -111,7 +112,7 @@ export function DashboardProfile({ role }: DashboardProfileProps) {
   const onEmailSubmit = async (values: EmailValues) => {
     const { error } = await updateUserEmail(values.email);
     if (error) {
-      toast.error(error);
+      toast.error(getAuthErrorMessage(t, error));
       return;
     }
     toast.success(p.emailUpdateSent);
@@ -120,7 +121,7 @@ export function DashboardProfile({ role }: DashboardProfileProps) {
   const onPasswordSubmit = async (values: PasswordValues) => {
     const { error } = await updateUserPassword(values.newPassword);
     if (error) {
-      toast.error(error);
+      toast.error(getAuthErrorMessage(t, error));
       return;
     }
     toast.success(p.passwordUpdated);
