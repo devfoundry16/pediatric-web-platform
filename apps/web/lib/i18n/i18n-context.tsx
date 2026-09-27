@@ -61,7 +61,7 @@ export function I18nProvider({
       const stored = localStorage.getItem("locale");
       if (stored && locales.includes(stored as Locale) && stored !== locale) {
         void setLocale(stored as Locale).catch((err) => {
-          // A failed dictionary chunk load falls back to English; leave a
+          // A failed dictionary chunk load keeps the default locale; leave a
           // trace so "the site ignores my language" reports are debuggable.
           console.warn("Failed to restore saved locale", err);
         });
