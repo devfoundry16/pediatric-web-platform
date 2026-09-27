@@ -19,7 +19,7 @@ export default function ChildDetailPage() {
   const [profile, setProfile] = useState<ChildProfile | null>(null);
   const [loading, setLoading] = useState(() => !invalidId);
   const [error, setError] = useState<string | null>(() =>
-    invalidId ? "Invalid id" : null
+    invalidId ? t.childForm.loadError : null
   );
 
   useEffect(() => {

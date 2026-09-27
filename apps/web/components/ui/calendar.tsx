@@ -11,7 +11,9 @@ import {
   getDefaultClassNames,
   type DayButton,
 } from "react-day-picker"
+import { ar } from "react-day-picker/locale/ar"
 
+import { useI18n } from "@/lib/i18n/i18n-context"
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 
@@ -28,20 +30,23 @@ function Calendar({
   buttonVariant?: React.ComponentProps<typeof Button>["variant"]
 }) {
   const defaultClassNames = getDefaultClassNames()
+  const { locale, dir, dateLocale } = useI18n()
 
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
+      // Month and weekday names, and the day buttons' aria labels.
+      locale={locale === "ar" ? ar : undefined}
+      // DayPicker mirrors its own nav chevrons for rtl.
+      dir={dir}
       className={cn(
         "bg-background group/calendar p-3 [--cell-size:--spacing(8)] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
-        String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
-        String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
         className
       )}
       captionLayout={captionLayout}
       formatters={{
         formatMonthDropdown: (date) =>
-          date.toLocaleString("default", { month: "short" }),
+          date.toLocaleString(dateLocale, { month: "short" }),
         ...formatters,
       }}
       classNames={{

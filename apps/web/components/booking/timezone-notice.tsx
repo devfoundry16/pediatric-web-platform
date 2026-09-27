@@ -21,8 +21,8 @@ export function TimezoneNotice({
   variant = "default",
   className,
 }: TimezoneNoticeProps) {
-  const { dictionary: t } = useI18n();
-  const label = formatTimezoneLabel(timezone);
+  const { dictionary: t, dateLocale } = useI18n();
+  const label = formatTimezoneLabel(timezone, dateLocale);
 
   if (variant === "compact") {
     return (

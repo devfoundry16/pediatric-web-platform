@@ -251,7 +251,7 @@ function IntegrationsPageInner() {
                               ? t.admin.common.roleDoctor
                               : a.owner.role === "admin"
                                 ? t.admin.common.roleAdmin
-                                : a.owner.role}
+                                : "—"}
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
@@ -345,7 +345,13 @@ function IntegrationsPageInner() {
                 <tbody>
                   {logs.map((l) => (
                     <tr key={l.id} className="border-b border-border last:border-0 hover:bg-muted/30">
-                      <td className="px-4 py-3 capitalize text-foreground">{l.action}</td>
+                      <td className="px-4 py-3 text-foreground">
+                        {l.action === "create"
+                          ? t.admin.integrations.actionCreate
+                          : l.action === "update"
+                            ? t.admin.integrations.actionUpdate
+                            : t.admin.integrations.actionDelete}
+                      </td>
                       <td className="px-4 py-3">
                         <Badge variant="outline" className="text-xs capitalize">
                           {l.related_type === "appointment"

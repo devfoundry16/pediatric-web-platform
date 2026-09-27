@@ -30,6 +30,7 @@ import {
 import { packagesApi } from "@/lib/api/packages";
 import type { ConsultationPackage, UserPackage, PackageUsageLog } from "@/types/packages";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { DEFAULT_TIMEZONE, formatStoredAppointment } from "@/lib/timezone";
 import type { Dictionary } from "@/lib/i18n/get-dictionary";
 
 const PACKAGE_ICONS: Record<string, typeof Package> = {
@@ -283,15 +284,25 @@ function UsageLogRow({ log }: { log: PackageUsageLog }) {
   const appt = log.appointments;
   const pkgName =
     log.user_packages?.consultation_packages?.name ?? t.packages.packageFallback;
+  // The usage log does not carry the appointment's zone, so this is the stored
+  // wall clock (the clinic's zone), only formatted for the locale.
+  const shownAt = appt
+    ? formatStoredAppointment(
+        appt.scheduled_date,
+        appt.scheduled_time,
+        DEFAULT_TIMEZONE,
+        DEFAULT_TIMEZONE,
+        dateLocale
+      )
+    : null;
 
   return (
     <div className="flex items-center justify-between py-2 text-sm">
       <div className="flex flex-col gap-0.5">
         <span className="font-medium text-foreground">{pkgName}</span>
-        {appt ? (
+        {appt && shownAt ? (
           <span className="text-xs text-muted-foreground">
-            {formatDate(appt.scheduled_date, dateLocale)} {t.booking.dateTimeAt}{" "}
-            {appt.scheduled_time.slice(0, 5)}
+            {shownAt.date} {t.booking.dateTimeAt} {shownAt.time}
             {appt.doctors?.full_name ? ` · ${appt.doctors.full_name}` : ""}
           </span>
         ) : (

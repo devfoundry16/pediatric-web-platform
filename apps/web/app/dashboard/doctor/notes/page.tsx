@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { DashboardLayout } from "@/components/dashboard/dashboard-layout";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { getConsultationTypeLabel } from "@/lib/i18n/consultation-labels";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -425,7 +426,7 @@ export default function DoctorNotesPage() {
                     <SelectItem value="__none__">{mr.noAppointment}</SelectItem>
                     {childAppointments.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
-                        {a.scheduled_date} · {a.consultation_type}
+                        {a.scheduled_date} · {getConsultationTypeLabel(t, a.consultation_type)}
                       </SelectItem>
                     ))}
                   </SelectContent>

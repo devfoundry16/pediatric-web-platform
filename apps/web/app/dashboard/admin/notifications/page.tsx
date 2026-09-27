@@ -87,7 +87,7 @@ export default function AdminNotificationsPage() {
       case "other":
         return t.admin.notifications.typeOther;
       default:
-        return value.replace(/_/g, " ");
+        return t.admin.notifications.typeOther;
     }
   };
 

@@ -443,7 +443,7 @@ function ParentAppointmentsContent() {
         <h1 className="text-2xl font-bold text-foreground">{t.appointments.title}</h1>
         <div className="flex flex-col gap-1">
           <p className="text-xs text-muted-foreground">
-            {t.booking.timezoneHint.replace("{timezone}", formatTimezoneLabel(viewerTimezone))}
+            {t.booking.timezoneHint.replace("{timezone}", formatTimezoneLabel(viewerTimezone, dateLocale))}
           </p>
           <p className="text-xs text-muted-foreground">{joinWindowHintText(t)}</p>
         </div>
@@ -515,7 +515,7 @@ function ParentAppointmentsContent() {
             <DialogTitle>{t.appointments.rescheduleTitle}</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground">
-            {t.booking.timezoneHint.replace("{timezone}", formatTimezoneLabel(viewerTimezone))}
+            {t.booking.timezoneHint.replace("{timezone}", formatTimezoneLabel(viewerTimezone, dateLocale))}
           </p>
 
           <div className="flex flex-col gap-4">

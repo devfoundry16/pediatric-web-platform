@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n/i18n-context";
+import { formatDurationSeconds } from "@/lib/i18n/format-unit";
 import { getErrorMessage } from "@/lib/i18n/error-message";
 import { coursesApi } from "@/lib/api/courses";
 import type { CourseDetail, CourseEnrollment } from "@/types/courses";
@@ -26,20 +27,13 @@ import {
   Eye,
 } from "lucide-react";
 
-function formatDuration(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  if (m === 0) return `${s}s`;
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
-}
-
 interface PageProps {
   params: Promise<{ courseId: string }>;
 }
 
 export default function CourseDetailPage({ params }: PageProps) {
   const { courseId } = use(params);
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   const tc = t.courses;
 
   const [course, setCourse] = useState<CourseDetail | null>(null);
@@ -211,7 +205,7 @@ export default function CourseDetailPage({ params }: PageProps) {
                           </span>
                           {lesson.duration_seconds > 0 && (
                             <span className="text-xs text-muted-foreground">
-                              {formatDuration(lesson.duration_seconds)}
+                              {formatDurationSeconds(dateLocale, lesson.duration_seconds)}
                             </span>
                           )}
                         </div>

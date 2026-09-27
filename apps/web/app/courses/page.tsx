@@ -8,19 +8,18 @@ import { ComingSoon } from "@/components/coming-soon";
 import { useFeatureFlag } from "@/lib/feature-flags/feature-flags-context";
 import { GraduationCap } from "lucide-react";
 
+// Placeholder catalog; the text lives in the dictionary (courses.samples).
 const mockCourses = [
   {
     id: "1",
-    title: "Child Nutrition Essentials",
-    description: "Learn the fundamentals of child nutrition from birth to age 5. Covers breastfeeding, solid foods, and balanced diets.",
+    key: "c1",
     lessons: 12,
     price: 199,
     enrolled: false,
   },
   {
     id: "2",
-    title: "Managing Common Childhood Illnesses",
-    description: "A comprehensive guide to identifying and managing fevers, colds, stomach bugs, and other common childhood illnesses.",
+    key: "c2",
     lessons: 8,
     price: 149,
     enrolled: true,
@@ -28,16 +27,14 @@ const mockCourses = [
   },
   {
     id: "3",
-    title: "Vaccination Guide for Parents",
-    description: "Everything you need to know about the UAE vaccination schedule, side effects, and how to prepare your child.",
+    key: "c3",
     lessons: 6,
     price: 0,
     enrolled: false,
   },
   {
     id: "4",
-    title: "Newborn Care 101",
-    description: "Essential care tips for the first 3 months: feeding, sleeping, bathing, and recognizing warning signs.",
+    key: "c4",
     lessons: 10,
     price: 179,
     enrolled: true,
@@ -45,21 +42,19 @@ const mockCourses = [
   },
   {
     id: "5",
-    title: "Child Development Milestones",
-    description: "Track and understand your child's physical, cognitive, and emotional development milestones from 0-5 years.",
+    key: "c5",
     lessons: 15,
     price: 249,
     enrolled: false,
   },
   {
     id: "6",
-    title: "First Aid for Parents",
-    description: "Learn essential first aid techniques for common childhood injuries and emergencies. Be prepared when it matters.",
+    key: "c6",
     lessons: 9,
     price: 129,
     enrolled: false,
   },
-];
+] as const;
 
 export default function CoursesPage() {
   const { dictionary: t } = useI18n();
@@ -82,7 +77,10 @@ export default function CoursesPage() {
           {coursesEnabled ? (
             <div className="mt-12 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {mockCourses.map((course) => (
-                <CourseCard key={course.id} course={course} />
+                <CourseCard
+                  key={course.id}
+                  course={{ ...course, ...t.courses.samples[course.key] }}
+                />
               ))}
             </div>
           ) : (

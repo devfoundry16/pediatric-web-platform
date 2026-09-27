@@ -48,7 +48,7 @@ const emptyForm = (): DoctorForm => ({
 });
 
 export default function AdminDoctorsPage() {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   // `load` must stay referentially stable across locale changes (re-creating
   // it would refetch the list and re-show skeletons on a language toggle), so
   // its toast copy is read through a ref that always holds the current
@@ -232,7 +232,7 @@ export default function AdminDoctorsPage() {
                         {d.email ?? <span className="text-amber-600">{t.admin.doctors.notSet}</span>}
                       </td>
                       <td className="py-3 text-muted-foreground">
-                        {formatTimezoneLabel(d.timezone || DEFAULT_TIMEZONE)}
+                        {formatTimezoneLabel(d.timezone || DEFAULT_TIMEZONE, dateLocale)}
                       </td>
                       <td className="py-3">
                         {d.profile_id ? (

@@ -37,14 +37,14 @@ export function TimezoneSelect({
   id,
   className,
 }: TimezoneSelectProps) {
-  const { dictionary: t } = useI18n();
+  const { dictionary: t, dateLocale } = useI18n();
   // Labels embed the zone's current UTC offset, which changes with DST — but
   // recomputing per render would churn ~90 Intl formats on every keystroke
   // elsewhere in the form, and an offset that is one render stale is harmless.
   const groups = useMemo(
-    () => buildTimezoneOptions([...pinned, value]),
+    () => buildTimezoneOptions([...pinned, value], dateLocale),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [value, pinned.join("|")]
+    [value, pinned.join("|"), dateLocale]
   );
 
   // The region strings on TIMEZONE_GROUPS are stable ids (lib/timezone.ts is
@@ -64,7 +64,7 @@ export function TimezoneSelect({
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger id={id} className={cn("w-full max-w-xs", className)}>
-        <SelectValue>{isValidTimezone(value) ? formatTimezoneLabel(value) : value}</SelectValue>
+        <SelectValue>{isValidTimezone(value) ? formatTimezoneLabel(value, dateLocale) : value}</SelectValue>
       </SelectTrigger>
       <SelectContent>
         {groups.map((group) => (

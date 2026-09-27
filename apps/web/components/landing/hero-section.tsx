@@ -113,7 +113,7 @@ export function HeroSection() {
             <div className="relative overflow-hidden rounded-3xl shadow-2xl">
               <Image
                 src="/dr-sahar.png"
-                alt="Dr. Sahar"
+                alt={t.landing.heroImageAlt}
                 width={420}
                 height={560}
                 className="w-full object-cover object-top"

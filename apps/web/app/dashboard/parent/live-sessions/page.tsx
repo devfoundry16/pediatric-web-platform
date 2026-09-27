@@ -127,7 +127,7 @@ function RegistrationCard({
               </span>
               <span className="flex items-center gap-1">
                 <Users className="h-3.5 w-3.5" />
-                {session.max_participants} max
+                {t.liveSessions.maxParticipantsShort.replace("{count}", String(session.max_participants))}
               </span>
             </div>
           </div>

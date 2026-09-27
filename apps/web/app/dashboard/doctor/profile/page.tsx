@@ -129,10 +129,10 @@ function ProfessionalInfoCard() {
           <div className="flex items-center gap-4">
             <Avatar className="h-16 w-16">
               {avatarUrl && (
-                <AvatarImage src={avatarUrl} alt={displayName || "Doctor"} />
+                <AvatarImage src={avatarUrl} alt={displayName || t.doctorDashboard.avatarAltFallback} />
               )}
               <AvatarFallback className="bg-primary/10 text-primary text-lg">
-                {initials || "DR"}
+                {initials || t.doctorDashboard.initialsFallback}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1">
