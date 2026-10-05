@@ -11,7 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useI18n } from "@/lib/i18n/i18n-context";
 import { coursesApi } from "@/lib/api/courses";
-import type { Course, CourseEnrollment } from "@/types/courses";
+import { courseInstructorName, type Course, type CourseEnrollment } from "@/types/courses";
 import {
   GraduationCap,
   BookOpen,
@@ -60,9 +60,9 @@ function CatalogCard({ course, isEnrolled, enrollment }: CatalogCardProps) {
             {course.is_free ? tc.free : `${Number(course.price_aed).toFixed(0)} ${t.common.aed}`}
           </Badge>
         </div>
-        {course.doctors?.full_name && (
+        {courseInstructorName(course) && (
           <p className="text-xs text-muted-foreground">
-            {tc.instructor}: {course.doctors.full_name}
+            {tc.instructor}: {courseInstructorName(course)}
           </p>
         )}
       </CardHeader>

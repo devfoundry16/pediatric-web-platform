@@ -1,16 +1,31 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
+import { actorScope, resolveActor, resolveDoctor } from "../lib/staff-actor";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-async function getDoctorId(userId: string | undefined): Promise<string | null> {
-  if (!supabaseAdmin || !userId) return null;
-  const { data } = await supabaseAdmin
-    .from("doctors")
-    .select("id")
-    .eq("profile_id", userId)
-    .single();
-  return data?.id ?? null;
+/**
+ * The instructor of a course with no doctor (an admin). Named through the FK
+ * because courses has no other link to profiles to disambiguate from.
+ */
+const INSTRUCTOR_EMBED =
+  "instructor:profiles!courses_instructor_profile_id_fkey (id, full_name)";
+
+/** Admins, and the course's own instructor, may watch any of its lessons. */
+async function canReviewCourse(userId: string, courseId: string): Promise<boolean> {
+  if (!supabaseAdmin) return false;
+  const actor = await resolveActor(userId);
+  if (actor?.kind === "admin") return true;
+  const { data: course } = await supabaseAdmin
+    .from("courses")
+    .select("doctor_id, instructor_profile_id")
+    .eq("id", courseId)
+    .maybeSingle();
+  if (!course) return false;
+  return (
+    course.instructor_profile_id === userId ||
+    (actor !== null && course.doctor_id !== null && course.doctor_id === actor.doctorId)
+  );
 }
 
 async function isEnrolled(userId: string, courseId: string): Promise<boolean> {
@@ -49,6 +64,7 @@ export async function listCourses(_req: Request, res: Response): Promise<void> {
         id,
         full_name
       ),
+      ${INSTRUCTOR_EMBED},
       course_lessons ( id )
     `,
     )
@@ -94,6 +110,7 @@ export async function getCourse(req: Request, res: Response): Promise<void> {
         id,
         full_name
       ),
+      ${INSTRUCTOR_EMBED},
       course_lessons (
         id,
         title,
@@ -200,6 +217,7 @@ export async function getMyEnrollments(
         is_free,
         price_aed,
         doctors ( id, full_name ),
+        ${INSTRUCTOR_EMBED},
         course_lessons ( id )
       )
     `,
@@ -283,8 +301,9 @@ export async function streamLesson(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Non-preview lessons require enrollment
-  if (!lesson.is_preview) {
+  // Non-preview lessons require enrollment — except for the people who
+  // build the course: its instructor and any admin, reviewing content.
+  if (!lesson.is_preview && !(await canReviewCourse(userId, courseId as string))) {
     const enrolled = await isEnrolled(userId, courseId as string);
     if (!enrolled) {
       res
@@ -386,8 +405,10 @@ export async function getCreatedCourses(
     return;
   }
 
-  const doctorId = await getDoctorId(req.userId);
-  if (!doctorId) {
+  // The caller's own courses only — admins see everyone's through
+  // GET /api/admin/courses instead.
+  const doctor = await resolveDoctor(req.userId!);
+  if (!doctor) {
     res.status(403).json({ error: "Only doctors can access this endpoint" });
     return;
   }
@@ -410,7 +431,63 @@ export async function getCreatedCourses(
       course_enrollments ( id )
     `,
     )
-    .eq("doctor_id", doctorId)
+    .eq("doctor_id", doctor.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const courses = (data ?? []).map((c) => ({
+    ...c,
+    lesson_count: Array.isArray(c.course_lessons) ? c.course_lessons.length : 0,
+    enrollment_count: Array.isArray(c.course_enrollments)
+      ? c.course_enrollments.length
+      : 0,
+    course_lessons: undefined,
+    course_enrollments: undefined,
+  }));
+
+  res.json({ courses });
+}
+
+// ─── Admin: Course Management ──────────────────────────────────────────────────
+
+// GET /api/admin/courses
+// Mounted on the admin router, so adminMiddleware has already run. Every
+// course from every instructor, drafts included — the admin counterpart of
+// /created. Creating and changing courses goes through the shared
+// /api/courses routes, which recognise admins themselves.
+export async function listAllCoursesAdmin(
+  _req: Request,
+  res: Response,
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("courses")
+    .select(
+      `
+      id,
+      slug,
+      title,
+      description,
+      thumbnail_url,
+      is_free,
+      price_aed,
+      is_published,
+      created_at,
+      updated_at,
+      doctors ( id, full_name ),
+      ${INSTRUCTOR_EMBED},
+      course_lessons ( id ),
+      course_enrollments ( id )
+    `,
+    )
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -438,9 +515,9 @@ export async function createCourse(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const doctorId = await getDoctorId(req.userId);
-  if (!doctorId) {
-    res.status(403).json({ error: "Only doctors can create courses" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can create courses" });
     return;
   }
 
@@ -467,7 +544,10 @@ export async function createCourse(req: Request, res: Response): Promise<void> {
       title,
       description: description ?? null,
       thumbnail_url: thumbnail_url ?? null,
-      doctor_id: doctorId,
+      // Whoever creates the course teaches it: as their doctor record when
+      // they have one, otherwise (an admin) as themselves.
+      doctor_id: actor.doctorId,
+      instructor_profile_id: actor.doctorId ? null : actor.userId,
       is_free: is_free !== false,
       price_aed: price_aed ?? 0,
       is_published: false,
@@ -490,9 +570,9 @@ export async function updateCourse(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const doctorId = await getDoctorId(req.userId);
-  if (!doctorId) {
-    res.status(403).json({ error: "Only doctors can update courses" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can update courses" });
     return;
   }
 
@@ -517,7 +597,7 @@ export async function updateCourse(req: Request, res: Response): Promise<void> {
       ...(is_published !== undefined && { is_published }),
     })
     .eq("id", id)
-    .eq("doctor_id", doctorId)
+    .match(actorScope(actor))
     .select()
     .single();
 
@@ -539,20 +619,20 @@ export async function getCourseLesson(
     return;
   }
 
-  const doctorId = await getDoctorId(req.userId);
-  if (!doctorId) {
-    res.status(403).json({ error: "Only doctors can access this endpoint" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can access this endpoint" });
     return;
   }
 
   const { id: courseId } = req.params;
 
-  // Ensure doctor owns this course
+  // Ensure the caller may manage this course (a doctor: only their own)
   const { data: course } = await supabaseAdmin
     .from("courses")
     .select("id")
     .eq("id", courseId)
-    .eq("doctor_id", doctorId)
+    .match(actorScope(actor))
     .single();
 
   if (!course) {
@@ -581,20 +661,20 @@ export async function addLesson(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const doctorId = await getDoctorId(req.userId);
-  if (!doctorId) {
-    res.status(403).json({ error: "Only doctors can add lessons" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can add lessons" });
     return;
   }
 
   const { id: courseId } = req.params;
 
-  // Ensure doctor owns this course
+  // Ensure the caller may manage this course (a doctor: only their own)
   const { data: course } = await supabaseAdmin
     .from("courses")
     .select("id")
     .eq("id", courseId)
-    .eq("doctor_id", doctorId)
+    .match(actorScope(actor))
     .single();
 
   if (!course) {
@@ -655,20 +735,20 @@ export async function updateLesson(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const doctorId = await getDoctorId(req.userId);
-  if (!doctorId) {
-    res.status(403).json({ error: "Only doctors can update lessons" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can update lessons" });
     return;
   }
 
   const { id: courseId, lessonId } = req.params;
 
-  // Ensure doctor owns this course
+  // Ensure the caller may manage this course (a doctor: only their own)
   const { data: course } = await supabaseAdmin
     .from("courses")
     .select("id")
     .eq("id", courseId)
-    .eq("doctor_id", doctorId)
+    .match(actorScope(actor))
     .single();
 
   if (!course) {
@@ -715,20 +795,20 @@ export async function deleteLesson(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const doctorId = await getDoctorId(req.userId);
-  if (!doctorId) {
-    res.status(403).json({ error: "Only doctors can delete lessons" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can delete lessons" });
     return;
   }
 
   const { id: courseId, lessonId } = req.params;
 
-  // Ensure doctor owns this course
+  // Ensure the caller may manage this course (a doctor: only their own)
   const { data: course } = await supabaseAdmin
     .from("courses")
     .select("id")
     .eq("id", courseId)
-    .eq("doctor_id", doctorId)
+    .match(actorScope(actor))
     .single();
 
   if (!course) {
@@ -757,9 +837,9 @@ export async function getUploadUrl(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const doctorId = await getDoctorId(req.userId);
-  if (!doctorId) {
-    res.status(403).json({ error: "Only doctors can upload videos" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can upload videos" });
     return;
   }
 
@@ -771,12 +851,12 @@ export async function getUploadUrl(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  // Ensure doctor owns this course
+  // Ensure the caller may manage this course (a doctor: only their own)
   const { data: course } = await supabaseAdmin
     .from("courses")
     .select("id")
     .eq("id", courseId)
-    .eq("doctor_id", doctorId)
+    .match(actorScope(actor))
     .single();
 
   if (!course) {

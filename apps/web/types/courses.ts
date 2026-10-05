@@ -28,7 +28,22 @@ export interface Course {
   created_at: string;
   updated_at: string;
   doctors: CourseDoctor | null;
+  /** Set only when no doctor teaches the course — an admin built it. */
+  instructor: CourseInstructor | null;
   lesson_count: number;
+}
+
+/** The account teaching a course that has no doctor. */
+export interface CourseInstructor {
+  id: string;
+  full_name: string | null;
+}
+
+/** Who to show as a course's instructor: its doctor, else the admin who built it. */
+export function courseInstructorName(
+  course: Pick<Course, "doctors" | "instructor">
+): string | null {
+  return course.doctors?.full_name ?? course.instructor?.full_name ?? null;
 }
 
 export interface CourseDetail extends Omit<Course, "lesson_count"> {
