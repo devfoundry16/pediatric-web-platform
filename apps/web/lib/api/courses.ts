@@ -92,6 +92,18 @@ export const coursesApi = {
     return data.courses;
   },
 
+  // ── Admin ───────────────────────────────────────────────────────────────────
+  // Every course from every instructor, drafts included. Creating and changing
+  // courses uses the same endpoints as doctors; the API recognises admins.
+
+  async getAllCourses(): Promise<DoctorCourse[]> {
+    const { data } = await axios.get<{ courses: DoctorCourse[] }>(
+      `${getBaseUrl()}/admin/courses`,
+      { headers: await authHeaders() }
+    );
+    return data.courses;
+  },
+
   async createCourse(payload: {
     title: string;
     description?: string;

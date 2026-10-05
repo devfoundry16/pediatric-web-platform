@@ -13,7 +13,7 @@ import { useI18n } from "@/lib/i18n/i18n-context";
 import { formatDurationSeconds } from "@/lib/i18n/format-unit";
 import { getErrorMessage } from "@/lib/i18n/error-message";
 import { coursesApi } from "@/lib/api/courses";
-import type { CourseDetail, CourseEnrollment } from "@/types/courses";
+import { courseInstructorName, type CourseDetail, type CourseEnrollment } from "@/types/courses";
 import { toast } from "sonner";
 import {
   GraduationCap,
@@ -140,11 +140,11 @@ export default function CourseDetailPage({ params }: PageProps) {
                   )}
                 </div>
 
-                {course.doctors?.full_name && (
+                {courseInstructorName(course) && (
                   <p className="text-sm text-muted-foreground">
                     {tc.instructor}:{" "}
                     <span className="font-medium text-foreground">
-                      {course.doctors.full_name}
+                      {courseInstructorName(course)}
                     </span>
                   </p>
                 )}

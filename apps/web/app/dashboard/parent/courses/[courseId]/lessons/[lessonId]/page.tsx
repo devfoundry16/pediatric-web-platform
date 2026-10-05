@@ -13,7 +13,7 @@ import { getErrorMessage } from "@/lib/i18n/error-message";
 import { coursesApi } from "@/lib/api/courses";
 import { downloadCourseCertificate } from "@/lib/course-certificate-download";
 import { useAuthStore } from "@/lib/stores/auth-store";
-import type { CourseDetail, CourseLesson } from "@/types/courses";
+import { courseInstructorName, type CourseDetail, type CourseLesson } from "@/types/courses";
 import { toast } from "sonner";
 import {
   ChevronLeft,
@@ -157,7 +157,7 @@ export default function LessonPlayerPage({ params }: PageProps) {
                     user?.email ??
                     tc.certificateParticipant,
                   courseTitle: course.title,
-                  instructorName: course.doctors?.full_name ?? null,
+                  instructorName: courseInstructorName(course),
                   completedAt: new Date().toISOString(),
                   labels: {
                     heading: tc.certificateHeading,

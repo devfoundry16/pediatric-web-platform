@@ -635,6 +635,7 @@
     "backToCourse": "Back to Course",
     "backToCourses": "Back to Courses",
     "instructor": "Instructor",
+    "instructorYou": "you",
     "duration": "Duration",
     "totalLessons": "Total Lessons",
     "preview": "Preview",
@@ -966,6 +967,7 @@
       "availability": "Availability",
       "consultationTypes": "Consultation Types",
       "liveSessions": "Live Sessions",
+      "courses": "Courses",
       "payments": "Payments",
       "packages": "Packages",
       "patients": "Patients",
@@ -1108,6 +1110,11 @@
     },
     "liveSessions": {
       "subtitle": "Every live session on the platform, from every host, drafts included. Sessions you create are hosted by you."
+    },
+    "courses": {
+      "subtitle": "Every course on the platform, from every instructor, drafts included. Courses you create are taught by you.",
+      "flagOffNotice": "The Courses section is switched off, so parents and doctors cannot see courses yet. You can still build them here.",
+      "flagOffLink": "Turn it on in Settings"
     },
     "payments": {
       "title": "Payments",
