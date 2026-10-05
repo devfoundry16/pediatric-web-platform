@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { supabaseAdmin } from "../lib/supabase";
+import { actorScope, resolveActor, resolveDoctor } from "../lib/staff-actor";
 import { createMeetingToken } from "../lib/daily";
 import { syncGroupSessionCalendarEvent } from "../lib/google-calendar";
 import { frontendUrl } from "../lib/app-url";
@@ -58,51 +59,6 @@ function getStripe(): StripeClient | null {
  * because group_sessions has no other link to profiles to disambiguate from.
  */
 const HOST_EMBED = "host:profiles!group_sessions_host_profile_id_fkey (id, full_name)";
-
-async function resolveDoctor(
-  userId: string
-): Promise<{ id: string } | null> {
-  if (!supabaseAdmin) return null;
-  const { data } = await supabaseAdmin
-    .from("doctors")
-    .select("id")
-    .eq("profile_id", userId)
-    .single();
-  return data ?? null;
-}
-
-/**
- * Who may manage live sessions, and how far that reaches.
- *
- * A doctor manages only the sessions they host. An admin manages every
- * session — their own, every doctor's, drafts included — and needs no doctors
- * row to do it; doctorId is set only for an admin who also has one, so the
- * sessions they create are still hosted as that doctor.
- */
-type SessionActor =
-  | { kind: "admin"; userId: string; doctorId: string | null }
-  | { kind: "doctor"; userId: string; doctorId: string };
-
-async function resolveActor(userId: string): Promise<SessionActor | null> {
-  if (!supabaseAdmin) return null;
-  const [doctor, { data: profile }] = await Promise.all([
-    resolveDoctor(userId),
-    supabaseAdmin.from("profiles").select("role").eq("id", userId).maybeSingle(),
-  ]);
-  if (profile?.role === "admin") {
-    return { kind: "admin", userId, doctorId: doctor?.id ?? null };
-  }
-  if (doctor) return { kind: "doctor", userId, doctorId: doctor.id };
-  return null;
-}
-
-/**
- * Filter for the group_sessions rows this actor may touch, for `.match()`.
- * Empty for an admin, so the id filter alone decides.
- */
-function actorScope(actor: SessionActor): Record<string, string> {
-  return actor.kind === "doctor" ? { doctor_id: actor.doctorId } : {};
-}
 
 /** Name shown to everyone else in the call; Daily labels a nameless token "Guest". */
 async function resolveDisplayName(userId: string, fallback: string): Promise<string> {
