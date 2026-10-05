@@ -24,6 +24,7 @@ import { TimezoneNotice } from "@/components/booking/timezone-notice";
 import {
   liveSessionsApi,
   isConfirmedRegistration,
+  sessionHostName,
   type GroupSession,
   type SessionRegistration,
 } from "@/lib/api/live-sessions";
@@ -113,7 +114,10 @@ export default function SessionDetailPage() {
 
   const isRegistered = isConfirmedRegistration(registration?.payment_status);
   const paymentPending = registration?.payment_status === "pending";
-  const isHost = hostDoctorId !== null && session?.doctors?.id === hostDoctorId;
+  // An admin-hosted session names its host directly, so no lookup is needed.
+  const isHost =
+    (hostDoctorId !== null && session?.doctors?.id === hostDoctorId) ||
+    (!!user && session?.host?.id === user.id);
 
   // The doctor can start the room at any moment. Without this the page keeps
   // showing "Scheduled" and withholds the Join button until a manual reload.
@@ -240,10 +244,10 @@ export default function SessionDetailPage() {
                   <Badge variant="secondary">{t.liveSessions.statusEnded}</Badge>
                 )}
               </div>
-              {session.doctors && (
+              {sessionHostName(session) && (
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {t.liveSessions.hostedBy} {session.doctors.full_name}
-                  {session.doctors.specialty
+                  {t.liveSessions.hostedBy} {sessionHostName(session)}
+                  {session.doctors?.specialty
                     ? ` · ${session.doctors.specialty}`
                     : ""}
                 </p>

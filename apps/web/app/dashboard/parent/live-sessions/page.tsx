@@ -12,6 +12,7 @@ import { useI18n } from "@/lib/i18n/i18n-context";
 import {
   liveSessionsApi,
   isConfirmedRegistration,
+  sessionHostName,
   type SessionRegistration,
 } from "@/lib/api/live-sessions";
 import { toast } from "sonner";
@@ -108,9 +109,9 @@ function RegistrationCard({
               )}
             </div>
 
-            {session.doctors && (
+            {sessionHostName(session) && (
               <p className="mt-1 text-xs text-muted-foreground">
-                {t.liveSessions.hostedBy} {session.doctors.full_name}
+                {t.liveSessions.hostedBy} {sessionHostName(session)}
               </p>
             )}
 

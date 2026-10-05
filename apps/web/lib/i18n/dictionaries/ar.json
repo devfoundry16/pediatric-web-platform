@@ -802,6 +802,8 @@
     "scheduledFor": "مجدولة في",
     "hostedBy": "يقدمها",
     "youAreHost": "أنت مضيف هذه الجلسة",
+    "hostYou": "أنت",
+    "noHost": "بدون مضيف",
     "aboutSession": "عن هذه الجلسة",
     "manageSessions": "إدارة الجلسات المباشرة",
     "createSession": "إنشاء جلسة",
@@ -963,6 +965,7 @@
       "doctors": "الأطباء",
       "availability": "أوقات التوفر",
       "consultationTypes": "أنواع الاستشارات",
+      "liveSessions": "الجلسات المباشرة",
       "payments": "المدفوعات",
       "packages": "الباقات",
       "patients": "المرضى",
@@ -1102,6 +1105,9 @@
       "durationLabel": "المدة (بالدقائق)",
       "activeCheckbox": "نشط (مرئي للمرضى)",
       "saveChanges": "حفظ التغييرات"
+    },
+    "liveSessions": {
+      "subtitle": "جميع الجلسات المباشرة على المنصة من جميع المضيفين، بما فيها المسودات. الجلسات التي تنشئها تكون أنت مضيفها."
     },
     "payments": {
       "title": "المدفوعات",

@@ -802,6 +802,8 @@
     "scheduledFor": "Scheduled for",
     "hostedBy": "Hosted by",
     "youAreHost": "You are hosting this session",
+    "hostYou": "you",
+    "noHost": "no host",
     "aboutSession": "About this session",
     "manageSessions": "Manage Live Sessions",
     "createSession": "Create Session",
@@ -963,6 +965,7 @@
       "doctors": "Doctors",
       "availability": "Availability",
       "consultationTypes": "Consultation Types",
+      "liveSessions": "Live Sessions",
       "payments": "Payments",
       "packages": "Packages",
       "patients": "Patients",
@@ -1102,6 +1105,9 @@
       "durationLabel": "Duration (min)",
       "activeCheckbox": "Active (visible to patients)",
       "saveChanges": "Save changes"
+    },
+    "liveSessions": {
+      "subtitle": "Every live session on the platform, from every host, drafts included. Sessions you create are hosted by you."
     },
     "payments": {
       "title": "Payments",
