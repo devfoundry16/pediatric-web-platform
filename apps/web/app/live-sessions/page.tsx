@@ -127,8 +127,9 @@ export default function LiveSessionsPage() {
                     registrations.get(session.id)
                   );
                   const isHost =
-                    hostDoctorId !== null &&
-                    session.doctors?.id === hostDoctorId;
+                    (hostDoctorId !== null &&
+                      session.doctors?.id === hostDoctorId) ||
+                    (!!user && session.host?.id === user.id);
                   // Only the host gets the opens-at line here: the card's
                   // only enabled join CTA before a session is live is the
                   // host's. Registrants join from the detail page, which

@@ -40,6 +40,19 @@ export interface GroupSession {
   created_at: string;
   participant_count: number;
   doctors: SessionDoctor | null;
+  /** Set only when no doctor hosts the session — an admin runs it. */
+  host: SessionHost | null;
+}
+
+/** The account hosting a session that has no doctor. */
+export interface SessionHost {
+  id: string;
+  full_name: string | null;
+}
+
+/** Who to show as a session's host: its doctor, else the admin running it. */
+export function sessionHostName(session: GroupSession): string | null {
+  return session.doctors?.full_name ?? session.host?.full_name ?? null;
 }
 
 /** 'refunded' was added by migration 012 when refund/chargeback revocation landed. */
@@ -154,6 +167,17 @@ export const liveSessionsApi = {
   async getDoctorSessions(): Promise<GroupSession[]> {
     const { data } = await axios.get<{ sessions: GroupSession[] }>(
       `${getBaseUrl()}/live-sessions/doctor/mine`,
+      { headers: await authHeaders() }
+    );
+    return data.sessions;
+  },
+
+  // Admin — every session from every host, drafts included. Creating and
+  // changing sessions uses the same endpoints as doctors; the API recognises
+  // admins and lets them reach any session.
+  async getAllSessions(): Promise<GroupSession[]> {
+    const { data } = await axios.get<{ sessions: GroupSession[] }>(
+      `${getBaseUrl()}/admin/live-sessions`,
       { headers: await authHeaders() }
     );
     return data.sessions;

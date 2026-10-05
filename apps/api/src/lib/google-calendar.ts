@@ -921,6 +921,9 @@ interface SessionRow {
   scheduled_at: string;
   duration_minutes: number;
   doctors: { full_name: string; email: string | null; profile_id: string | null; timezone: string | null } | null;
+  /** Set only for a session with no doctor — an admin hosts it. */
+  host_profile_id: string | null;
+  host: { full_name: string | null } | null;
   session_registrations: Array<{ user_id: string; payment_status: string }>;
 }
 
@@ -940,6 +943,8 @@ export async function syncGroupSessionCalendarEvent(sessionId: string): Promise<
       .select(
         `id, title, status, is_published, scheduled_at, duration_minutes,
          doctors ( full_name, email, profile_id, timezone ),
+         host_profile_id,
+         host:profiles!group_sessions_host_profile_id_fkey ( full_name ),
          session_registrations ( user_id, payment_status )`
       )
       .eq("id", sessionId)
@@ -974,14 +979,17 @@ export async function syncGroupSessionCalendarEvent(sessionId: string): Promise<
     );
     const recipients = await resolveRecipients([
       // The host first, so a doctor who also registered keeps the host link.
-      { userId: session.doctors?.profile_id ?? null, role: "doctor" },
+      // An admin host gets the admin link, which is where they run sessions.
+      session.doctors
+        ? { userId: session.doctors.profile_id, role: "doctor" as const }
+        : { userId: session.host_profile_id, role: "admin" as const },
       ...confirmed.map((r) => ({ userId: r.user_id, role: "parent" as const })),
     ]);
 
     const baseEvent: CalendarEvent = {
       summary: session.title,
       description:
-        `Live group session with ${session.doctors?.full_name ?? "our doctor"}.\n\n` +
+        `Live group session with ${session.doctors?.full_name ?? session.host?.full_name ?? "our doctor"}.\n\n` +
         `Session page (details and join):\n${frontendUrl()}/live-sessions/${session.id}`,
       start: instantToEventTime(start, timezone),
       end: instantToEventTime(end, timezone),

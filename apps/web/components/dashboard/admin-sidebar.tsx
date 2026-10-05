@@ -22,6 +22,7 @@ import {
   Bell,
   Plug,
   Settings,
+  Video,
   LogOut,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -39,6 +40,7 @@ const adminNav: NavItem[] = [
   { href: "/dashboard/admin/doctors", labelKey: "doctors", icon: UserRoundCog },
   { href: "/dashboard/admin/availability", labelKey: "availability", icon: Clock },
   { href: "/dashboard/admin/consultation-types", labelKey: "consultationTypes", icon: Stethoscope },
+  { href: "/dashboard/admin/live-sessions", labelKey: "liveSessions", icon: Video },
   { href: "/dashboard/admin/payments", labelKey: "payments", icon: CreditCard },
   { href: "/dashboard/admin/packages", labelKey: "packages", icon: Package },
   { href: "/dashboard/admin/patients", labelKey: "patients", icon: Baby },

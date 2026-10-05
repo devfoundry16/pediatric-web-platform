@@ -26,6 +26,21 @@ export function argOf(q: RecordedQuery, method: string, field: string): unknown 
 }
 
 /**
+ * The value a query filters `field` on, whether through .eq(field, value) or
+ * .match({ field: value }). undefined when it does not filter on it.
+ */
+export function filterOf(q: RecordedQuery, field: string): unknown {
+  const eq = argOf(q, "eq", field);
+  if (eq !== undefined) return eq;
+  for (const call of q.calls) {
+    if (call.method !== "match") continue;
+    const criteria = call.args[0] as Record<string, unknown>;
+    if (field in criteria) return criteria[field];
+  }
+  return undefined;
+}
+
+/**
  * Apply the query's eq/is/in filters to an in-memory row list, then honour
  * single/maybeSingle. Lets a handler stand in for a real table with one line.
  */
@@ -37,6 +52,10 @@ export function applyFilters(rows: any[], q: RecordedQuery): TableResult {
     else if (call.method === "is") out = out.filter((r) => r[field] === value);
     else if (call.method === "in") out = out.filter((r) => (value as any[]).includes(r[field]));
     else if (call.method === "neq") out = out.filter((r) => r[field] !== value);
+    else if (call.method === "match") {
+      const criteria = call.args[0] as Record<string, unknown>;
+      out = out.filter((r) => Object.entries(criteria).every(([k, v]) => r[k] === v));
+    }
   }
   if (has(q, "single") || has(q, "maybeSingle")) {
     return { data: out[0] ?? null };
@@ -73,6 +92,7 @@ export function createSupabaseMock(
       "select",
       "eq",
       "neq",
+      "match",
       "in",
       "is",
       "gt",

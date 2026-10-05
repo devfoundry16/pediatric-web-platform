@@ -36,8 +36,8 @@ function sessionUrl(sessionId: string): string {
   return `${frontendUrl()}/live-sessions/${sessionId}`;
 }
 
-/** The parent's address lives in auth.users, which needs the admin API. */
-async function parentRecipient(
+/** A user's address (a parent, or an admin hosting a session) lives in auth.users, which needs the admin API. */
+async function userRecipient(
   userId: string
 ): Promise<{ recipient: Recipient | null; name: string; reason?: string }> {
   if (!supabaseAdmin) return { recipient: null, name: "Parent", reason: "No database client" };
@@ -89,6 +89,8 @@ async function remindGroupSessions(now: Date, windowEnd: Date): Promise<Reminder
     .select(
       `id, title, scheduled_at, duration_minutes,
        doctors ( full_name, email ),
+       host_profile_id,
+       host:profiles!group_sessions_host_profile_id_fkey ( full_name ),
        session_registrations ( id, user_id, payment_status )`
     )
     .eq("status", "scheduled")
@@ -104,6 +106,8 @@ async function remindGroupSessions(now: Date, windowEnd: Date): Promise<Reminder
     const doctor = session.doctors as unknown as
       | { full_name: string; email: string | null }
       | null;
+    const host = session.host as unknown as { full_name: string | null } | null;
+    const hostName = doctor?.full_name ?? host?.full_name ?? null;
     const startsAt = new Date(session.scheduled_at);
 
     // group_sessions has no timezone column — scheduled_at is a real instant, so
@@ -133,7 +137,7 @@ async function remindGroupSessions(now: Date, windowEnd: Date): Promise<Reminder
     );
 
     for (const registration of confirmed) {
-      const { recipient, name, reason } = await parentRecipient(registration.user_id);
+      const { recipient, name, reason } = await userRecipient(registration.user_id);
 
       if (!recipient) {
         run.failed += 1;
@@ -151,9 +155,25 @@ async function remindGroupSessions(now: Date, windowEnd: Date): Promise<Reminder
         recipient,
         audience: "parent",
         recipientName: name,
-        counterpartName: doctor?.full_name ?? "your doctor",
+        counterpartName: hostName ?? "your doctor",
       });
       if (sent) run.sent += 1;
+    }
+
+    // An admin-hosted session has no doctor; its host's address lives in
+    // auth.users, the same place a parent's does.
+    if (!doctor && session.host_profile_id) {
+      const { recipient, name } = await userRecipient(session.host_profile_id as string);
+      if (recipient) {
+        const sent = await sendOnce({
+          ...shared,
+          recipient,
+          audience: "doctor",
+          recipientName: name,
+          counterpartName: `${confirmed.length} registered participant(s)`,
+        });
+        if (sent) run.sent += 1;
+      }
     }
 
     if (doctor?.email) {
@@ -240,7 +260,7 @@ async function remindAppointments(now: Date, windowEnd: Date): Promise<ReminderR
       startsIn: `in ${LEAD_MINUTES} minutes`,
     };
 
-    const { recipient, name, reason } = await parentRecipient(appointment.parent_id);
+    const { recipient, name, reason } = await userRecipient(appointment.parent_id);
 
     if (!recipient) {
       run.failed += 1;

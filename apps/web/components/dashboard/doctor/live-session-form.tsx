@@ -58,6 +58,8 @@ const EMPTY_VALUES: LiveSessionFormValues = {
 interface LiveSessionFormProps {
   defaultValues?: Partial<LiveSessionFormValues>;
   submitLabel: string;
+  /** Where Cancel leads — the dashboard list this form was opened from. */
+  cancelHref: string;
   onSubmit: (payload: CreateSessionPayload) => Promise<void>;
 }
 
@@ -72,6 +74,7 @@ interface LiveSessionFormProps {
 export function LiveSessionForm({
   defaultValues,
   submitLabel,
+  cancelHref,
   onSubmit,
 }: LiveSessionFormProps) {
   const { dictionary: t } = useI18n();
@@ -274,7 +277,7 @@ export function LiveSessionForm({
 
       <div className="flex justify-end gap-3">
         <Button type="button" variant="outline" asChild>
-          <Link href="/dashboard/doctor/live-sessions">{t.common.cancel}</Link>
+          <Link href={cancelHref}>{t.common.cancel}</Link>
         </Button>
         <Button type="submit" disabled={saving} className="gap-2">
           <Video className="h-4 w-4" />
