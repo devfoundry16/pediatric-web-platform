@@ -1082,6 +1082,8 @@ interface SessionRegistrationRow {
     scheduled_at: string;
     price_aed: number;
     doctors: { full_name: string } | null;
+    /** The admin hosting a session that has no doctor. */
+    host: { full_name: string | null } | null;
   } | null;
 }
 
@@ -1240,7 +1242,8 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
       .from("session_registrations")
       .select(`
         id, user_id, payment_status, registered_at, stripe_session_id,
-        group_sessions (id, title, scheduled_at, price_aed, doctors (full_name))
+        group_sessions (id, title, scheduled_at, price_aed, doctors (full_name),
+          host:profiles!group_sessions_host_profile_id_fkey (full_name))
       `, { count: "exact" })
       // Listed positively, like the consultation stream above: a free seat is
       // not a transaction, and neither is a ticket still sitting in checkout.
@@ -1273,7 +1276,10 @@ export async function listPayments(req: Request, res: Response): Promise<void> {
         amount_aed: Number(session.price_aed),
         payment_status: row.payment_status,
         payment_reference: row.stripe_session_id,
-        doctors: session.doctors ?? null,
+        // An admin-hosted session has no doctor; show its host in that column.
+        doctors:
+          session.doctors ??
+          (session.host?.full_name ? { full_name: session.host.full_name } : null),
         child_profiles: null,
         scheduled_date: null,
         package_name: null,

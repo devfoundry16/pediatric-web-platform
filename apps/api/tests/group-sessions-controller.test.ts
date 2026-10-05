@@ -5,6 +5,7 @@ import {
   argOf,
   createFetchMock,
   createSupabaseMock,
+  filterOf,
   json,
   makeRes,
   type TableHandler,
@@ -28,6 +29,9 @@ const DOCTOR_ID = "88888888-1111-4222-8333-444444444444";
 const HOST_USER_ID = "77777777-1111-4222-8333-444444444444";
 const PARENT_USER_ID = "66666666-1111-4222-8333-444444444444";
 const OTHER_USER_ID = "55555555-1111-4222-8333-444444444444";
+const ADMIN_USER_ID = "44444444-1111-4222-8333-444444444444";
+const OTHER_DOCTOR_ID = "33333333-1111-4222-8333-444444444444";
+const OTHER_DOCTOR_USER_ID = "22222222-1111-4222-8333-444444444444";
 const ROOM_NAME = SESSION_ID; // groupSessionRoomName is the bare session id
 const ROOM_URL = `https://littlecare.daily.co/${ROOM_NAME}`;
 
@@ -38,7 +42,17 @@ const CLOSES_AT_ISO = "2026-09-01T06:30:00.000Z";
 const OPENS_AT_EPOCH = Math.floor(Date.parse(OPENS_AT_ISO) / 1000);
 const CLOSES_AT_EPOCH = Math.floor(Date.parse(CLOSES_AT_ISO) / 1000);
 
-const DOCTORS = [{ id: DOCTOR_ID, profile_id: HOST_USER_ID }];
+const DOCTORS = [
+  { id: DOCTOR_ID, profile_id: HOST_USER_ID },
+  { id: OTHER_DOCTOR_ID, profile_id: OTHER_DOCTOR_USER_ID },
+];
+const PROFILES = [
+  { id: HOST_USER_ID, role: "doctor", full_name: "Dr Host" },
+  { id: OTHER_DOCTOR_USER_ID, role: "doctor", full_name: "Dr Other" },
+  { id: PARENT_USER_ID, role: "parent", full_name: "Parent" },
+  { id: OTHER_USER_ID, role: "parent", full_name: "Other" },
+  { id: ADMIN_USER_ID, role: "admin", full_name: "Clinic Admin" },
+];
 const REGISTRATIONS = [
   { id: "reg-1", session_id: SESSION_ID, user_id: PARENT_USER_ID, payment_status: "paid" },
 ];
@@ -63,13 +77,16 @@ function sessionRow(overrides: Record<string, unknown> = {}) {
  */
 function groupSessionsHandler(row: Record<string, unknown>): TableHandler {
   return (q) => {
+    if (q.op === "insert") {
+      return { data: { id: "new-session", ...(q.payload as object) } };
+    }
+    const idFilter = argOf(q, "eq", "id");
+    const doctorFilter = filterOf(q, "doctor_id");
+    if (idFilter !== undefined && idFilter !== row.id) return { data: null };
+    if (doctorFilter !== undefined && doctorFilter !== row.doctor_id) return { data: null };
     if (q.op === "update") {
       return { data: { ...row, ...(q.payload as object) } };
     }
-    const idFilter = argOf(q, "eq", "id");
-    const doctorFilter = argOf(q, "eq", "doctor_id");
-    if (idFilter !== undefined && idFilter !== row.id) return { data: null };
-    if (doctorFilter !== undefined && doctorFilter !== row.doctor_id) return { data: null };
     return { data: row };
   };
 }
@@ -82,6 +99,7 @@ function setup(opts: {
   const mock = createSupabaseMock({
     group_sessions: groupSessionsHandler(opts.session),
     doctors: (q) => applyFilters(opts.doctors ?? DOCTORS, q),
+    profiles: (q) => applyFilters(PROFILES, q),
     session_registrations: (q) => applyFilters(opts.registrations ?? REGISTRATIONS, q),
   });
   supabaseHolder.current = mock.client;
@@ -333,5 +351,200 @@ describe("goLive", () => {
         (q.payload as any)?.status === "live"
     );
     expect(liveUpdates).toHaveLength(1);
+  });
+});
+
+describe("admin-managed sessions", () => {
+  /** Daily calls fired in the background (room ensure/delete) — answered, not asserted. */
+  function quietDaily() {
+    vi.stubGlobal(
+      "fetch",
+      createFetchMock([{ match: () => true, respond: () => json(200, {}) }]).fn
+    );
+  }
+
+  const newSessionBody = {
+    title: "Sleep routines",
+    scheduled_at: "2026-09-01T05:00:00Z",
+    is_published: false,
+  };
+
+  it("lets an admin with no doctor record create a session they host", async () => {
+    const mock = setup({ session: sessionRow() });
+    quietDaily();
+
+    const { createSession } = await loadController();
+    const req = { body: newSessionBody, userId: ADMIN_USER_ID } as any;
+    const res = makeRes();
+    await createSession(req, res as any);
+
+    expect(res.statusCode).toBe(201);
+    const insert = mock.queries.find((q) => q.table === "group_sessions" && q.op === "insert");
+    expect(insert?.payload).toMatchObject({ doctor_id: null, host_profile_id: ADMIN_USER_ID });
+  });
+
+  it("still hosts a doctor's session as their doctor record", async () => {
+    const mock = setup({ session: sessionRow() });
+    quietDaily();
+
+    const { createSession } = await loadController();
+    const req = { body: newSessionBody, userId: HOST_USER_ID } as any;
+    const res = makeRes();
+    await createSession(req, res as any);
+
+    expect(res.statusCode).toBe(201);
+    const insert = mock.queries.find((q) => q.table === "group_sessions" && q.op === "insert");
+    expect(insert?.payload).toMatchObject({ doctor_id: DOCTOR_ID, host_profile_id: null });
+  });
+
+  it("refuses to let a parent create a session", async () => {
+    const mock = setup({ session: sessionRow() });
+
+    const { createSession } = await loadController();
+    const req = { body: newSessionBody, userId: PARENT_USER_ID } as any;
+    const res = makeRes();
+    await createSession(req, res as any);
+
+    expect(res.statusCode).toBe(403);
+    expect(mock.queries.some((q) => q.op === "insert")).toBe(false);
+  });
+
+  it("lets an admin edit a doctor's session", async () => {
+    setup({ session: sessionRow() });
+    quietDaily();
+
+    const { updateSession } = await loadController();
+    const req = {
+      params: { id: SESSION_ID },
+      body: { title: "Renamed" },
+      userId: ADMIN_USER_ID,
+    } as any;
+    const res = makeRes();
+    await updateSession(req, res as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.session.title).toBe("Renamed");
+  });
+
+  it("still hides one doctor's session from another doctor", async () => {
+    setup({ session: sessionRow() });
+
+    const { updateSession } = await loadController();
+    const req = {
+      params: { id: SESSION_ID },
+      body: { title: "Renamed" },
+      userId: OTHER_DOCTOR_USER_ID,
+    } as any;
+    const res = makeRes();
+    await updateSession(req, res as any);
+
+    expect(res.statusCode).toBe(404);
+  });
+
+  it("lets an admin cancel and end a doctor's session", async () => {
+    const mock = setup({ session: sessionRow() });
+    quietDaily();
+    const { cancelSession, endSession } = await loadController();
+
+    const cancelRes = makeRes();
+    await cancelSession(
+      { params: { id: SESSION_ID }, userId: ADMIN_USER_ID } as any,
+      cancelRes as any
+    );
+    expect(cancelRes.statusCode).toBe(200);
+    expect(
+      mock.queries.some(
+        (q) => q.op === "update" && (q.payload as any)?.status === "cancelled"
+      )
+    ).toBe(true);
+
+    const endRes = makeRes();
+    await endSession(
+      { params: { id: SESSION_ID }, body: {}, userId: ADMIN_USER_ID } as any,
+      endRes as any
+    );
+    expect(endRes.statusCode).toBe(200);
+    expect(endRes.body.session.status).toBe("ended");
+  });
+
+  it("lets an admin take a doctor's session live inside the window", async () => {
+    vi.setSystemTime(new Date("2026-09-01T05:30:00.000Z"));
+    setup({ session: sessionRow() });
+    vi.stubGlobal("fetch", existingRoomFetchMock().fn);
+
+    const { goLive } = await loadController();
+    const res = makeRes();
+    await goLive({ params: { id: SESSION_ID }, userId: ADMIN_USER_ID } as any, res as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body.session.status).toBe("live");
+  });
+
+  it("lets an admin join any session as owner without registering", async () => {
+    vi.setSystemTime(new Date("2026-09-01T05:30:00.000Z"));
+    setup({ session: sessionRow(), registrations: [] });
+    let tokenBody: any = null;
+    vi.stubGlobal(
+      "fetch",
+      existingRoomFetchMock([
+        {
+          match: (m, u) => m === "POST" && u === TOKENS,
+          respond: (call) => {
+            tokenBody = call.body;
+            return json(200, { token: "admin-token" });
+          },
+        },
+      ]).fn
+    );
+
+    const { joinSession } = await loadController();
+    const res = makeRes();
+    await joinSession({ params: { id: SESSION_ID }, userId: ADMIN_USER_ID } as any, res as any);
+
+    expect(res.statusCode).toBe(200);
+    expect(tokenBody.properties.is_owner).toBe(true);
+    expect(tokenBody.properties.user_name).toBe("Clinic Admin");
+  });
+
+  it("refuses to register an admin for a session", async () => {
+    vi.setSystemTime(new Date("2026-09-01T04:00:00.000Z"));
+    const mock = setup({
+      session: sessionRow({ is_published: true, max_participants: 30, session_registrations: [] }),
+    });
+
+    const { registerForSession } = await loadController();
+    const res = makeRes();
+    await registerForSession(
+      { params: { id: SESSION_ID }, userId: ADMIN_USER_ID } as any,
+      res as any
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(mock.queries.some((q) => q.table === "session_registrations" && q.op === "upsert")).toBe(
+      false
+    );
+  });
+
+  it("refuses to register the admin hosting a session as a participant", async () => {
+    vi.setSystemTime(new Date("2026-09-01T04:00:00.000Z"));
+    setup({
+      session: sessionRow({
+        doctor_id: null,
+        host_profile_id: ADMIN_USER_ID,
+        is_published: true,
+        max_participants: 30,
+        session_registrations: [],
+      }),
+    });
+
+    const { registerForSession } = await loadController();
+    const res = makeRes();
+    await registerForSession(
+      { params: { id: SESSION_ID }, userId: ADMIN_USER_ID } as any,
+      res as any
+    );
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.error).toBe("You are the host of this session");
   });
 });

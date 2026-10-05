@@ -53,6 +53,12 @@ function getStripe(): StripeClient | null {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * The host of a session with no doctor (an admin). Named through the FK
+ * because group_sessions has no other link to profiles to disambiguate from.
+ */
+const HOST_EMBED = "host:profiles!group_sessions_host_profile_id_fkey (id, full_name)";
+
 async function resolveDoctor(
   userId: string
 ): Promise<{ id: string } | null> {
@@ -63,6 +69,39 @@ async function resolveDoctor(
     .eq("profile_id", userId)
     .single();
   return data ?? null;
+}
+
+/**
+ * Who may manage live sessions, and how far that reaches.
+ *
+ * A doctor manages only the sessions they host. An admin manages every
+ * session — their own, every doctor's, drafts included — and needs no doctors
+ * row to do it; doctorId is set only for an admin who also has one, so the
+ * sessions they create are still hosted as that doctor.
+ */
+type SessionActor =
+  | { kind: "admin"; userId: string; doctorId: string | null }
+  | { kind: "doctor"; userId: string; doctorId: string };
+
+async function resolveActor(userId: string): Promise<SessionActor | null> {
+  if (!supabaseAdmin) return null;
+  const [doctor, { data: profile }] = await Promise.all([
+    resolveDoctor(userId),
+    supabaseAdmin.from("profiles").select("role").eq("id", userId).maybeSingle(),
+  ]);
+  if (profile?.role === "admin") {
+    return { kind: "admin", userId, doctorId: doctor?.id ?? null };
+  }
+  if (doctor) return { kind: "doctor", userId, doctorId: doctor.id };
+  return null;
+}
+
+/**
+ * Filter for the group_sessions rows this actor may touch, for `.match()`.
+ * Empty for an admin, so the id filter alone decides.
+ */
+function actorScope(actor: SessionActor): Record<string, string> {
+  return actor.kind === "doctor" ? { doctor_id: actor.doctorId } : {};
 }
 
 /** Name shown to everyone else in the call; Daily labels a nameless token "Guest". */
@@ -122,6 +161,7 @@ export async function listSessions(
        max_participants, price_aed, is_free, status, daily_room_url,
        recording_url, is_published, created_at,
        doctors (id, full_name, specialty, avatar_url),
+       ${HOST_EMBED},
        session_registrations (payment_status)`
     )
     .eq("is_published", true)
@@ -188,6 +228,7 @@ export async function getSession(
        max_participants, price_aed, is_free, status, daily_room_url,
        recording_url, is_published, created_at,
        doctors (id, full_name, specialty, avatar_url),
+       ${HOST_EMBED},
        session_registrations (payment_status)`
     )
     .eq("id", id)
@@ -262,6 +303,54 @@ export async function getDoctorSessions(
   res.json({ sessions });
 }
 
+// ─── Admin ────────────────────────────────────────────────────────────────────
+
+// GET /api/admin/live-sessions
+// Mounted on the admin router, so adminMiddleware has already run. Every
+// session from every host, drafts and cancelled ones included — the admin
+// counterpart of /doctor/mine.
+export async function listAllSessionsAdmin(
+  _req: Request,
+  res: Response
+): Promise<void> {
+  if (!supabaseAdmin) {
+    res.status(500).json({ error: "Server misconfigured" });
+    return;
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("group_sessions")
+    .select(
+      `id, title, description, scheduled_at, duration_minutes,
+       max_participants, price_aed, is_free, status,
+       daily_room_url, recording_url, is_published, created_at,
+       doctors (id, full_name, specialty, avatar_url),
+       ${HOST_EMBED},
+       session_registrations (payment_status)`
+    )
+    .order("scheduled_at", { ascending: false });
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  const sessions = (data ?? []).map((s) => {
+    const regs = Array.isArray(s.session_registrations)
+      ? (s.session_registrations as Array<{ payment_status: string }>)
+      : [];
+    return {
+      ...s,
+      session_registrations: undefined,
+      participant_count: participantCount(regs),
+    };
+  });
+
+  res.json({ sessions });
+}
+
+// ─── Doctor or admin ──────────────────────────────────────────────────────────
+
 // POST /api/live-sessions
 export async function createSession(
   req: Request,
@@ -272,9 +361,9 @@ export async function createSession(
     return;
   }
 
-  const doctor = await resolveDoctor(req.userId!);
-  if (!doctor) {
-    res.status(403).json({ error: "Only doctors can create sessions" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can create sessions" });
     return;
   }
 
@@ -307,7 +396,10 @@ export async function createSession(
   const { data, error } = await supabaseAdmin
     .from("group_sessions")
     .insert({
-      doctor_id: doctor.id,
+      // Whoever creates the session hosts it: as their doctor record when they
+      // have one, otherwise (an admin) as themselves.
+      doctor_id: actor.doctorId,
+      host_profile_id: actor.doctorId ? null : actor.userId,
       title,
       description: description ?? null,
       scheduled_at,
@@ -345,9 +437,9 @@ export async function updateSession(
     return;
   }
 
-  const doctor = await resolveDoctor(req.userId!);
-  if (!doctor) {
-    res.status(403).json({ error: "Only doctors can update sessions" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can update sessions" });
     return;
   }
 
@@ -377,7 +469,7 @@ export async function updateSession(
     .from("group_sessions")
     .select("id, status")
     .eq("id", id)
-    .eq("doctor_id", doctor.id)
+    .match(actorScope(actor))
     .maybeSingle();
 
   if (!existing) {
@@ -422,7 +514,7 @@ export async function updateSession(
     .from("group_sessions")
     .update(updates)
     .eq("id", id)
-    .eq("doctor_id", doctor.id)
+    .match(actorScope(actor))
     .select()
     .single();
 
@@ -465,9 +557,9 @@ export async function cancelSession(
     return;
   }
 
-  const doctor = await resolveDoctor(req.userId!);
-  if (!doctor) {
-    res.status(403).json({ error: "Only doctors can cancel sessions" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can cancel sessions" });
     return;
   }
 
@@ -477,7 +569,7 @@ export async function cancelSession(
     .from("group_sessions")
     .select("id, status")
     .eq("id", id)
-    .eq("doctor_id", doctor.id)
+    .match(actorScope(actor))
     .maybeSingle();
 
   if (!existing) {
@@ -501,7 +593,7 @@ export async function cancelSession(
     .from("group_sessions")
     .update({ status: "cancelled" })
     .eq("id", id)
-    .eq("doctor_id", doctor.id);
+    .match(actorScope(actor));
 
   if (error) {
     res.status(500).json({ error: error.message });
@@ -525,9 +617,9 @@ export async function goLive(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const doctor = await resolveDoctor(req.userId!);
-  if (!doctor) {
-    res.status(403).json({ error: "Only doctors can start sessions" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can start sessions" });
     return;
   }
 
@@ -537,7 +629,7 @@ export async function goLive(req: Request, res: Response): Promise<void> {
     .from("group_sessions")
     .select("id, status, scheduled_at, duration_minutes")
     .eq("id", id)
-    .eq("doctor_id", doctor.id)
+    .match(actorScope(actor))
     .single();
 
   if (fetchError || !existing) {
@@ -606,9 +698,9 @@ export async function endSession(req: Request, res: Response): Promise<void> {
     return;
   }
 
-  const doctor = await resolveDoctor(req.userId!);
-  if (!doctor) {
-    res.status(403).json({ error: "Only doctors can end sessions" });
+  const actor = await resolveActor(req.userId!);
+  if (!actor) {
+    res.status(403).json({ error: "Only doctors and admins can end sessions" });
     return;
   }
 
@@ -622,7 +714,7 @@ export async function endSession(req: Request, res: Response): Promise<void> {
       recording_url: recording_url ?? null,
     })
     .eq("id", id)
-    .eq("doctor_id", doctor.id)
+    .match(actorScope(actor))
     .select()
     .single();
 
@@ -656,7 +748,7 @@ export async function registerForSession(
   const { data: session, error: sessionError } = await supabaseAdmin
     .from("group_sessions")
     .select(
-      "id, title, price_aed, is_free, status, is_published, max_participants, scheduled_at, duration_minutes, doctor_id, session_registrations (payment_status)"
+      "id, title, price_aed, is_free, status, is_published, max_participants, scheduled_at, duration_minutes, doctor_id, host_profile_id, session_registrations (payment_status)"
     )
     .eq("id", id)
     .eq("is_published", true)
@@ -690,8 +782,27 @@ export async function registerForSession(
     res.status(500).json({ error: hostDoctorError.message });
     return;
   }
-  if (hostDoctor && session.doctor_id === hostDoctor.id) {
+  if (
+    (hostDoctor && session.doctor_id === hostDoctor.id) ||
+    session.host_profile_id === userId
+  ) {
     res.status(400).json({ error: "You are the host of this session" });
+    return;
+  }
+
+  // Admins open every room as host (see joinSession), so a registration would
+  // only take a seat a parent could have had.
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileError) {
+    res.status(500).json({ error: profileError.message });
+    return;
+  }
+  if (profile?.role === "admin") {
+    res.status(400).json({ error: "Admins join sessions as host and do not register" });
     return;
   }
 
@@ -807,7 +918,8 @@ export async function getMyRegistrations(
          id, title, description, scheduled_at, duration_minutes,
          max_participants, price_aed, is_free, status,
          daily_room_url, recording_url,
-         doctors (id, full_name, specialty, avatar_url)
+         doctors (id, full_name, specialty, avatar_url),
+         ${HOST_EMBED}
        )`
     )
     .eq("user_id", req.userId!)
@@ -834,11 +946,11 @@ export async function joinSession(
   const { id } = req.params;
   const userId = req.userId!;
 
-  // Fetch session including doctor_id so we can grant host bypass
+  // Fetch session including its host so we can grant host bypass
   const { data: session, error: sessionError } = await supabaseAdmin
     .from("group_sessions")
     .select(
-      "id, status, daily_room_name, daily_room_url, scheduled_at, duration_minutes, doctor_id"
+      "id, status, daily_room_name, daily_room_url, scheduled_at, duration_minutes, doctor_id, host_profile_id"
     )
     .eq("id", id)
     .single();
@@ -853,12 +965,15 @@ export async function joinSession(
     return;
   }
 
-  // Check if the requester is the doctor who owns this session
-  const doctor = await resolveDoctor(userId);
-  const isDoctorHost =
-    doctor !== null && session.doctor_id === doctor.id;
+  // The session's own host joins as owner without a registration, and so does
+  // any admin: admins run every session, including ones a doctor hosts.
+  const actor = await resolveActor(userId);
+  const isHost =
+    session.host_profile_id === userId ||
+    actor?.kind === "admin" ||
+    (actor !== null && session.doctor_id === actor.doctorId);
 
-  if (!isDoctorHost) {
+  if (!isHost) {
     // Verify participant registration with confirmed payment
     const { data: registration } = await supabaseAdmin
       .from("session_registrations")
@@ -914,8 +1029,8 @@ export async function joinSession(
     token = await createMeetingToken({
       roomName: session.daily_room_name ?? groupSessionRoomName(id as string),
       userId,
-      userName: await resolveDisplayName(userId, isDoctorHost ? "Doctor" : "Participant"),
-      isOwner: isDoctorHost,
+      userName: await resolveDisplayName(userId, isHost ? "Host" : "Participant"),
+      isOwner: isHost,
       expiryEpoch: Math.floor(window.closesAt.getTime() / 1000),
     });
   } catch (err) {

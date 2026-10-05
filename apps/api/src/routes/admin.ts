@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authMiddleware } from "../middleware/auth";
 import { adminMiddleware } from "../middleware/admin";
+import { listAllSessionsAdmin } from "../controllers/group-sessions";
 import {
   getAdminStats,
   listUsers,
@@ -71,6 +72,10 @@ router.delete("/holidays/:holidayId", deleteDoctorHolidayAdmin);
 router.get("/consultation-types", listConsultationTypes);
 router.post("/consultation-types", createConsultationType);
 router.patch("/consultation-types/:id", updateConsultationType);
+
+// Live sessions — every host's, drafts included. Mutations go through the
+// shared /api/live-sessions routes, which recognise admins themselves.
+router.get("/live-sessions", listAllSessionsAdmin);
 
 // Payments
 router.get("/payments", listPayments);
